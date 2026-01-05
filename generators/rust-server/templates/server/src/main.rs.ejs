@@ -1,0 +1,218 @@
+use axum::{middleware, routing::get, Router};
+<%_ if (enableSwaggerCodegen) { _%>
+use axum::Json;
+<%_ } _%>
+use std::net::SocketAddr;
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
+<%_ if (applicationTypeMonolith) { _%>
+use tower_http::services::ServeDir;
+<%_ } _%>
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::OpenApi;
+use utoipa_scalar::{Scalar, Servable};
+<%_ } _%>
+
+use <%= rustCrateName %>::config::AppConfig;
+<%_ if (enableSwaggerCodegen) { _%>
+use <%= rustCrateName %>::openapi::ApiDoc;
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+use <%= rustCrateName %>::config::OAuth2Config;
+use <%= rustCrateName %>::security::OAuth2Validator;
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+use <%= rustCrateName %>::db::create_pool;
+<%_ } else { _%>
+use <%= rustCrateName %>::db::connection::establish_connection_pool;
+<%_ } _%>
+<%_ if (enableEmail) { _%>
+use <%= rustCrateName %>::config::EmailConfig;
+use <%= rustCrateName %>::services::EmailService;
+use std::sync::Arc;
+<%_ } _%>
+use <%= rustCrateName %>::handlers;
+use <%= rustCrateName %>::middleware::auth::auth_middleware;
+use <%= rustCrateName %>::AppState;
+
+#[tokio::main]
+async fn main() {
+    // Load .env file first so RUST_LOG is available for tracing initialization
+    dotenvy::dotenv().ok();
+
+    // Initialize tracing (reads RUST_LOG from environment)
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,<%= rustCrateName %>=debug,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    // Load configuration
+    let config = AppConfig::from_env();
+
+<%_ if (authenticationTypeOauth2) { _%>
+    // Load OAuth2 configuration
+    let oauth2_config = OAuth2Config::from_env();
+    tracing::info!("OAuth2 issuer URI: {}", oauth2_config.issuer_uri);
+
+    // Create OAuth2 validator
+    let oauth2_validator = OAuth2Validator::new(
+        oauth2_config.jwks_uri.clone(),
+        oauth2_config.issuer_uri.clone(),
+        oauth2_config.client_id.clone(),
+    );
+
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    // Establish MongoDB connection
+    tracing::info!("Connecting to MongoDB at {}", config.mongodb_uri);
+    let db = create_pool(&config.mongodb_uri, &config.mongodb_database)
+        .await
+        .expect("Failed to connect to MongoDB");
+    tracing::info!("Connected to MongoDB database: {}", config.mongodb_database);
+<%_ } else { _%>
+    // Establish database connection pool
+    let pool = establish_connection_pool(&config.database_url);
+
+    // Run migrations
+    <%= rustCrateName %>::db::connection::run_migrations(&pool);
+<%_ } _%>
+
+<%_ if (enableEmail) { _%>
+    // Initialize email service (if enabled)
+    let email_config = EmailConfig::from_env();
+    let email_service = if email_config.enabled {
+        tracing::info!("Email service enabled, connecting to {}:{}", email_config.host, email_config.port);
+        match EmailService::new(email_config) {
+            Ok(service) => {
+                tracing::info!("Email service initialized successfully");
+                Some(Arc::new(service))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize email service: {}. Email functionality will be disabled.", e);
+                None
+            }
+        }
+    } else {
+        tracing::info!("Email service disabled (MAIL_ENABLED=false)");
+        None
+    };
+
+<%_ } _%>
+    // Build CORS layer
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    // Build application state
+    let state = AppState {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        db,
+<%_ } else { _%>
+        pool,
+<%_ } _%>
+        config: config.clone(),
+<%_ if (authenticationTypeOauth2) { _%>
+        oauth2_config,
+        oauth2_validator,
+<%_ } _%>
+<%_ if (enableEmail) { _%>
+        email_service,
+<%_ } _%>
+    };
+
+    // Build application routes
+<%_ if (applicationTypeMonolith) { _%>
+    let mut app = Router::new()
+<%_ } else { _%>
+    let app = Router::new()
+        .route("/", get(|| async { "Welcome to <%= baseName %>!" }))
+<%_ } _%>
+        .nest("/api", api_routes(state.clone()))
+        .nest("/management", handlers::management::routes())
+<%_ if (enableSwaggerCodegen) { _%>
+        // OpenAPI documentation endpoints
+        // Note: /swagger-ui/* is served from static files (JHipster's custom Swagger UI)
+        // Scalar provides an alternative API documentation viewer
+        .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+        // Spring Boot compatible endpoint for JHipster Angular UI
+        .route("/v3/api-docs", get(openapi_json))
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+        // OAuth2 authorization routes (at root level for standard OAuth2 URLs)
+        .merge(handlers::oauth2::auth_routes())
+<%_ } _%>
+        .layer(TraceLayer::new_for_http())
+        .layer(cors);
+
+<%_ if (applicationTypeMonolith) { _%>
+    // Add static file serving if configured (monolithic mode)
+    if config.serve_static_files {
+        let static_dir = config.static_files_dir.clone()
+            .unwrap_or_else(|| "./static".to_string());
+
+        tracing::info!("Serving static files from: {}", static_dir);
+
+        // Serve static files with SPA fallback for Angular routes
+        let static_service = ServeDir::new(&static_dir)
+            .fallback(handlers::static_files::spa_fallback_handler(static_dir.clone()));
+
+        app = app.fallback_service(static_service);
+    } else {
+        // Simple welcome message when not serving static files
+        app = app.route("/", get(|| async { "Welcome to <%= baseName %>!" }));
+    }
+
+<%_ } _%>
+    let app = app.with_state(state);
+
+    // Start server
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
+    tracing::info!("Starting {} server on {}", "<%= baseName %>", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+fn api_routes(state: AppState) -> Router<AppState> {
+    // Routes that require authentication
+    let protected_routes = Router::new()
+        .nest("/users", handlers::user::routes())
+        .nest("/admin/users", handlers::user::admin_routes())
+        .nest("/authorities", handlers::user::authority_routes())
+        .nest("/account", handlers::account::routes())
+<%_ if (authenticationTypeOauth2) { _%>
+        .nest("/oauth2", handlers::oauth2::api_routes())
+        // Logout route at /api/logout (requires auth to get id_token from cookie)
+        .merge(handlers::oauth2::logout_route())
+<%_ } _%>
+        // jhipster-needle-add-entity-route - JHipster will add entity routes here
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+
+    // Public routes (no authentication required)
+<%_ if (authenticationTypeOauth2) { _%>
+    let public_routes = Router::new()
+        .nest("/health", handlers::health::routes());
+<%_ } else { _%>
+    let public_routes = Router::new()
+        .nest("/health", handlers::health::routes())
+        // Registration routes (public for JWT authentication)
+        .merge(handlers::account::public_routes())
+        .nest("/authenticate", handlers::account::auth_routes());
+<%_ } _%>
+
+    Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
+}
+
+<%_ if (enableSwaggerCodegen) { _%>
+/// Serve OpenAPI JSON at /v3/api-docs for JHipster Angular UI compatibility
+async fn openapi_json() -> Json<utoipa::openapi::OpenApi> {
+    Json(ApiDoc::openapi())
+}
+<%_ } _%>

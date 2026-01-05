@@ -1,0 +1,214 @@
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::Serialize;
+use thiserror::Error;
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+
+/// Application error types
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+/// Error response body
+#[derive(Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+pub struct ErrorResponse {
+    /// Error type (e.g., "Bad Request", "Not Found")
+    pub error: String,
+    /// Human-readable error message
+    pub message: String,
+    /// Additional error details
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Vec<String>>,
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, error_type, message) = match &self {
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "Bad Request", msg.clone()),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "Unauthorized", msg.clone()),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "Forbidden", msg.clone()),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "Not Found", msg.clone()),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, "Conflict", msg.clone()),
+            AppError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, "Validation Error", msg.clone()),
+            AppError::Internal(msg) => {
+                tracing::error!("Internal error: {}", msg);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal Server Error",
+                    "An internal error occurred".to_string(),
+                )
+            }
+        };
+
+        let body = Json(ErrorResponse {
+            error: error_type.to_string(),
+            message,
+            details: None,
+        });
+
+        (status, body).into_response()
+    }
+}
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+impl From<mongodb::error::Error> for AppError {
+    fn from(err: mongodb::error::Error) -> Self {
+        use mongodb::error::ErrorKind;
+
+        // Check for duplicate key error (code 11000)
+        if let ErrorKind::Write(write_failure) = err.kind.as_ref() {
+            use mongodb::error::WriteFailure;
+            if let WriteFailure::WriteError(write_error) = write_failure {
+                if write_error.code == 11000 {
+                    return AppError::Conflict("Duplicate key error".to_string());
+                }
+            }
+        }
+        AppError::Internal(err.to_string())
+    }
+}
+
+impl From<bson::oid::Error> for AppError {
+    fn from(err: bson::oid::Error) -> Self {
+        AppError::BadRequest(format!("Invalid ObjectId: {}", err))
+    }
+}
+
+impl From<bson::ser::Error> for AppError {
+    fn from(err: bson::ser::Error) -> Self {
+        AppError::Internal(format!("BSON serialization error: {}", err))
+    }
+}
+
+impl From<bson::de::Error> for AppError {
+    fn from(err: bson::de::Error) -> Self {
+        AppError::Internal(format!("BSON deserialization error: {}", err))
+    }
+}
+<%_ } else { _%>
+impl From<diesel::result::Error> for AppError {
+    fn from(err: diesel::result::Error) -> Self {
+        match err {
+            diesel::result::Error::NotFound => AppError::NotFound("Resource not found".to_string()),
+            diesel::result::Error::DatabaseError(kind, info) => match kind {
+                diesel::result::DatabaseErrorKind::UniqueViolation => {
+                    AppError::Conflict(info.message().to_string())
+                }
+                diesel::result::DatabaseErrorKind::ForeignKeyViolation => {
+                    AppError::BadRequest(info.message().to_string())
+                }
+                _ => AppError::Internal(info.message().to_string()),
+            },
+            _ => AppError::Internal(err.to_string()),
+        }
+    }
+}
+<%_ } _%>
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_error_bad_request_message() {
+        let error = AppError::BadRequest("Invalid input".to_string());
+        assert_eq!(error.to_string(), "Bad request: Invalid input");
+    }
+
+    #[test]
+    fn test_app_error_unauthorized_message() {
+        let error = AppError::Unauthorized("Invalid credentials".to_string());
+        assert_eq!(error.to_string(), "Unauthorized: Invalid credentials");
+    }
+
+    #[test]
+    fn test_app_error_forbidden_message() {
+        let error = AppError::Forbidden("Access denied".to_string());
+        assert_eq!(error.to_string(), "Forbidden: Access denied");
+    }
+
+    #[test]
+    fn test_app_error_not_found_message() {
+        let error = AppError::NotFound("Resource not found".to_string());
+        assert_eq!(error.to_string(), "Not found: Resource not found");
+    }
+
+    #[test]
+    fn test_app_error_conflict_message() {
+        let error = AppError::Conflict("Resource already exists".to_string());
+        assert_eq!(error.to_string(), "Conflict: Resource already exists");
+    }
+
+    #[test]
+    fn test_app_error_validation_message() {
+        let error = AppError::Validation("Email is invalid".to_string());
+        assert_eq!(error.to_string(), "Validation error: Email is invalid");
+    }
+
+    #[test]
+    fn test_app_error_internal_message() {
+        let error = AppError::Internal("Database connection failed".to_string());
+        assert_eq!(error.to_string(), "Internal error: Database connection failed");
+    }
+
+    #[test]
+    fn test_error_response_serialization() {
+        let response = ErrorResponse {
+            error: "Bad Request".to_string(),
+            message: "Invalid input".to_string(),
+            details: Some(vec!["Field 'email' is required".to_string()]),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\":\"Bad Request\""));
+        assert!(json.contains("\"message\":\"Invalid input\""));
+        assert!(json.contains("\"details\""));
+    }
+
+    #[test]
+    fn test_error_response_without_details() {
+        let response = ErrorResponse {
+            error: "Not Found".to_string(),
+            message: "User not found".to_string(),
+            details: None,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(!json.contains("details"));
+    }
+
+<%_ if (!devDatabaseTypeMongodb) { _%>
+    #[test]
+    fn test_diesel_not_found_conversion() {
+        let diesel_error = diesel::result::Error::NotFound;
+        let app_error: AppError = diesel_error.into();
+        match app_error {
+            AppError::NotFound(msg) => assert_eq!(msg, "Resource not found"),
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+<%_ } _%>
+}

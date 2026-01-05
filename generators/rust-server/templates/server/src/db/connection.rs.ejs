@@ -1,0 +1,254 @@
+<%_ if (devDatabaseTypePostgresql) { _%>
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../migrations");
+
+pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
+pub type DbConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+
+/// Extracts database name from a PostgreSQL connection URL
+fn extract_db_name(database_url: &str) -> Option<String> {
+    // Format: postgres://user:pass@host:port/dbname
+    database_url.rsplit('/').next().map(|s| s.to_string())
+}
+
+/// Builds a connection URL to the 'postgres' maintenance database
+fn get_maintenance_db_url(database_url: &str) -> String {
+    if let Some(last_slash) = database_url.rfind('/') {
+        format!("{}postgres", &database_url[..=last_slash])
+    } else {
+        database_url.to_string()
+    }
+}
+
+/// Creates the database if it doesn't exist (for development)
+pub fn ensure_database_exists(database_url: &str) {
+    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "production".to_string());
+
+    // Only auto-create database in development mode
+    if app_env != "development" {
+        return;
+    }
+
+    let db_name = match extract_db_name(database_url) {
+        Some(name) => name,
+        None => {
+            tracing::warn!("Could not extract database name from URL");
+            return;
+        }
+    };
+
+    let maintenance_url = get_maintenance_db_url(database_url);
+
+    // Try to connect to the maintenance database
+    match PgConnection::establish(&maintenance_url) {
+        Ok(mut conn) => {
+            // Check if database exists
+            let db_exists: Result<Option<DbName>, _> = diesel::sql_query(
+                format!("SELECT datname FROM pg_database WHERE datname = '{}'", db_name)
+            )
+            .get_result::<DbName>(&mut conn)
+            .optional();
+
+            match db_exists {
+                Ok(Some(_)) => {
+                    tracing::info!("Database '{}' already exists", db_name);
+                }
+                Ok(None) => {
+                    tracing::info!("Creating database '{}'...", db_name);
+                    match diesel::sql_query(format!("CREATE DATABASE \"{}\"", db_name))
+                        .execute(&mut conn)
+                    {
+                        Ok(_) => tracing::info!("Database '{}' created successfully", db_name),
+                        Err(e) => tracing::error!("Failed to create database '{}': {}", db_name, e),
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Could not check if database exists: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Could not connect to maintenance database to create '{}': {}",
+                db_name,
+                e
+            );
+        }
+    }
+}
+
+/// Helper struct for querying database names
+#[derive(QueryableByName)]
+struct DbName {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    #[allow(dead_code)]
+    datname: String,
+}
+
+/// Establishes a connection pool to the PostgreSQL database
+pub fn establish_connection_pool(database_url: &str) -> DbPool {
+    // In development, ensure the database exists before connecting
+    ensure_database_exists(database_url);
+
+    let manager = ConnectionManager::<PgConnection>::new(database_url);
+
+    r2d2::Pool::builder()
+        .max_size(10)
+        .build(manager)
+        .expect("Failed to create database pool")
+}
+<%_ } else if (devDatabaseTypeMysql) { _%>
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::mysql::MysqlConnection;
+use diesel::prelude::*;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../migrations");
+
+pub type DbPool = r2d2::Pool<ConnectionManager<MysqlConnection>>;
+pub type DbConnection = r2d2::PooledConnection<ConnectionManager<MysqlConnection>>;
+
+/// Extracts database name from a MySQL connection URL
+fn extract_db_name(database_url: &str) -> Option<String> {
+    // Format: mysql://user:pass@host:port/dbname
+    database_url.rsplit('/').next().map(|s| s.to_string())
+}
+
+/// Builds a connection URL without the database name (connects to MySQL server directly)
+fn get_maintenance_db_url(database_url: &str) -> String {
+    if let Some(last_slash) = database_url.rfind('/') {
+        // Connect without specifying a database
+        database_url[..last_slash].to_string()
+    } else {
+        database_url.to_string()
+    }
+}
+
+/// Creates the database if it doesn't exist (for development)
+pub fn ensure_database_exists(database_url: &str) {
+    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "production".to_string());
+
+    // Only auto-create database in development mode
+    if app_env != "development" {
+        return;
+    }
+
+    let db_name = match extract_db_name(database_url) {
+        Some(name) => name,
+        None => {
+            tracing::warn!("Could not extract database name from URL");
+            return;
+        }
+    };
+
+    let maintenance_url = get_maintenance_db_url(database_url);
+
+    // Try to connect to MySQL server without specifying a database
+    match MysqlConnection::establish(&maintenance_url) {
+        Ok(mut conn) => {
+            // Check if database exists
+            let db_exists: Result<Option<DbName>, _> = diesel::sql_query(
+                format!("SELECT SCHEMA_NAME as db_name FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{}'", db_name)
+            )
+            .get_result::<DbName>(&mut conn)
+            .optional();
+
+            match db_exists {
+                Ok(Some(_)) => {
+                    tracing::info!("Database '{}' already exists", db_name);
+                }
+                Ok(None) => {
+                    tracing::info!("Creating database '{}'...", db_name);
+                    match diesel::sql_query(format!("CREATE DATABASE `{}`", db_name))
+                        .execute(&mut conn)
+                    {
+                        Ok(_) => tracing::info!("Database '{}' created successfully", db_name),
+                        Err(e) => tracing::error!("Failed to create database '{}': {}", db_name, e),
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Could not check if database exists: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Could not connect to MySQL server to create '{}': {}",
+                db_name,
+                e
+            );
+        }
+    }
+}
+
+/// Helper struct for querying database names
+#[derive(QueryableByName)]
+struct DbName {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    #[allow(dead_code)]
+    db_name: String,
+}
+
+/// Establishes a connection pool to the MySQL database
+pub fn establish_connection_pool(database_url: &str) -> DbPool {
+    // In development, ensure the database exists before connecting
+    ensure_database_exists(database_url);
+
+    let manager = ConnectionManager::<MysqlConnection>::new(database_url);
+
+    r2d2::Pool::builder()
+        .max_size(10)
+        .build(manager)
+        .expect("Failed to create database pool")
+}
+<%_ } else { _%>
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::sqlite::SqliteConnection;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use std::fs;
+use std::path::Path;
+
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../migrations");
+
+pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+pub type DbConnection = r2d2::PooledConnection<ConnectionManager<SqliteConnection>>;
+
+/// Establishes a connection pool to the SQLite database
+pub fn establish_connection_pool(database_url: &str) -> DbPool {
+    // Ensure the database directory exists for SQLite
+    if database_url.starts_with("sqlite://") {
+        let db_path = database_url.trim_start_matches("sqlite://");
+        if let Some(parent) = Path::new(db_path).parent() {
+            fs::create_dir_all(parent).expect("Failed to create database directory");
+        }
+    }
+
+    let manager = ConnectionManager::<SqliteConnection>::new(database_url);
+
+    r2d2::Pool::builder()
+        .max_size(10)
+        .build(manager)
+        .expect("Failed to create database pool")
+}
+<%_ } _%>
+
+/// Runs pending migrations
+pub fn run_migrations(pool: &DbPool) {
+    let mut conn = pool.get().expect("Failed to get connection from pool");
+
+    tracing::info!("Running database migrations...");
+
+    conn.run_pending_migrations(MIGRATIONS)
+        .expect("Failed to run migrations");
+
+    tracing::info!("Migrations completed successfully");
+}
+
+/// Gets a connection from the pool
+pub fn get_connection(pool: &DbPool) -> DbConnection {
+    pool.get().expect("Failed to get connection from pool")
+}

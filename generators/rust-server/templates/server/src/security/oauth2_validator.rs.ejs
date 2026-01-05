@@ -1,0 +1,352 @@
+//! OAuth2/OIDC token validation using JWKS
+
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use crate::errors::AppError;
+use crate::security::jwks::JwksClient;
+
+/// Keycloak/OIDC JWT claims structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OidcClaims {
+    /// Subject (user ID)
+    pub sub: String,
+    /// Expiration time
+    pub exp: usize,
+    /// Issued at time
+    pub iat: usize,
+    /// Issuer
+    pub iss: String,
+    /// Audience (can be string or array)
+    #[serde(default)]
+    pub aud: serde_json::Value,
+    /// Preferred username (Keycloak)
+    pub preferred_username: Option<String>,
+    /// Given name (first name)
+    pub given_name: Option<String>,
+    /// Family name (last name)
+    pub family_name: Option<String>,
+    /// Email address
+    pub email: Option<String>,
+    /// Email verified flag
+    pub email_verified: Option<bool>,
+    /// Realm access (Keycloak roles)
+    pub realm_access: Option<RealmAccess>,
+    /// Resource access (Keycloak client-specific roles)
+    #[serde(default)]
+    pub resource_access: serde_json::Value,
+    /// Authorized party (client ID that requested the token)
+    pub azp: Option<String>,
+    /// Scope
+    pub scope: Option<String>,
+    /// Session ID
+    pub sid: Option<String>,
+    /// Groups (if group membership is included in token)
+    #[serde(default)]
+    pub groups: Vec<String>,
+}
+
+/// Keycloak realm access structure containing roles
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RealmAccess {
+    /// List of realm-level roles
+    pub roles: Vec<String>,
+}
+
+impl OidcClaims {
+    /// Extract authorities/roles from the token
+    ///
+    /// Checks realm_access.roles first (Keycloak standard),
+    /// then falls back to groups if no roles found.
+    pub fn get_authorities(&self) -> Vec<String> {
+        // First try realm_access.roles (Keycloak standard)
+        if let Some(ref realm_access) = self.realm_access {
+            if !realm_access.roles.is_empty() {
+                return realm_access.roles
+                    .iter()
+                    .filter(|r| r.starts_with("ROLE_"))
+                    .cloned()
+                    .collect();
+            }
+        }
+
+        // Fall back to groups if no ROLE_ prefixed roles found
+        self.groups
+            .iter()
+            .filter(|g| g.starts_with("ROLE_") || g.starts_with("/"))
+            .map(|g| {
+                if g.starts_with("/") {
+                    // Convert group path to role (e.g., /admin -> ROLE_ADMIN)
+                    format!("ROLE_{}", g.trim_start_matches('/').to_uppercase())
+                } else {
+                    g.clone()
+                }
+            })
+            .collect()
+    }
+
+    /// Get the username from the token
+    ///
+    /// Uses preferred_username if available, falls back to sub
+    pub fn get_username(&self) -> String {
+        self.preferred_username
+            .clone()
+            .unwrap_or_else(|| self.sub.clone())
+    }
+
+    /// Get the email from the token
+    pub fn get_email(&self) -> Option<String> {
+        self.email.clone()
+    }
+
+    /// Get the full name from the token
+    pub fn get_full_name(&self) -> Option<String> {
+        match (&self.given_name, &self.family_name) {
+            (Some(given), Some(family)) => Some(format!("{} {}", given, family)),
+            (Some(given), None) => Some(given.clone()),
+            (None, Some(family)) => Some(family.clone()),
+            (None, None) => None,
+        }
+    }
+}
+
+/// OAuth2 token validator that validates tokens using JWKS
+#[derive(Clone)]
+pub struct OAuth2Validator {
+    jwks_client: Arc<JwksClient>,
+    issuer: String,
+    client_id: String,
+}
+
+impl OAuth2Validator {
+    /// Creates a new OAuth2 validator
+    ///
+    /// # Arguments
+    /// * `jwks_uri` - The JWKS endpoint URI
+    /// * `issuer` - The expected token issuer
+    /// * `client_id` - The expected audience/client ID
+    pub fn new(jwks_uri: String, issuer: String, client_id: String) -> Self {
+        Self {
+            jwks_client: Arc::new(JwksClient::new(jwks_uri)),
+            issuer,
+            client_id,
+        }
+    }
+
+    /// Validates an OAuth2/OIDC token and returns the claims
+    ///
+    /// # Arguments
+    /// * `token` - The JWT token string (without "Bearer " prefix)
+    ///
+    /// # Returns
+    /// The validated OIDC claims or an error
+    pub async fn validate_token(&self, token: &str) -> Result<OidcClaims, AppError> {
+        // Decode header to get key ID (kid)
+        let header = decode_header(token)
+            .map_err(|e| AppError::Unauthorized(format!("Invalid token header: {}", e)))?;
+
+        let kid = header.kid.ok_or_else(|| {
+            AppError::Unauthorized("Token missing key ID (kid)".to_string())
+        })?;
+
+        let algorithm = header.alg;
+
+        // Validate algorithm is RS256 or RS384 or RS512
+        if !matches!(algorithm, Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512) {
+            return Err(AppError::Unauthorized(format!(
+                "Unsupported algorithm: {:?}. Expected RS256, RS384, or RS512",
+                algorithm
+            )));
+        }
+
+        // Fetch JWKS and find matching key
+        let jwks = self.jwks_client.get_jwks().await.map_err(|e| {
+            AppError::Internal(format!("Failed to fetch JWKS: {}", e))
+        })?;
+
+        let jwk = jwks
+            .keys
+            .iter()
+            .find(|k| k.common.key_id.as_ref() == Some(&kid))
+            .ok_or_else(|| {
+                AppError::Unauthorized(format!("Key not found in JWKS: {}", kid))
+            })?;
+
+        // Build decoding key from JWK
+        let decoding_key = DecodingKey::from_jwk(jwk)
+            .map_err(|e| AppError::Unauthorized(format!("Invalid JWK: {}", e)))?;
+
+        // Configure validation
+        let mut validation = Validation::new(algorithm);
+        validation.set_issuer(&[&self.issuer]);
+        // Note: Keycloak access tokens typically have audience="account" (internal service),
+        // not the client ID. The client ID is in the "azp" (authorized party) claim instead.
+        // We validate the azp claim manually after decoding instead of using strict audience validation.
+        validation.validate_aud = false;
+
+        // Decode and validate token
+        let token_data = decode::<OidcClaims>(token, &decoding_key, &validation)
+            .map_err(|e| AppError::Unauthorized(format!("Token validation failed: {}", e)))?;
+
+        // Validate the authorized party (azp) claim matches our client ID
+        // This ensures the token was issued for our application
+        if let Some(ref azp) = token_data.claims.azp {
+            if azp != &self.client_id {
+                return Err(AppError::Unauthorized(format!(
+                    "Token authorized party '{}' does not match expected client ID '{}'",
+                    azp, self.client_id
+                )));
+            }
+        }
+
+        tracing::debug!(
+            "Token validated successfully for user: {}",
+            token_data.claims.get_username()
+        );
+
+        Ok(token_data.claims)
+    }
+
+    /// Invalidates the JWKS cache
+    pub async fn invalidate_cache(&self) {
+        self.jwks_client.invalidate_cache().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oidc_claims_get_username() {
+        let claims = OidcClaims {
+            sub: "user-id-123".to_string(),
+            exp: 0,
+            iat: 0,
+            iss: "http://keycloak".to_string(),
+            aud: serde_json::Value::Null,
+            preferred_username: Some("testuser".to_string()),
+            given_name: Some("Test".to_string()),
+            family_name: Some("User".to_string()),
+            email: Some("test@example.com".to_string()),
+            email_verified: Some(true),
+            realm_access: None,
+            resource_access: serde_json::Value::Null,
+            azp: None,
+            scope: None,
+            sid: None,
+            groups: vec![],
+        };
+
+        assert_eq!(claims.get_username(), "testuser");
+    }
+
+    #[test]
+    fn test_oidc_claims_get_username_fallback() {
+        let claims = OidcClaims {
+            sub: "user-id-123".to_string(),
+            exp: 0,
+            iat: 0,
+            iss: "http://keycloak".to_string(),
+            aud: serde_json::Value::Null,
+            preferred_username: None,
+            given_name: None,
+            family_name: None,
+            email: None,
+            email_verified: None,
+            realm_access: None,
+            resource_access: serde_json::Value::Null,
+            azp: None,
+            scope: None,
+            sid: None,
+            groups: vec![],
+        };
+
+        assert_eq!(claims.get_username(), "user-id-123");
+    }
+
+    #[test]
+    fn test_oidc_claims_get_authorities_from_realm_access() {
+        let claims = OidcClaims {
+            sub: "user-id-123".to_string(),
+            exp: 0,
+            iat: 0,
+            iss: "http://keycloak".to_string(),
+            aud: serde_json::Value::Null,
+            preferred_username: None,
+            given_name: None,
+            family_name: None,
+            email: None,
+            email_verified: None,
+            realm_access: Some(RealmAccess {
+                roles: vec![
+                    "ROLE_ADMIN".to_string(),
+                    "ROLE_USER".to_string(),
+                    "offline_access".to_string(), // Should be filtered out
+                ],
+            }),
+            resource_access: serde_json::Value::Null,
+            azp: None,
+            scope: None,
+            sid: None,
+            groups: vec![],
+        };
+
+        let authorities = claims.get_authorities();
+        assert_eq!(authorities.len(), 2);
+        assert!(authorities.contains(&"ROLE_ADMIN".to_string()));
+        assert!(authorities.contains(&"ROLE_USER".to_string()));
+    }
+
+    #[test]
+    fn test_oidc_claims_get_authorities_from_groups() {
+        let claims = OidcClaims {
+            sub: "user-id-123".to_string(),
+            exp: 0,
+            iat: 0,
+            iss: "http://keycloak".to_string(),
+            aud: serde_json::Value::Null,
+            preferred_username: None,
+            given_name: None,
+            family_name: None,
+            email: None,
+            email_verified: None,
+            realm_access: None,
+            resource_access: serde_json::Value::Null,
+            azp: None,
+            scope: None,
+            sid: None,
+            groups: vec!["/admin".to_string(), "/user".to_string()],
+        };
+
+        let authorities = claims.get_authorities();
+        assert_eq!(authorities.len(), 2);
+        assert!(authorities.contains(&"ROLE_ADMIN".to_string()));
+        assert!(authorities.contains(&"ROLE_USER".to_string()));
+    }
+
+    #[test]
+    fn test_oidc_claims_get_full_name() {
+        let claims = OidcClaims {
+            sub: "user-id-123".to_string(),
+            exp: 0,
+            iat: 0,
+            iss: "http://keycloak".to_string(),
+            aud: serde_json::Value::Null,
+            preferred_username: None,
+            given_name: Some("John".to_string()),
+            family_name: Some("Doe".to_string()),
+            email: None,
+            email_verified: None,
+            realm_access: None,
+            resource_access: serde_json::Value::Null,
+            azp: None,
+            scope: None,
+            sid: None,
+            groups: vec![],
+        };
+
+        assert_eq!(claims.get_full_name(), Some("John Doe".to_string()));
+    }
+}

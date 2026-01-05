@@ -1,0 +1,302 @@
+//! Email service for sending transactional emails
+//!
+//! This module provides email functionality for account-related emails:
+//! - Account activation
+//! - Password reset
+//! - Password changed notification
+//! - Account created notification (admin creates user)
+//!
+//! Email is disabled by default. Set MAIL_ENABLED=true and configure
+//! SMTP settings to enable email functionality.
+
+use lettre::{
+    message::{header::ContentType, Mailbox, MultiPart, SinglePart},
+    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
+};
+use std::sync::Arc;
+use tera::{Context, Tera};
+
+use crate::config::EmailConfig;
+use crate::errors::AppError;
+
+/// Email service for sending transactional emails
+#[derive(Clone)]
+pub struct EmailService {
+    config: EmailConfig,
+    templates: Arc<Tera>,
+    transport: Option<AsyncSmtpTransport<Tokio1Executor>>,
+}
+
+impl EmailService {
+    /// Create a new email service instance
+    pub fn new(config: EmailConfig) -> Result<Self, AppError> {
+        // Load email templates
+        let templates = Self::load_templates()?;
+
+        // Build SMTP transport if enabled
+        let transport = if config.enabled {
+            Some(Self::build_transport(&config)?)
+        } else {
+            tracing::info!("Email service is disabled (MAIL_ENABLED=false)");
+            None
+        };
+
+        Ok(Self {
+            config,
+            templates: Arc::new(templates),
+            transport,
+        })
+    }
+
+    /// Load Tera templates from embedded strings
+    fn load_templates() -> Result<Tera, AppError> {
+        let mut tera = Tera::default();
+
+        // Add embedded templates
+        tera.add_raw_template(
+            "activation.html",
+            include_str!("../templates/email/activation.html"),
+        )
+        .map_err(|e| AppError::Internal(format!("Failed to load activation template: {}", e)))?;
+
+        tera.add_raw_template(
+            "password-reset.html",
+            include_str!("../templates/email/password-reset.html"),
+        )
+        .map_err(|e| AppError::Internal(format!("Failed to load password-reset template: {}", e)))?;
+
+        tera.add_raw_template(
+            "password-changed.html",
+            include_str!("../templates/email/password-changed.html"),
+        )
+        .map_err(|e| {
+            AppError::Internal(format!("Failed to load password-changed template: {}", e))
+        })?;
+
+        tera.add_raw_template(
+            "account-created.html",
+            include_str!("../templates/email/account-created.html"),
+        )
+        .map_err(|e| {
+            AppError::Internal(format!("Failed to load account-created template: {}", e))
+        })?;
+
+        Ok(tera)
+    }
+
+    /// Build SMTP transport based on configuration
+    fn build_transport(
+        config: &EmailConfig,
+    ) -> Result<AsyncSmtpTransport<Tokio1Executor>, AppError> {
+        let builder = if config.use_tls {
+            AsyncSmtpTransport::<Tokio1Executor>::relay(&config.host)
+                .map_err(|e| AppError::Internal(format!("Failed to create SMTP relay: {}", e)))?
+        } else {
+            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&config.host)
+        };
+
+        let mut transport_builder = builder.port(config.port);
+
+        // Add authentication if credentials provided
+        if let (Some(username), Some(password)) = (&config.username, &config.password) {
+            let credentials = Credentials::new(username.clone(), password.clone());
+            transport_builder = transport_builder.credentials(credentials);
+        }
+
+        Ok(transport_builder.build())
+    }
+
+    /// Send an email
+    async fn send_email(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError> {
+        if !self.config.enabled {
+            tracing::warn!(
+                "Email sending is disabled. Would have sent '{}' to: {}",
+                subject,
+                to
+            );
+            return Ok(());
+        }
+
+        let transport = self.transport.as_ref().ok_or_else(|| {
+            AppError::Internal("Email transport not configured".to_string())
+        })?;
+
+        let from_mailbox: Mailbox = format!("{} <{}>", self.config.from_name, self.config.from)
+            .parse()
+            .map_err(|e| AppError::Internal(format!("Invalid from address: {}", e)))?;
+
+        let to_mailbox: Mailbox = to
+            .parse()
+            .map_err(|e| AppError::Internal(format!("Invalid to address: {}", e)))?;
+
+        let email = Message::builder()
+            .from(from_mailbox)
+            .to(to_mailbox)
+            .subject(subject)
+            .multipart(MultiPart::alternative().singlepart(
+                SinglePart::builder()
+                    .header(ContentType::TEXT_HTML)
+                    .body(html_body.to_string()),
+            ))
+            .map_err(|e| AppError::Internal(format!("Failed to build email: {}", e)))?;
+
+        transport
+            .send(email)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to send email: {}", e)))?;
+
+        tracing::info!("Email '{}' sent successfully to: {}", subject, to);
+        Ok(())
+    }
+
+    /// Render a template with the given context
+    fn render_template(&self, template_name: &str, context: &Context) -> Result<String, AppError> {
+        self.templates.render(template_name, context).map_err(|e| {
+            AppError::Internal(format!("Failed to render template {}: {}", template_name, e))
+        })
+    }
+
+    /// Send account activation email
+    pub async fn send_activation_email(
+        &self,
+        to: &str,
+        user_name: &str,
+        activation_key: &str,
+    ) -> Result<(), AppError> {
+        let mut context = Context::new();
+        context.insert("user_name", user_name);
+        context.insert(
+            "activation_url",
+            &format!("{}/account/activate?key={}", self.config.base_url, activation_key),
+        );
+        context.insert("base_url", &self.config.base_url);
+
+        let html_body = self.render_template("activation.html", &context)?;
+        self.send_email(to, "Activate your account", &html_body)
+            .await
+    }
+
+    /// Send password reset email
+    pub async fn send_password_reset_email(
+        &self,
+        to: &str,
+        user_name: &str,
+        reset_key: &str,
+    ) -> Result<(), AppError> {
+        let mut context = Context::new();
+        context.insert("user_name", user_name);
+        context.insert(
+            "reset_url",
+            &format!(
+                "{}/account/reset/finish?key={}",
+                self.config.base_url, reset_key
+            ),
+        );
+        context.insert("base_url", &self.config.base_url);
+
+        let html_body = self.render_template("password-reset.html", &context)?;
+        self.send_email(to, "Reset your password", &html_body).await
+    }
+
+    /// Send password changed confirmation email
+    pub async fn send_password_changed_email(
+        &self,
+        to: &str,
+        user_name: &str,
+    ) -> Result<(), AppError> {
+        let mut context = Context::new();
+        context.insert("user_name", user_name);
+        context.insert("base_url", &self.config.base_url);
+
+        let html_body = self.render_template("password-changed.html", &context)?;
+        self.send_email(to, "Your password has been changed", &html_body)
+            .await
+    }
+
+    /// Send account created email (when admin creates a user)
+    pub async fn send_account_created_email(
+        &self,
+        to: &str,
+        user_name: &str,
+        login: &str,
+        reset_key: &str,
+    ) -> Result<(), AppError> {
+        let mut context = Context::new();
+        context.insert("user_name", user_name);
+        context.insert("login", login);
+        context.insert(
+            "reset_url",
+            &format!(
+                "{}/account/reset/finish?key={}",
+                self.config.base_url, reset_key
+            ),
+        );
+        context.insert("base_url", &self.config.base_url);
+
+        let html_body = self.render_template("account-created.html", &context)?;
+        self.send_email(to, "Your account has been created", &html_body)
+            .await
+    }
+
+    /// Check if email service is enabled
+    pub fn is_enabled(&self) -> bool {
+        self.config.enabled
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_email_service_disabled() {
+        let config = EmailConfig::default();
+        let service = EmailService::new(config).unwrap();
+        assert!(!service.is_enabled());
+    }
+
+    #[tokio::test]
+    async fn test_send_email_when_disabled() {
+        let config = EmailConfig::default();
+        let service = EmailService::new(config).unwrap();
+
+        // Should not error when disabled, just log a warning
+        let result = service
+            .send_activation_email("test@example.com", "Test User", "activation-key-123")
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_render_activation_template() {
+        let config = EmailConfig::default();
+        let service = EmailService::new(config).unwrap();
+
+        let mut context = Context::new();
+        context.insert("user_name", "Test User");
+        context.insert("activation_url", "http://localhost/activate?key=123");
+        context.insert("base_url", "http://localhost");
+
+        let result = service.render_template("activation.html", &context);
+        assert!(result.is_ok());
+        let html = result.unwrap();
+        assert!(html.contains("Test User"));
+        assert!(html.contains("activation_url"));
+    }
+
+    #[test]
+    fn test_render_password_reset_template() {
+        let config = EmailConfig::default();
+        let service = EmailService::new(config).unwrap();
+
+        let mut context = Context::new();
+        context.insert("user_name", "Test User");
+        context.insert("reset_url", "http://localhost/reset?key=123");
+        context.insert("base_url", "http://localhost");
+
+        let result = service.render_template("password-reset.html", &context);
+        assert!(result.is_ok());
+    }
+}

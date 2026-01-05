@@ -1,0 +1,143 @@
+<%_ if (applicationTypeMonolith) { _%>
+# =============================================================================
+# Client Build Stage (for monolithic deployment)
+# =============================================================================
+FROM node:22-alpine AS client-builder
+
+WORKDIR /app/client
+
+# Copy package files and install dependencies
+COPY client/package*.json ./
+RUN npm ci --legacy-peer-deps
+
+# Copy client source and build for production
+COPY client/ ./
+RUN npm run build -- --configuration=production
+
+<%_ } _%>
+# =============================================================================
+# Server Build Stage
+# =============================================================================
+FROM rust:1.89-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+<%_ if (devDatabaseTypePostgresql) { _%>
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } else if (devDatabaseTypeMysql) { _%>
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } else { _%>
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } _%>
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
+COPY server/Cargo.toml ./server/
+
+# Create dummy source to cache dependencies
+RUN mkdir -p server/src && \
+    echo "fn main() {}" > server/src/main.rs && \
+    cargo build --release && \
+    rm -rf server/src
+
+# Copy actual source code
+COPY server/src ./server/src
+COPY migrations ./migrations
+
+# Build the application
+RUN touch server/src/main.rs && \
+    cargo build --release
+
+# =============================================================================
+# Runtime Stage
+# =============================================================================
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+<%_ if (devDatabaseTypePostgresql) { _%>
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } else if (devDatabaseTypeMysql) { _%>
+RUN apt-get update && apt-get install -y \
+    default-mysql-client \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } else { _%>
+RUN apt-get update && apt-get install -y \
+    libsqlite3-0 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+<%_ } _%>
+
+# Copy the binary (Rust uses snake_case for binary names)
+COPY --from=builder /app/target/release/<%= rustCrateName %> /app/<%= rustCrateName %>
+<%_ if (!devDatabaseTypeMongodb) { _%>
+COPY --from=builder /app/migrations /app/migrations
+<%_ } _%>
+
+<%_ if (devDatabaseTypeSqlite) { _%>
+# Create directory for SQLite database
+RUN mkdir -p /app/target/db
+<%_ } _%>
+
+<%_ if (applicationTypeMonolith) { _%>
+# Copy the built Angular client for monolithic deployment
+COPY --from=client-builder /app/client/dist/<%= baseName %>/browser ./static/
+<%_ } _%>
+
+# Application configuration
+ENV APP_NAME=<%= rustCrateName %>
+ENV APP_ENV=production
+ENV APP_PORT=8080
+ENV APP_HOST=0.0.0.0
+<%_ if (devDatabaseTypePostgresql) { _%>
+ENV DATABASE_URL=postgres://postgres:postgres@db:5432/<%= rustCrateName %>
+<%_ } else if (devDatabaseTypeMysql) { _%>
+ENV DATABASE_URL=mysql://root:root@db:3306/<%= rustCrateName %>
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+ENV MONGODB_URI=mongodb://mongodb:27017
+ENV MONGODB_DATABASE=<%= baseName.toLowerCase() %>
+<%_ } else { _%>
+ENV DATABASE_URL=sqlite:///app/target/db/<%= rustCrateName %>.db
+<%_ } _%>
+
+<%_ if (authenticationTypeJwt) { _%>
+# JWT configuration - IMPORTANT: Override this in production with a secure secret!
+# Use: docker run -e JWT_SECRET=your-secure-secret-here ...
+ENV JWT_SECRET=change-me-in-production-use-a-secure-random-string
+ENV JWT_EXPIRATION_HOURS=24
+<%_ } _%>
+
+<%_ if (applicationTypeMonolith) { _%>
+# Static file serving configuration for monolithic deployment
+ENV SERVE_STATIC_FILES=true
+ENV STATIC_FILES_DIR=./static
+<%_ } _%>
+
+EXPOSE 8080
+
+CMD ["/app/<%= rustCrateName %>"]

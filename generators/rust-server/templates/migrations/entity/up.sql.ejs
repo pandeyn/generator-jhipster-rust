@@ -1,0 +1,90 @@
+<%_ if (devDatabaseTypePostgresql) { _%>
+-- Create <%= entityTableName %> table
+CREATE TABLE <%= entityTableName %> (
+    id SERIAL PRIMARY KEY<%_ for (const field of fields.filter(f => !f.id)) { _%>,
+    <%= field.fieldNameUnderscored %> <%= field.postgresColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
+    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%>,
+    created_by VARCHAR(50),
+    created_date TIMESTAMP,
+    last_modified_by VARCHAR(50),
+    last_modified_date TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_<%= entityTableName %>_id ON <%= entityTableName %>(id);
+<%_ for (const field of fields.filter(f => f.fieldValidationUnique)) { _%>
+CREATE INDEX idx_<%= entityTableName %>_<%= field.fieldNameUnderscored %> ON <%= entityTableName %>(<%= field.fieldNameUnderscored %>);
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %>_id ON <%= entityTableName %>(<%= relationship.relationshipFieldName %>_id);
+<%_ } _%>
+
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
+-- Create join table for <%= relationship.relationshipName %> many-to-many relationship
+CREATE TABLE <%= relationship.joinTable.name %> (
+    <%= entityTableName %>_id INTEGER NOT NULL REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
+    <%= relationship.otherEntityTableName %>_id INTEGER NOT NULL REFERENCES <%= relationship.otherEntityTableName %>(id) ON DELETE CASCADE,
+    PRIMARY KEY (<%= entityTableName %>_id, <%= relationship.otherEntityTableName %>_id)
+);
+<%_ } _%>
+<%_ } else if (devDatabaseTypeMysql) { _%>
+-- Create <%= entityTableName %> table
+CREATE TABLE <%= entityTableName %> (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT<%_ for (const field of fields.filter(f => !f.id)) { _%>,
+    <%= field.fieldNameUnderscored %> <%= field.mysqlColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
+    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%>,
+    created_by VARCHAR(50),
+    created_date DATETIME,
+    last_modified_by VARCHAR(50),
+    last_modified_date DATETIME
+);
+
+-- Create indexes
+CREATE INDEX idx_<%= entityTableName %>_id ON <%= entityTableName %>(id);
+<%_ for (const field of fields.filter(f => f.fieldValidationUnique)) { _%>
+CREATE INDEX idx_<%= entityTableName %>_<%= field.fieldNameUnderscored %> ON <%= entityTableName %>(<%= field.fieldNameUnderscored %>);
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %>_id ON <%= entityTableName %>(<%= relationship.relationshipFieldName %>_id);
+<%_ } _%>
+
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
+-- Create join table for <%= relationship.relationshipName %> many-to-many relationship
+CREATE TABLE <%= relationship.joinTable.name %> (
+    <%= entityTableName %>_id INTEGER NOT NULL,
+    <%= relationship.otherEntityTableName %>_id INTEGER NOT NULL,
+    PRIMARY KEY (<%= entityTableName %>_id, <%= relationship.otherEntityTableName %>_id),
+    FOREIGN KEY (<%= entityTableName %>_id) REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
+    FOREIGN KEY (<%= relationship.otherEntityTableName %>_id) REFERENCES <%= relationship.otherEntityTableName %>(id) ON DELETE CASCADE
+);
+<%_ } _%>
+<%_ } else { _%>
+-- Create <%= entityTableName %> table
+CREATE TABLE <%= entityTableName %> (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL<%_ for (const field of fields.filter(f => !f.id)) { _%>,
+    <%= field.fieldNameUnderscored %> <%= field.sqliteColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
+    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%>,
+    created_by TEXT,
+    created_date TIMESTAMP,
+    last_modified_by TEXT,
+    last_modified_date TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_<%= entityTableName %>_id ON <%= entityTableName %>(id);
+<%_ for (const field of fields.filter(f => f.fieldValidationUnique)) { _%>
+CREATE INDEX idx_<%= entityTableName %>_<%= field.fieldNameUnderscored %> ON <%= entityTableName %>(<%= field.fieldNameUnderscored %>);
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %>_id ON <%= entityTableName %>(<%= relationship.relationshipFieldName %>_id);
+<%_ } _%>
+
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
+-- Create join table for <%= relationship.relationshipName %> many-to-many relationship
+CREATE TABLE <%= relationship.joinTable.name %> (
+    <%= entityTableName %>_id INTEGER NOT NULL REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
+    <%= relationship.otherEntityTableName %>_id INTEGER NOT NULL REFERENCES <%= relationship.otherEntityTableName %>(id) ON DELETE CASCADE,
+    PRIMARY KEY (<%= entityTableName %>_id, <%= relationship.otherEntityTableName %>_id)
+);
+<%_ } _%>
+<%_ } _%>

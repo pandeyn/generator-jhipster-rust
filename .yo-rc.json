@@ -1,0 +1,139 @@
+{
+  "generator-jhipster": {
+    "additionalSubGenerators": "rust-server",
+    "baseName": "rust",
+    "cli": true,
+    "entities": [],
+    "generators": {
+      "bootstrap-application": {
+        "command": false,
+        "priorities": [
+          "initializing",
+          "configuring",
+          "loading",
+          "preparing",
+          "preparingEachEntity",
+          "preparingEachEntityField",
+          "preparingEachEntityRelationship"
+        ],
+        "sbs": true,
+        "written": true
+      },
+      "ci-cd": {
+        "command": false,
+        "priorities": [
+          "initializing",
+          "prompting",
+          "configuring",
+          "composing",
+          "composingComponent",
+          "loading",
+          "preparing",
+          "configuringEachEntity",
+          "loadingEntities",
+          "preparingEachEntity",
+          "preparingEachEntityField",
+          "preparingEachEntityRelationship",
+          "postPreparingEachEntity",
+          "default",
+          "writing",
+          "writingEntities",
+          "postWriting",
+          "postWritingEntities",
+          "loadingTranslations",
+          "install",
+          "postInstall",
+          "end"
+        ],
+        "sbs": false,
+        "written": true
+      },
+      "client": {
+        "command": false,
+        "priorities": ["composing", "postWriting"],
+        "sbs": true,
+        "written": true
+      },
+      "common": {
+        "command": false,
+        "priorities": ["writing"],
+        "sbs": true,
+        "written": true
+      },
+      "cypress": {
+        "command": false,
+        "priorities": ["preparing", "postWriting"],
+        "sbs": true,
+        "written": true
+      },
+      "docker": {
+        "command": false,
+        "priorities": ["preparing", "writing"],
+        "sbs": true,
+        "written": true
+      },
+      "entity": {
+        "command": false,
+        "priorities": [
+          "initializing",
+          "prompting",
+          "configuring",
+          "composing",
+          "composingComponent",
+          "loading",
+          "preparing",
+          "configuringEachEntity",
+          "loadingEntities",
+          "preparingEachEntity",
+          "preparingEachEntityField",
+          "preparingEachEntityRelationship",
+          "postPreparingEachEntity",
+          "default",
+          "writing",
+          "writingEntities",
+          "postWriting",
+          "postWritingEntities",
+          "loadingTranslations",
+          "install",
+          "postInstall",
+          "end"
+        ],
+        "sbs": false,
+        "written": true
+      },
+      "languages": {
+        "command": false,
+        "priorities": ["initializing"],
+        "sbs": true,
+        "written": true
+      },
+      "server": {
+        "command": false,
+        "priorities": ["initializing", "composing"],
+        "sbs": false,
+        "written": true
+      },
+      "rust-server": {
+        "command": false,
+        "priorities": [
+          "initializing",
+          "configuring",
+          "composing",
+          "loading",
+          "preparing",
+          "preparingEachEntityField",
+          "writing",
+          "writingEntities",
+          "postWritingEntities"
+        ],
+        "sbs": false,
+        "written": true
+      }
+    },
+    "jhipsterVersion": "8.11.0",
+    "localBlueprint": false,
+    "packageJsonType": "module",
+    "sampleWritten": true,
+    "subGenerators": ["bootstrap-application", "ci-cd", "client", "common", "cypress", "docker", "entity", "languages", "server"]
+  }
+}

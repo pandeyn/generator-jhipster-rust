@@ -1,0 +1,15 @@
+<%_ if (devDatabaseTypeMongodb) { _%>
+mod user_mongodb;
+mod authority_mongodb;
+
+pub use user_mongodb::*;
+pub use authority_mongodb::*;
+<%_ } else { _%>
+mod user;
+mod authority;
+
+pub use user::*;
+pub use authority::*;
+<%_ } _%>
+
+// jhipster-needle-add-entity-model - JHipster will add entity models here

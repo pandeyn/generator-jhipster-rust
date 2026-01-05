@@ -1,0 +1,320 @@
+use bson::{oid::ObjectId, DateTime as BsonDateTime};
+use serde::{Deserialize, Serialize};
+
+<%_ if (typeof javadoc !== 'undefined') { _%>
+/// <%= javadoc %>
+<%_ } else { _%>
+/// <%= persistClass %> entity
+<%_ } _%>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct <%= persistClass %> {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ if (!field.fieldValidationRequired) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    <%_ } _%>
+    pub <%= field.fieldNameUnderscored %>: <%- field.mongoFieldType %>,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub <%= relationship.relationshipFieldName %>_id: Option<ObjectId>,
+<%_ } _%>
+<%_ // Embedded OneToMany relationships _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub <%= relationship.relationshipFieldNamePlural %>: Vec<Embedded<%= relationship.otherEntity.persistClass %>>,
+<%_ } _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_date: Option<BsonDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified_date: Option<BsonDateTime>,
+}
+
+/// New <%= persistClass %> for insertion (without ID)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct New<%= persistClass %> {
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+    pub <%= field.fieldNameUnderscored %>: <%- field.mongoFieldType %>,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+    pub <%= relationship.relationshipFieldName %>_id: Option<ObjectId>,
+<%_ } _%>
+    pub created_by: Option<String>,
+    pub created_date: Option<BsonDateTime>,
+    pub last_modified_by: Option<String>,
+    pub last_modified_date: Option<BsonDateTime>,
+}
+
+/// <%= persistClass %> update document
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Update<%= persistClass %> {
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub <%= field.fieldNameUnderscored %>: Option<<%- field.mongoFieldType.replace('Option<', '').replace('>', '') %>>,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub <%= relationship.relationshipFieldName %>_id: Option<Option<ObjectId>>,
+<%_ } _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified_date: Option<BsonDateTime>,
+}
+
+impl <%= persistClass %> {
+    /// Get the entity's ID as a hex string
+    pub fn id_str(&self) -> String {
+        self.id.map(|id| id.to_hex()).unwrap_or_default()
+    }
+}
+
+<%_ const manyToManyRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
+<%_ for (const rel of manyToManyRels) { _%>
+/// Link document for <%= persistClass %> to <%= rel.otherEntity.persistClass %> many-to-many relationship
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct <%= persistClass %><%= rel.otherEntity.persistClass %>Link {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    pub <%= entityTableName %>_id: ObjectId,
+    pub <%= rel.otherEntityTableName %>_id: ObjectId,
+}
+<%_ } _%>
+
+<%_ // Embedded document types for OneToMany relationships _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+/// Embedded <%= relationship.otherEntity.persistClass %> document (stored within parent)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Embedded<%= relationship.otherEntity.persistClass %> {
+    /// Local ID within the parent document (UUID string)
+    pub id: String,
+<%_ for (const field of relationship.otherEntity.fields.filter(f => !f.id)) { _%>
+    <%_ if (!field.fieldValidationRequired) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    <%_ } _%>
+    pub <%= field.fieldNameUnderscored %>: <%- field.mongoFieldType %>,
+<%_ } _%>
+}
+<%_ } _%>
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_<%= entityInstance %>_clone() {
+        let entity = <%= persistClass %> {
+            id: Some(ObjectId::new()),
+<%_ const allFields = fields.filter(f => !f.id); _%>
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+            <%= relationship.relationshipFieldNamePlural %>: vec![],
+<%_ } _%>
+            created_by: Some("system".to_string()),
+            created_date: Some(BsonDateTime::now()),
+            last_modified_by: None,
+            last_modified_date: None,
+        };
+        let cloned = entity.clone();
+        assert_eq!(entity.id, cloned.id);
+    }
+
+    #[test]
+    fn test_<%= entityInstance %>_debug() {
+        let entity = <%= persistClass %> {
+            id: Some(ObjectId::new()),
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+            <%= relationship.relationshipFieldNamePlural %>: vec![],
+<%_ } _%>
+            created_by: None,
+            created_date: None,
+            last_modified_by: None,
+            last_modified_date: None,
+        };
+        let debug_str = format!("{:?}", entity);
+        assert!(debug_str.contains("<%= persistClass %>"));
+    }
+
+    #[test]
+    fn test_new_<%= entityInstance %>_creation() {
+        let new_entity = New<%= persistClass %> {
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+            created_by: Some("test_user".to_string()),
+            created_date: None,
+            last_modified_by: None,
+            last_modified_date: None,
+        };
+        assert_eq!(new_entity.created_by, Some("test_user".to_string()));
+    }
+
+    #[test]
+    fn test_update_<%= entityInstance %>_default() {
+        let update = Update<%= persistClass %>::default();
+        assert!(update.last_modified_by.is_none());
+    }
+
+    #[test]
+    fn test_<%= entityInstance %>_serialization() {
+        let entity = <%= persistClass %> {
+            id: Some(ObjectId::new()),
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+            <%= relationship.relationshipFieldNamePlural %>: vec![],
+<%_ } _%>
+            created_by: None,
+            created_date: None,
+            last_modified_by: None,
+            last_modified_date: None,
+        };
+        let json = serde_json::to_string(&entity).unwrap();
+        assert!(json.contains("\"_id\""));
+    }
+
+    #[test]
+    fn test_<%= entityInstance %>_id_str() {
+        let entity = <%= persistClass %> {
+            id: Some(ObjectId::new()),
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: "test".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+            <%= relationship.relationshipFieldNamePlural %>: vec![],
+<%_ } _%>
+            created_by: None,
+            created_date: None,
+            last_modified_by: None,
+            last_modified_date: None,
+        };
+        let id_str = entity.id_str();
+        assert_eq!(id_str.len(), 24); // ObjectId hex string length
+    }
+}

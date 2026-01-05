@@ -1,0 +1,139 @@
+use axum::{extract::State, routing::get, Json, Router};
+use serde::Serialize;
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+
+use crate::AppState;
+
+#[derive(Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+pub struct HealthResponse {
+    /// Overall health status (UP or DOWN)
+    pub status: String,
+    /// Component-level health status
+    pub components: HealthComponents,
+}
+
+#[derive(Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+pub struct HealthComponents {
+    /// Database health status
+    pub db: ComponentHealth,
+}
+
+#[derive(Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+pub struct ComponentHealth {
+    /// Component status (UP or DOWN)
+    pub status: String,
+}
+
+/// Health check routes
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(health_check))
+        .route("/liveness", get(liveness))
+        .route("/readiness", get(readiness))
+}
+
+/// Main health check endpoint
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/health",
+    tag = "health",
+    responses(
+        (status = 200, description = "Health check successful", body = HealthResponse)
+    )
+)]
+<%_ } _%>
+pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
+    let db_status = check_database(&state).await;
+
+    Json(HealthResponse {
+        status: if db_status { "UP" } else { "DOWN" }.to_string(),
+        components: HealthComponents {
+            db: ComponentHealth {
+                status: if db_status { "UP" } else { "DOWN" }.to_string(),
+            },
+        },
+    })
+}
+
+/// Kubernetes liveness probe
+async fn liveness() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "status": "UP" }))
+}
+
+/// Kubernetes readiness probe
+async fn readiness(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let db_status = check_database(&state).await;
+    Json(serde_json::json!({
+        "status": if db_status { "UP" } else { "DOWN" }
+    }))
+}
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+async fn check_database(state: &AppState) -> bool {
+    use bson::doc;
+    state.db.run_command(doc! { "ping": 1 }).await.is_ok()
+}
+<%_ } else { _%>
+async fn check_database(state: &AppState) -> bool {
+    state.pool.get().is_ok()
+}
+<%_ } _%>
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_health_response_serialization() {
+        let response = HealthResponse {
+            status: "UP".to_string(),
+            components: HealthComponents {
+                db: ComponentHealth {
+                    status: "UP".to_string(),
+                },
+            },
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"status\":\"UP\""));
+        assert!(json.contains("\"components\""));
+        assert!(json.contains("\"db\""));
+    }
+
+    #[test]
+    fn test_health_response_down_status() {
+        let response = HealthResponse {
+            status: "DOWN".to_string(),
+            components: HealthComponents {
+                db: ComponentHealth {
+                    status: "DOWN".to_string(),
+                },
+            },
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"status\":\"DOWN\""));
+    }
+
+    #[test]
+    fn test_component_health_serialization() {
+        let component = ComponentHealth {
+            status: "UP".to_string(),
+        };
+        let json = serde_json::to_string(&component).unwrap();
+        assert_eq!(json, "{\"status\":\"UP\"}");
+    }
+
+    #[test]
+    fn test_health_components_serialization() {
+        let components = HealthComponents {
+            db: ComponentHealth {
+                status: "UP".to_string(),
+            },
+        };
+        let json = serde_json::to_string(&components).unwrap();
+        assert!(json.contains("\"db\""));
+        assert!(json.contains("\"status\":\"UP\""));
+    }
+}

@@ -1,0 +1,729 @@
+//! Test utilities for integration testing
+//!
+<%_ if (devDatabaseTypeMongodb) { _%>
+//! Provides helpers for setting up test MongoDB database and test fixtures.
+
+use std::sync::Arc;
+use bson::{doc, DateTime as BsonDateTime};
+use mongodb::{Client, Database, options::ClientOptions};
+
+use crate::config::AppConfig;
+use crate::db::MongoPool;
+use crate::models::User;
+use crate::services::UserService;
+use crate::AppState;
+
+/// Creates a test MongoDB pool connected to a test database
+///
+/// Uses the TEST_MONGODB_URI environment variable if set,
+/// otherwise falls back to MONGODB_URI,
+/// or uses a default local MongoDB connection.
+pub async fn create_test_mongo_pool() -> MongoPool {
+    let mongodb_uri = std::env::var("TEST_MONGODB_URI")
+        .or_else(|_| std::env::var("MONGODB_URI"))
+        .unwrap_or_else(|_| "mongodb://localhost:27017".to_string());
+
+    let database_name = std::env::var("TEST_MONGODB_DATABASE")
+        .or_else(|_| std::env::var("MONGODB_DATABASE").map(|s| format!("{}_test", s)))
+        .unwrap_or_else(|_| "<%= baseName.toLowerCase() %>_test".to_string());
+
+    let mut client_options = ClientOptions::parse(&mongodb_uri)
+        .await
+        .expect("Failed to parse MongoDB URI");
+    client_options.app_name = Some("<%= baseName %>_test".to_string());
+
+    let client = Client::with_options(client_options)
+        .expect("Failed to create MongoDB client");
+
+    let database = client.database(&database_name);
+
+    // Clean up existing test data for isolation
+    clean_test_data_mongo(&database).await;
+
+    Arc::new(database)
+}
+
+/// Cleans up test data for isolation between tests
+async fn clean_test_data_mongo(db: &Database) {
+    // Drop all collections except authorities
+    let collections: Vec<String> = db.list_collection_names().await.unwrap_or_default();
+    for collection_name in collections {
+        if collection_name != "authorities" {
+            let _ = db.collection::<bson::Document>(&collection_name).drop().await;
+        }
+    }
+
+    // Recreate authorities
+    let authorities = db.collection::<bson::Document>("authorities");
+    let _ = authorities.delete_many(doc! {}).await;
+    let _ = authorities.insert_many(vec![
+        doc! { "_id": "ROLE_ADMIN" },
+        doc! { "_id": "ROLE_USER" },
+    ]).await;
+}
+
+/// Creates a test configuration for MongoDB
+pub fn create_test_config() -> AppConfig {
+    AppConfig {
+        app_name: "test_app".to_string(),
+        app_env: "test".to_string(),
+        app_port: 8080,
+        app_host: "127.0.0.1".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+        app_https: false,
+<%_ } _%>
+        mongodb_uri: std::env::var("TEST_MONGODB_URI")
+            .or_else(|_| std::env::var("MONGODB_URI"))
+            .unwrap_or_else(|_| "mongodb://localhost:27017".to_string()),
+        mongodb_database: std::env::var("TEST_MONGODB_DATABASE")
+            .or_else(|_| std::env::var("MONGODB_DATABASE").map(|s| format!("{}_test", s)))
+            .unwrap_or_else(|_| "<%= baseName.toLowerCase() %>_test".to_string()),
+<%_ if (authenticationTypeJwt) { _%>
+        jwt_secret: "test_jwt_secret_key_for_testing_purposes_only_12345".to_string(),
+        jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+        frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+        static_files_dir: None,
+        serve_static_files: false,
+<%_ } _%>
+    }
+}
+
+/// Creates a test AppState with test database (async version for MongoDB)
+pub async fn create_test_state() -> AppState {
+<%_ if (authenticationTypeOauth2) { _%>
+    use crate::config::OAuth2Config;
+    use crate::security::OAuth2Validator;
+
+    let config = create_test_config();
+    let oauth2_config = OAuth2Config::from_env();
+    let oauth2_validator = OAuth2Validator::new(
+        oauth2_config.jwks_uri.clone(),
+        oauth2_config.issuer_uri.clone(),
+        oauth2_config.client_id.clone(),
+    );
+
+    AppState {
+        db: create_test_mongo_pool().await,
+        config,
+        oauth2_config,
+        oauth2_validator,
+    }
+<%_ } else { _%>
+    AppState {
+        db: create_test_mongo_pool().await,
+        config: create_test_config(),
+    }
+<%_ } _%>
+}
+
+/// Creates a test admin user in MongoDB and returns their login
+pub async fn create_test_admin_mongo(db: &MongoPool) -> String {
+    // Check if admin already exists
+    if let Ok(Some(_user)) = UserService::find_by_login(db, "admin").await {
+        return "admin".to_string();
+    }
+
+    // Create new admin user
+    let password_hash = UserService::hash_password("admin123").expect("Failed to hash password");
+    let now = BsonDateTime::now();
+
+    let user = User {
+        id: None,
+        login: "admin".to_string(),
+        password_hash,
+        first_name: Some("Admin".to_string()),
+        last_name: Some("User".to_string()),
+        email: "admin@localhost".to_string(),
+        activated: true,
+        lang_key: Some("en".to_string()),
+        image_url: None,
+        authorities: vec!["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        created_by: Some("system".to_string()),
+        created_date: Some(now),
+        last_modified_by: Some("system".to_string()),
+        last_modified_date: Some(now),
+    };
+
+    let collection = db.collection::<User>("users");
+    collection.insert_one(&user).await.expect("Failed to create admin user");
+
+    "admin".to_string()
+}
+
+/// Creates a test regular user in MongoDB and returns their login
+pub async fn create_test_user_mongo(db: &MongoPool) -> String {
+    // Check if user already exists
+    if let Ok(Some(_user)) = UserService::find_by_login(db, "user").await {
+        return "user".to_string();
+    }
+
+    // Create new user
+    let password_hash = UserService::hash_password("user123").expect("Failed to hash password");
+    let now = BsonDateTime::now();
+
+    let user = User {
+        id: None,
+        login: "user".to_string(),
+        password_hash,
+        first_name: Some("Test".to_string()),
+        last_name: Some("User".to_string()),
+        email: "user@localhost".to_string(),
+        activated: true,
+        lang_key: Some("en".to_string()),
+        image_url: None,
+        authorities: vec!["ROLE_USER".to_string()],
+        created_by: Some("system".to_string()),
+        created_date: Some(now),
+        last_modified_by: Some("system".to_string()),
+        last_modified_date: Some(now),
+    };
+
+    let collection = db.collection::<User>("users");
+    collection.insert_one(&user).await.expect("Failed to create test user");
+
+    "user".to_string()
+}
+
+<%_ if (authenticationTypeJwt) { _%>
+/// Generates a valid JWT token for testing
+pub fn generate_test_token(config: &AppConfig, login: &str, authorities: &[String]) -> String {
+    crate::services::AuthService::generate_token(config, login, authorities, false)
+        .expect("Failed to generate test token")
+}
+<%_ } _%>
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_test_mongo_pool() {
+        let db = create_test_mongo_pool().await;
+        // Verify we can list collections
+        let collections = db.list_collection_names().await;
+        assert!(collections.is_ok());
+    }
+
+    #[test]
+    fn test_create_test_config() {
+        let config = create_test_config();
+        assert_eq!(config.app_env, "test");
+<%_ if (authenticationTypeJwt) { _%>
+        assert!(!config.jwt_secret.is_empty());
+<%_ } _%>
+    }
+
+    #[tokio::test]
+    async fn test_create_test_admin_mongo() {
+        let db = create_test_mongo_pool().await;
+        let login = create_test_admin_mongo(&db).await;
+        assert_eq!(login, "admin");
+
+        // Verify user exists
+        let user = UserService::find_by_login(&db, "admin").await.unwrap().unwrap();
+        assert_eq!(user.email, "admin@localhost");
+        assert!(user.activated);
+    }
+
+    #[tokio::test]
+    async fn test_create_test_user_mongo() {
+        let db = create_test_mongo_pool().await;
+        let login = create_test_user_mongo(&db).await;
+        assert_eq!(login, "user");
+
+        // Verify user exists
+        let user = UserService::find_by_login(&db, "user").await.unwrap().unwrap();
+        assert_eq!(user.email, "user@localhost");
+    }
+
+<%_ if (authenticationTypeJwt) { _%>
+    #[test]
+    fn test_generate_test_token() {
+        let config = create_test_config();
+        let token = generate_test_token(&config, "testuser", &["ROLE_USER".to_string()]);
+        assert!(!token.is_empty());
+        // JWT tokens have 3 parts
+        assert_eq!(token.split('.').count(), 3);
+    }
+<%_ } _%>
+}
+<%_ } else if (devDatabaseTypePostgresql) { _%>
+//! Provides helpers for setting up test PostgreSQL database and test fixtures.
+
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
+use diesel_migrations::MigrationHarness;
+
+use crate::config::AppConfig;
+use crate::db::connection::{DbPool, MIGRATIONS};
+use crate::models::NewUser;
+use crate::services::UserService;
+use crate::AppState;
+
+/// Creates a test database pool connected to a test database
+///
+/// Uses the TEST_DATABASE_URL environment variable if set,
+/// otherwise falls back to DATABASE_URL with "_test" appended,
+/// or uses a default local PostgreSQL connection.
+pub fn create_test_pool() -> DbPool {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| {
+            std::env::var("DATABASE_URL").map(|base_url| {
+                // Append _test to database name
+                format!("{}_test", base_url)
+            })
+        })
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/<%= baseName.toLowerCase() %>_test".to_string());
+
+    // First, try to create the test database if it doesn't exist
+    ensure_test_database_exists(&database_url);
+
+    let manager = ConnectionManager::<PgConnection>::new(&database_url);
+    let pool = r2d2::Pool::builder()
+        .max_size(5)
+        .build(manager)
+        .expect("Failed to create test pool. Ensure PostgreSQL is running and accessible.");
+
+    // Run migrations
+    let mut conn = pool.get().expect("Failed to get connection");
+    conn.run_pending_migrations(MIGRATIONS)
+        .expect("Failed to run migrations");
+
+    // Clean up existing test data for isolation
+    clean_test_data(&mut conn);
+
+    pool
+}
+
+/// Ensures the test database exists
+fn ensure_test_database_exists(database_url: &str) {
+    let db_name = database_url.rsplit('/').next().unwrap_or("test");
+    let maintenance_url = if let Some(last_slash) = database_url.rfind('/') {
+        format!("{}postgres", &database_url[..=last_slash])
+    } else {
+        database_url.to_string()
+    };
+
+    if let Ok(mut conn) = PgConnection::establish(&maintenance_url) {
+        // Check if database exists
+        let db_exists: Result<Option<CountResult>, _> = diesel::sql_query(
+            format!("SELECT 1 as count FROM pg_database WHERE datname = '{}'", db_name)
+        )
+        .get_result::<CountResult>(&mut conn)
+        .optional();
+
+        if let Ok(None) = db_exists {
+            let _ = diesel::sql_query(format!("CREATE DATABASE \"{}\"", db_name))
+                .execute(&mut conn);
+        }
+    }
+}
+
+#[derive(diesel::QueryableByName)]
+struct CountResult {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    #[allow(dead_code)]
+    count: i64,
+}
+
+/// Cleans up test data for isolation between tests
+fn clean_test_data(conn: &mut PgConnection) {
+    use crate::db::schema::{user_authorities, users};
+
+    // Delete test users (keep admin and user from migrations)
+    let _ = diesel::delete(user_authorities::table.filter(
+        user_authorities::user_id.ne_all(
+            users::table.select(users::id).filter(
+                users::login.eq("admin").or(users::login.eq("user"))
+            )
+        )
+    )).execute(conn);
+
+    let _ = diesel::delete(users::table.filter(
+        users::login.ne("admin").and(users::login.ne("user"))
+    )).execute(conn);
+}
+<%_ } else if (devDatabaseTypeMysql) { _%>
+//! Provides helpers for setting up test MySQL database and test fixtures.
+
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::mysql::MysqlConnection;
+use diesel::prelude::*;
+use diesel_migrations::MigrationHarness;
+
+use crate::config::AppConfig;
+use crate::db::connection::{DbPool, MIGRATIONS};
+use crate::models::NewUser;
+use crate::services::UserService;
+use crate::AppState;
+
+/// Creates a test database pool connected to a test database
+///
+/// Uses the TEST_DATABASE_URL environment variable if set,
+/// otherwise falls back to DATABASE_URL with "_test" appended,
+/// or uses a default local MySQL connection.
+pub fn create_test_pool() -> DbPool {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| {
+            std::env::var("DATABASE_URL").map(|base_url| {
+                // Append _test to database name
+                format!("{}_test", base_url)
+            })
+        })
+        .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>_test".to_string());
+
+    // First, try to create the test database if it doesn't exist
+    ensure_test_database_exists(&database_url);
+
+    let manager = ConnectionManager::<MysqlConnection>::new(&database_url);
+    let pool = r2d2::Pool::builder()
+        .max_size(5)
+        .build(manager)
+        .expect("Failed to create test pool. Ensure MySQL is running and accessible.");
+
+    // Run migrations
+    let mut conn = pool.get().expect("Failed to get connection");
+    conn.run_pending_migrations(MIGRATIONS)
+        .expect("Failed to run migrations");
+
+    // Clean up existing test data for isolation
+    clean_test_data(&mut conn);
+
+    pool
+}
+
+/// Ensures the test database exists
+fn ensure_test_database_exists(database_url: &str) {
+    let db_name = database_url.rsplit('/').next().unwrap_or("test");
+    let maintenance_url = if let Some(last_slash) = database_url.rfind('/') {
+        format!("{}mysql", &database_url[..=last_slash])
+    } else {
+        database_url.to_string()
+    };
+
+    if let Ok(mut conn) = MysqlConnection::establish(&maintenance_url) {
+        // Check if database exists using MySQL information schema
+        let db_exists: Result<Option<CountResult>, _> = diesel::sql_query(
+            format!("SELECT 1 as count FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{}'", db_name)
+        )
+        .get_result::<CountResult>(&mut conn)
+        .optional();
+
+        if let Ok(None) = db_exists {
+            let _ = diesel::sql_query(format!("CREATE DATABASE `{}`", db_name))
+                .execute(&mut conn);
+        }
+    }
+}
+
+#[derive(diesel::QueryableByName)]
+struct CountResult {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    #[allow(dead_code)]
+    count: i64,
+}
+
+/// Cleans up test data for isolation between tests
+fn clean_test_data(conn: &mut MysqlConnection) {
+    use crate::db::schema::{user_authorities, users};
+
+    // Delete test users (keep admin and user from migrations)
+    let _ = diesel::delete(user_authorities::table.filter(
+        user_authorities::user_id.ne_all(
+            users::table.select(users::id).filter(
+                users::login.eq("admin").or(users::login.eq("user"))
+            )
+        )
+    )).execute(conn);
+
+    let _ = diesel::delete(users::table.filter(
+        users::login.ne("admin").and(users::login.ne("user"))
+    )).execute(conn);
+}
+<%_ } else { _%>
+//! Provides helpers for setting up in-memory SQLite database and test fixtures.
+
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::sqlite::SqliteConnection;
+use diesel_migrations::MigrationHarness;
+
+use crate::config::AppConfig;
+use crate::db::connection::{DbPool, MIGRATIONS};
+use crate::models::NewUser;
+use crate::services::UserService;
+use crate::AppState;
+
+/// Creates an isolated SQLite database pool for testing
+///
+/// Each call creates a unique temporary database file to ensure test isolation
+/// when tests run in parallel. The file is created in the system temp directory.
+pub fn create_test_pool() -> DbPool {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let db_id = COUNTER.fetch_add(1, Ordering::SeqCst);
+    let thread_id = format!("{:?}", std::thread::current().id());
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    // Create unique temp file for each test pool using counter, thread ID, and timestamp
+    let db_path = std::env::temp_dir().join(format!(
+        "test_db_{}_{}_{}.sqlite",
+        db_id, thread_id.replace(['(', ')'], ""), timestamp
+    ));
+    let db_url = db_path.to_string_lossy().to_string();
+
+    let manager = ConnectionManager::<SqliteConnection>::new(&db_url);
+    let pool = r2d2::Pool::builder()
+        .max_size(5)
+        .build(manager)
+        .expect("Failed to create test pool");
+
+    // Run migrations
+    let mut conn = pool.get().expect("Failed to get connection");
+    conn.run_pending_migrations(MIGRATIONS)
+        .expect("Failed to run migrations");
+
+    pool
+}
+<%_ } _%>
+<%_ if (!devDatabaseTypeMongodb) { _%>
+
+/// Creates a test configuration
+pub fn create_test_config() -> AppConfig {
+    AppConfig {
+        app_name: "test_app".to_string(),
+        app_env: "test".to_string(),
+        app_port: 8080,
+        app_host: "127.0.0.1".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+        app_https: false,
+<%_ } _%>
+<%_ if (devDatabaseTypePostgresql) { _%>
+        database_url: std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/<%= baseName.toLowerCase() %>_test".to_string()),
+<%_ } else if (devDatabaseTypeMysql) { _%>
+        database_url: std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>_test".to_string()),
+<%_ } else { _%>
+        database_url: ":memory:".to_string(),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+        jwt_secret: "test_jwt_secret_key_for_testing_purposes_only_12345".to_string(),
+        jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+        frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+        static_files_dir: None,
+        serve_static_files: false,
+<%_ } _%>
+    }
+}
+
+/// Creates a test AppState with test database
+pub fn create_test_state() -> AppState {
+<%_ if (authenticationTypeOauth2) { _%>
+    use crate::config::OAuth2Config;
+    use crate::security::OAuth2Validator;
+
+    let config = create_test_config();
+    let oauth2_config = OAuth2Config::from_env();
+    let oauth2_validator = OAuth2Validator::new(
+        oauth2_config.jwks_uri.clone(),
+        oauth2_config.issuer_uri.clone(),
+        oauth2_config.client_id.clone(),
+    );
+
+    AppState {
+        pool: create_test_pool(),
+        config,
+        oauth2_config,
+        oauth2_validator,
+    }
+<%_ } else { _%>
+    AppState {
+        pool: create_test_pool(),
+        config: create_test_config(),
+    }
+<%_ } _%>
+}
+
+/// Gets or creates a test admin user and returns their login
+///
+/// If the admin user already exists (from migrations), updates the password to "admin123".
+/// Otherwise creates a new admin user with password "admin123".
+pub fn create_test_admin(pool: &DbPool) -> String {
+    let mut conn = pool.get().expect("Failed to get connection");
+
+    // Check if admin already exists (from migrations)
+    if let Ok(_user) = UserService::find_by_login(&mut conn, "admin") {
+        // Admin exists - update password to known test value
+        let password_hash = UserService::hash_password("admin123").expect("Failed to hash password");
+        UserService::update_password(&mut conn, "admin", &password_hash)
+            .expect("Failed to update admin password");
+        return "admin".to_string();
+    }
+
+    // Admin doesn't exist - create new one
+    let password_hash = UserService::hash_password("admin123").expect("Failed to hash password");
+
+    let new_user = NewUser {
+        login: "admin".to_string(),
+        password_hash,
+        first_name: Some("Admin".to_string()),
+        last_name: Some("User".to_string()),
+        email: "admin@localhost".to_string(),
+        activated: true,
+        lang_key: Some("en".to_string()),
+        image_url: None,
+        created_by: Some("system".to_string()),
+        created_date: Some(chrono::Utc::now().naive_utc()),
+        last_modified_by: Some("system".to_string()),
+        last_modified_date: Some(chrono::Utc::now().naive_utc()),
+    };
+
+    UserService::create_with_authorities(
+        &mut conn,
+        new_user,
+        vec!["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+    )
+    .expect("Failed to create admin user");
+
+    "admin".to_string()
+}
+
+/// Gets or creates a test regular user and returns their login
+///
+/// If the user already exists (from migrations), updates the password to "user123"
+/// and ensures the user is activated. Otherwise creates a new user.
+pub fn create_test_user(pool: &DbPool) -> String {
+    let mut conn = pool.get().expect("Failed to get connection");
+
+    // Check if user already exists (from migrations)
+    if let Ok(user) = UserService::find_by_login(&mut conn, "user") {
+        // User exists - update password to known test value and ensure activated
+        let password_hash = UserService::hash_password("user123").expect("Failed to hash password");
+        UserService::update_password(&mut conn, "user", &password_hash)
+            .expect("Failed to update user password");
+        // Ensure user is activated (may have been deactivated by a previous test)
+        use crate::dto::UpdateUserDto;
+        UserService::update(&mut conn, user.id, UpdateUserDto {
+            login: None,
+            first_name: None,
+            last_name: None,
+            email: None,
+            activated: Some(true),
+            lang_key: None,
+            image_url: None,
+            authorities: None,
+        }, "system").expect("Failed to reactivate user");
+        return "user".to_string();
+    }
+
+    // User doesn't exist - create new one
+    let password_hash = UserService::hash_password("user123").expect("Failed to hash password");
+
+    let new_user = NewUser {
+        login: "user".to_string(),
+        password_hash,
+        first_name: Some("Test".to_string()),
+        last_name: Some("User".to_string()),
+        email: "user@localhost".to_string(),
+        activated: true,
+        lang_key: Some("en".to_string()),
+        image_url: None,
+        created_by: Some("system".to_string()),
+        created_date: Some(chrono::Utc::now().naive_utc()),
+        last_modified_by: Some("system".to_string()),
+        last_modified_date: Some(chrono::Utc::now().naive_utc()),
+    };
+
+    UserService::create_with_authorities(
+        &mut conn,
+        new_user,
+        vec!["ROLE_USER".to_string()],
+    )
+    .expect("Failed to create test user");
+
+    "user".to_string()
+}
+
+<%_ if (authenticationTypeJwt) { _%>
+/// Generates a valid JWT token for testing
+pub fn generate_test_token(config: &AppConfig, login: &str, authorities: &[String]) -> String {
+    crate::services::AuthService::generate_token(config, login, authorities, false)
+        .expect("Failed to generate test token")
+}
+<%_ } _%>
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_test_pool() {
+        let pool = create_test_pool();
+        assert!(pool.get().is_ok());
+    }
+
+    #[test]
+    fn test_create_test_config() {
+        let config = create_test_config();
+        assert_eq!(config.app_env, "test");
+<%_ if (authenticationTypeJwt) { _%>
+        assert!(!config.jwt_secret.is_empty());
+<%_ } _%>
+    }
+
+    #[test]
+    fn test_create_test_state() {
+        let state = create_test_state();
+        assert!(state.pool.get().is_ok());
+        assert_eq!(state.config.app_env, "test");
+    }
+
+    #[test]
+    fn test_create_test_admin() {
+        let pool = create_test_pool();
+        let login = create_test_admin(&pool);
+        assert_eq!(login, "admin");
+
+        // Verify user exists
+        let mut conn = pool.get().unwrap();
+        let user = UserService::find_by_login(&mut conn, "admin").unwrap();
+        assert_eq!(user.email, "admin@localhost");
+        assert!(user.activated);
+    }
+
+    #[test]
+    fn test_create_test_user() {
+        let pool = create_test_pool();
+        let login = create_test_user(&pool);
+        assert_eq!(login, "user");
+
+        // Verify user exists
+        let mut conn = pool.get().unwrap();
+        let user = UserService::find_by_login(&mut conn, "user").unwrap();
+        assert_eq!(user.email, "user@localhost");
+    }
+
+<%_ if (authenticationTypeJwt) { _%>
+    #[test]
+    fn test_generate_test_token() {
+        let config = create_test_config();
+        let token = generate_test_token(&config, "testuser", &["ROLE_USER".to_string()]);
+        assert!(!token.is_empty());
+        // JWT tokens have 3 parts
+        assert_eq!(token.split('.').count(), 3);
+    }
+<%_ } _%>
+}
+<%_ } _%>

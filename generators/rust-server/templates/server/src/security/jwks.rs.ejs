@@ -1,0 +1,147 @@
+//! JWKS (JSON Web Key Set) client for fetching and caching public keys from OAuth2 providers
+
+use jsonwebtoken::jwk::JwkSet;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+
+/// Error type for JWKS operations
+#[derive(Debug, thiserror::Error)]
+pub enum JwksError {
+    #[error("Failed to fetch JWKS: {0}")]
+    FetchError(String),
+    #[error("Failed to parse JWKS: {0}")]
+    ParseError(String),
+    #[error("Key not found: {0}")]
+    KeyNotFound(String),
+}
+
+/// Cached JWKS entry with timestamp
+#[derive(Clone)]
+struct CachedJwks {
+    jwks: JwkSet,
+    fetched_at: Instant,
+}
+
+/// JWKS client with caching support
+///
+/// Fetches and caches the JSON Web Key Set from the OAuth2 provider's JWKS endpoint.
+/// Keys are cached for a configurable duration to avoid repeated network requests.
+#[derive(Clone)]
+pub struct JwksClient {
+    jwks_uri: String,
+    cache: Arc<RwLock<Option<CachedJwks>>>,
+    cache_duration: Duration,
+    http_client: reqwest::Client,
+}
+
+impl JwksClient {
+    /// Creates a new JWKS client
+    ///
+    /// # Arguments
+    /// * `jwks_uri` - The URI to fetch JWKS from (e.g., http://keycloak:9080/realms/jhipster/protocol/openid-connect/certs)
+    pub fn new(jwks_uri: String) -> Self {
+        Self {
+            jwks_uri,
+            cache: Arc::new(RwLock::new(None)),
+            cache_duration: Duration::from_secs(300), // 5 minutes default
+            http_client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .expect("Failed to create HTTP client"),
+        }
+    }
+
+    /// Creates a new JWKS client with custom cache duration
+    pub fn with_cache_duration(jwks_uri: String, cache_duration: Duration) -> Self {
+        Self {
+            jwks_uri,
+            cache: Arc::new(RwLock::new(None)),
+            cache_duration,
+            http_client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .expect("Failed to create HTTP client"),
+        }
+    }
+
+    /// Fetches the JWKS, using cache if available and not expired
+    pub async fn get_jwks(&self) -> Result<JwkSet, JwksError> {
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(cached) = cache.as_ref() {
+                if cached.fetched_at.elapsed() < self.cache_duration {
+                    tracing::debug!("Using cached JWKS");
+                    return Ok(cached.jwks.clone());
+                }
+            }
+        }
+
+        // Fetch fresh JWKS
+        tracing::info!("Fetching JWKS from {}", self.jwks_uri);
+        let response = self
+            .http_client
+            .get(&self.jwks_uri)
+            .send()
+            .await
+            .map_err(|e| JwksError::FetchError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(JwksError::FetchError(format!(
+                "JWKS endpoint returned status {}",
+                response.status()
+            )));
+        }
+
+        let jwks: JwkSet = response
+            .json()
+            .await
+            .map_err(|e| JwksError::ParseError(e.to_string()))?;
+
+        tracing::info!("Successfully fetched JWKS with {} keys", jwks.keys.len());
+
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            *cache = Some(CachedJwks {
+                jwks: jwks.clone(),
+                fetched_at: Instant::now(),
+            });
+        }
+
+        Ok(jwks)
+    }
+
+    /// Invalidates the cache, forcing a fresh fetch on next request
+    pub async fn invalidate_cache(&self) {
+        let mut cache = self.cache.write().await;
+        *cache = None;
+        tracing::info!("JWKS cache invalidated");
+    }
+
+    /// Gets the JWKS URI
+    pub fn jwks_uri(&self) -> &str {
+        &self.jwks_uri
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jwks_client_creation() {
+        let client = JwksClient::new("http://localhost:9080/realms/jhipster/protocol/openid-connect/certs".to_string());
+        assert_eq!(client.jwks_uri(), "http://localhost:9080/realms/jhipster/protocol/openid-connect/certs");
+    }
+
+    #[test]
+    fn test_jwks_client_with_custom_cache_duration() {
+        let client = JwksClient::with_cache_duration(
+            "http://localhost:9080/certs".to_string(),
+            Duration::from_secs(600),
+        );
+        assert_eq!(client.cache_duration, Duration::from_secs(600));
+    }
+}

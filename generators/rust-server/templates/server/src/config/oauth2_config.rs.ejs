@@ -1,0 +1,145 @@
+//! OAuth2/OIDC Configuration for Keycloak/Okta
+
+use serde::Deserialize;
+
+/// OAuth2/OIDC configuration loaded from environment variables
+#[derive(Debug, Clone, Deserialize)]
+pub struct OAuth2Config {
+    /// The OIDC issuer URI (e.g., http://localhost:9080/realms/jhipster)
+    pub issuer_uri: String,
+    /// OAuth2 client ID
+    pub client_id: String,
+    /// OAuth2 client secret (optional for public clients)
+    pub client_secret: Option<String>,
+    /// JWKS URI for fetching public keys
+    pub jwks_uri: String,
+    /// Authorization endpoint
+    pub authorization_endpoint: String,
+    /// Token endpoint
+    pub token_endpoint: String,
+    /// UserInfo endpoint
+    pub userinfo_endpoint: String,
+    /// End session (logout) endpoint
+    pub end_session_endpoint: String,
+}
+
+impl OAuth2Config {
+    /// Creates OAuth2 configuration from environment variables
+    ///
+    /// Required environment variables:
+    /// - OIDC_ISSUER_URI: The OIDC issuer URI
+    /// - OIDC_CLIENT_ID: The OAuth2 client ID
+    ///
+    /// Optional environment variables:
+    /// - OIDC_CLIENT_SECRET: The OAuth2 client secret
+    ///
+    /// Other endpoints are derived from the issuer URI following OIDC discovery conventions.
+    pub fn from_env() -> Self {
+        let issuer_uri = std::env::var("OIDC_ISSUER_URI")
+            .unwrap_or_else(|_| "http://localhost:9080/realms/jhipster".to_string());
+
+        let client_id = std::env::var("OIDC_CLIENT_ID")
+            .unwrap_or_else(|_| "web_app".to_string());
+
+        let client_secret = std::env::var("OIDC_CLIENT_SECRET").ok();
+
+        // Derive endpoints from issuer URI
+        // For Keycloak: {issuer}/protocol/openid-connect/{endpoint}
+        // For Okta: {issuer}/v1/{endpoint}
+        let base = issuer_uri.trim_end_matches('/');
+        let is_okta = base.contains("okta");
+
+        let (jwks_uri, authorization_endpoint, token_endpoint, userinfo_endpoint, end_session_endpoint) = if is_okta {
+            // Okta-specific endpoints
+            (
+                format!("{}/v1/keys", base),
+                format!("{}/v1/authorize", base),
+                format!("{}/v1/token", base),
+                format!("{}/v1/userinfo", base),
+                format!("{}/v1/logout", base),
+            )
+        } else {
+            // Keycloak/standard OIDC endpoints
+            (
+                format!("{}/protocol/openid-connect/certs", base),
+                format!("{}/protocol/openid-connect/auth", base),
+                format!("{}/protocol/openid-connect/token", base),
+                format!("{}/protocol/openid-connect/userinfo", base),
+                format!("{}/protocol/openid-connect/logout", base),
+            )
+        };
+
+        Self {
+            issuer_uri,
+            client_id,
+            client_secret,
+            jwks_uri,
+            authorization_endpoint,
+            token_endpoint,
+            userinfo_endpoint,
+            end_session_endpoint,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Mutex to ensure OAuth2 config tests run serially since they modify env vars
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_default_config() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // Clear any existing env vars for test isolation
+        std::env::remove_var("OIDC_ISSUER_URI");
+        std::env::remove_var("OIDC_CLIENT_ID");
+        std::env::remove_var("OIDC_CLIENT_SECRET");
+
+        let config = OAuth2Config::from_env();
+
+        assert_eq!(config.issuer_uri, "http://localhost:9080/realms/jhipster");
+        assert_eq!(config.client_id, "web_app");
+        assert!(config.client_secret.is_none());
+        assert!(config.jwks_uri.contains("protocol/openid-connect/certs"));
+    }
+
+    #[test]
+    fn test_keycloak_endpoints() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        std::env::set_var("OIDC_ISSUER_URI", "http://keycloak:9080/realms/test");
+        std::env::set_var("OIDC_CLIENT_ID", "test_app");
+
+        let config = OAuth2Config::from_env();
+
+        assert_eq!(config.jwks_uri, "http://keycloak:9080/realms/test/protocol/openid-connect/certs");
+        assert_eq!(config.authorization_endpoint, "http://keycloak:9080/realms/test/protocol/openid-connect/auth");
+        assert_eq!(config.token_endpoint, "http://keycloak:9080/realms/test/protocol/openid-connect/token");
+
+        // Clean up
+        std::env::remove_var("OIDC_ISSUER_URI");
+        std::env::remove_var("OIDC_CLIENT_ID");
+    }
+
+    #[test]
+    fn test_okta_endpoints() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        std::env::set_var("OIDC_ISSUER_URI", "https://dev-12345.okta.com/oauth2/default");
+        std::env::set_var("OIDC_CLIENT_ID", "okta_app");
+
+        let config = OAuth2Config::from_env();
+
+        assert!(config.jwks_uri.contains("/v1/keys"));
+        assert!(config.authorization_endpoint.contains("/v1/authorize"));
+        assert!(config.token_endpoint.contains("/v1/token"));
+
+        // Clean up
+        std::env::remove_var("OIDC_ISSUER_URI");
+        std::env::remove_var("OIDC_CLIENT_ID");
+    }
+}

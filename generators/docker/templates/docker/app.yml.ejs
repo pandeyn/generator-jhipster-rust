@@ -1,0 +1,82 @@
+<%_
+// Default database type flags if not set (for standalone docker generation)
+const isPostgresql = typeof devDatabaseTypePostgresql !== 'undefined' ? devDatabaseTypePostgresql : false;
+const isMysql = typeof devDatabaseTypeMysql !== 'undefined' ? devDatabaseTypeMysql : false;
+const isSqlite = typeof devDatabaseTypeSqlite !== 'undefined' ? devDatabaseTypeSqlite : (!isPostgresql && !isMysql);
+_%>
+# This configuration is intended for development purpose, it's **your** responsibility to harden it for production
+name: <%= baseName.toLowerCase() %>
+services:
+  app:
+    image: <%= baseName.toLowerCase() %>
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - RUST_LOG=info
+<%_ if (isPostgresql) { _%>
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/<%= baseName.toLowerCase() %>
+<%_ } else if (isMysql) { _%>
+      - DATABASE_URL=mysql://root:root@db:3306/<%= baseName.toLowerCase() %>
+<%_ } else { _%>
+      - DATABASE_URL=sqlite:./data/<%= baseName.toLowerCase() %>.db
+<%_ } _%>
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    ports:
+      - 127.0.0.1:8080:8080
+<%_ if (isSqlite) { _%>
+    volumes:
+      - ./data:/app/data
+<%_ } _%>
+<%_ if (isPostgresql || isMysql) { _%>
+    depends_on:
+      db:
+        condition: service_healthy
+<%_ } _%>
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/api/health']
+      interval: 5s
+      timeout: 5s
+      retries: 40
+<%_ if (isPostgresql) { _%>
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=<%= baseName.toLowerCase() %>
+    ports:
+      - 127.0.0.1:5432:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+<%_ } else if (isMysql) { _%>
+
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=<%= baseName.toLowerCase() %>
+    ports:
+      - 127.0.0.1:3306:3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-proot']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:
+<%_ } _%>

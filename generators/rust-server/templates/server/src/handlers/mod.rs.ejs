@@ -1,0 +1,12 @@
+pub mod health;
+pub mod management;
+pub mod user;
+pub mod account;
+<%_ if (authenticationTypeOauth2) { _%>
+pub mod oauth2;
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+pub mod static_files;
+<%_ } _%>
+
+// jhipster-needle-add-entity-handler - JHipster will add entity handlers here

@@ -1,0 +1,256 @@
+use std::env;
+
+#[derive(Clone, Debug)]
+pub struct AppConfig {
+    pub app_name: String,
+    pub app_env: String,
+    pub app_port: u16,
+    pub app_host: String,
+<%_ if (applicationTypeMonolith) { _%>
+    /// Whether to use HTTPS for generated URLs (e.g., OAuth2 redirects)
+    pub app_https: bool,
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    pub mongodb_uri: String,
+    pub mongodb_database: String,
+<%_ } else { _%>
+    pub database_url: String,
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+    pub jwt_secret: String,
+    pub jwt_expiration_hours: u64,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+    /// Frontend URL for OAuth2 redirect after authentication
+    /// In development, this is typically the Angular dev server (e.g., http://localhost:9090)
+    /// In production, this would be the production frontend URL
+    pub frontend_url: String,
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+    /// Directory to serve static files from (for monolithic deployment)
+    pub static_files_dir: Option<String>,
+    /// Whether to enable static file serving
+    pub serve_static_files: bool,
+<%_ } _%>
+}
+
+impl AppConfig {
+    pub fn from_env() -> Self {
+        Self {
+            app_name: env::var("APP_NAME").unwrap_or_else(|_| "<%= baseName %>".to_string()),
+            app_env: env::var("APP_ENV").unwrap_or_else(|_| "development".to_string()),
+            app_port: env::var("APP_PORT")
+                .unwrap_or_else(|_| "8080".to_string())
+                .parse()
+                .expect("APP_PORT must be a valid port number"),
+            app_host: env::var("APP_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
+<%_ if (applicationTypeMonolith) { _%>
+            app_https: env::var("APP_HTTPS")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: env::var("MONGODB_URI")
+                .expect("MONGODB_URI must be set"),
+            mongodb_database: env::var("MONGODB_DATABASE")
+                .expect("MONGODB_DATABASE must be set"),
+<%_ } else { _%>
+            database_url: env::var("DATABASE_URL")
+                .expect("DATABASE_URL must be set"),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: env::var("JWT_SECRET")
+                .expect("JWT_SECRET must be set"),
+            jwt_expiration_hours: env::var("JWT_EXPIRATION_HOURS")
+                .unwrap_or_else(|_| "24".to_string())
+                .parse()
+                .expect("JWT_EXPIRATION_HOURS must be a valid number"),
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: env::var("FRONTEND_URL")
+                .unwrap_or_else(|_| "http://localhost:9000".to_string()),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+            static_files_dir: env::var("STATIC_FILES_DIR").ok(),
+            serve_static_files: env::var("SERVE_STATIC_FILES")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or_else(|_| env::var("STATIC_FILES_DIR").is_ok()),
+<%_ } _%>
+        }
+    }
+
+    pub fn is_production(&self) -> bool {
+        self.app_env == "production"
+    }
+
+    pub fn is_development(&self) -> bool {
+        self.app_env == "development"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_production_true() {
+        let config = AppConfig {
+            app_name: "test".to_string(),
+            app_env: "production".to_string(),
+            app_port: 8080,
+            app_host: "0.0.0.0".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+            app_https: false,
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: "mongodb://localhost:27017".to_string(),
+            mongodb_database: "test".to_string(),
+<%_ } else { _%>
+            database_url: "test.db".to_string(),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: "secret".to_string(),
+            jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+            static_files_dir: None,
+            serve_static_files: false,
+<%_ } _%>
+        };
+        assert!(config.is_production());
+        assert!(!config.is_development());
+    }
+
+    #[test]
+    fn test_is_development_true() {
+        let config = AppConfig {
+            app_name: "test".to_string(),
+            app_env: "development".to_string(),
+            app_port: 8080,
+            app_host: "0.0.0.0".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+            app_https: false,
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: "mongodb://localhost:27017".to_string(),
+            mongodb_database: "test".to_string(),
+<%_ } else { _%>
+            database_url: "test.db".to_string(),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: "secret".to_string(),
+            jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+            static_files_dir: None,
+            serve_static_files: false,
+<%_ } _%>
+        };
+        assert!(config.is_development());
+        assert!(!config.is_production());
+    }
+
+    #[test]
+    fn test_is_neither_production_nor_development() {
+        let config = AppConfig {
+            app_name: "test".to_string(),
+            app_env: "staging".to_string(),
+            app_port: 8080,
+            app_host: "0.0.0.0".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+            app_https: false,
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: "mongodb://localhost:27017".to_string(),
+            mongodb_database: "test".to_string(),
+<%_ } else { _%>
+            database_url: "test.db".to_string(),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: "secret".to_string(),
+            jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+            static_files_dir: None,
+            serve_static_files: false,
+<%_ } _%>
+        };
+        assert!(!config.is_production());
+        assert!(!config.is_development());
+    }
+
+    #[test]
+    fn test_app_config_clone() {
+        let config = AppConfig {
+            app_name: "test".to_string(),
+            app_env: "development".to_string(),
+            app_port: 8080,
+            app_host: "localhost".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+            app_https: false,
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: "mongodb://localhost:27017".to_string(),
+            mongodb_database: "test".to_string(),
+<%_ } else { _%>
+            database_url: "test.db".to_string(),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: "secret".to_string(),
+            jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+            static_files_dir: None,
+            serve_static_files: false,
+<%_ } _%>
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.app_name, config.app_name);
+        assert_eq!(cloned.app_port, config.app_port);
+    }
+
+    #[test]
+    fn test_app_config_debug() {
+        let config = AppConfig {
+            app_name: "test_app".to_string(),
+            app_env: "development".to_string(),
+            app_port: 3000,
+            app_host: "127.0.0.1".to_string(),
+<%_ if (applicationTypeMonolith) { _%>
+            app_https: false,
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: "mongodb://localhost:27017".to_string(),
+            mongodb_database: "test".to_string(),
+<%_ } else { _%>
+            database_url: "test.db".to_string(),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: "secret".to_string(),
+            jwt_expiration_hours: 24,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: "http://localhost:9000".to_string(),
+<%_ } _%>
+<%_ if (applicationTypeMonolith) { _%>
+            static_files_dir: None,
+            serve_static_files: false,
+<%_ } _%>
+        };
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("test_app"));
+        assert!(debug_str.contains("3000"));
+    }
+}

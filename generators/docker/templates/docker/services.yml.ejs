@@ -1,0 +1,28 @@
+# This configuration is intended for development purpose, it's **your** responsibility to harden it for production
+name: <%= baseName.toLowerCase() %>
+services:
+<%_ if (devDatabaseTypeMongodb) { _%>
+  mongodb:
+    extends:
+      file: ./mongodb.yml
+      service: mongodb
+    profiles:
+      - ''
+      - prod
+<%_ } else if (devDatabaseTypePostgresql) { _%>
+  postgresql:
+    extends:
+      file: ./postgresql.yml
+      service: postgresql
+    profiles:
+      - ''
+      - prod
+<%_ } else if (devDatabaseTypeMysql) { _%>
+  mysql:
+    extends:
+      file: ./mysql.yml
+      service: mysql
+    profiles:
+      - ''
+      - prod
+<%_ } _%>

@@ -1,0 +1,30 @@
+# This configuration is intended for development purpose, it's **your** responsibility to harden it for production
+# Uses single-node replica set for transaction support (required for multi-document operations)
+name: <%= baseName.toLowerCase() %>
+services:
+  mongodb:
+    image: mongo:7.0
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    # If you want to expose these ports outside your dev PC,
+    # remove the "127.0.0.1:" prefix
+    ports:
+      - 127.0.0.1:27017:27017
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "
+          try {
+            rs.status();
+          } catch (e) {
+            rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]});
+          }
+          db.adminCommand('ping');
+        "
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  mongodb_data:

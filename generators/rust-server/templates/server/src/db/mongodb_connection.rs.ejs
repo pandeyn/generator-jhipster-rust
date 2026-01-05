@@ -1,0 +1,58 @@
+use mongodb::{Client, Database, options::ClientOptions};
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+
+/// MongoDB connection pool type (wrapped Database instance)
+pub type MongoPool = Arc<Database>;
+
+/// Global MongoDB client for connection reuse
+static MONGO_CLIENT: OnceCell<Client> = OnceCell::const_new();
+
+/// Create a MongoDB connection pool
+///
+/// Supports both standard `mongodb://` and Atlas `mongodb+srv://` connection strings.
+pub async fn create_pool(database_url: &str, database_name: &str) -> Result<MongoPool, mongodb::error::Error> {
+    let client = MONGO_CLIENT
+        .get_or_try_init(|| async {
+            let mut client_options = ClientOptions::parse(database_url).await?;
+
+            // Set application name for connection monitoring
+            client_options.app_name = Some("<%= baseName %>".to_string());
+
+            // Create the client
+            Client::with_options(client_options)
+        })
+        .await?;
+
+    let database = client.database(database_name);
+
+    // Ping to verify connection
+    database
+        .run_command(bson::doc! { "ping": 1 })
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to ping MongoDB: {}", e);
+            e
+        })?;
+
+    tracing::info!("Connected to MongoDB database: {}", database_name);
+
+    Ok(Arc::new(database))
+}
+
+/// Get a reference to the MongoDB client (for transactions)
+pub async fn get_client() -> Option<&'static Client> {
+    MONGO_CLIENT.get()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mongo_pool_type() {
+        // Verify MongoPool is the expected type
+        fn assert_sync_send<T: Sync + Send>() {}
+        assert_sync_send::<MongoPool>();
+    }
+}

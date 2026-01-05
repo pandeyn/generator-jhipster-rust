@@ -1,0 +1,68 @@
+<%_ if (devDatabaseTypePostgresql) { _%>
+# Docker Compose for <%= baseName %> with PostgreSQL
+version: '3.8'
+
+services:
+  postgresql:
+    image: postgres:16-alpine
+    container_name: <%= baseName.toLowerCase() %>-postgresql
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: <%= baseName.toLowerCase() %>
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgresql_data:
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+# Docker Compose for <%= baseName %> with MongoDB
+# Note: Uses single-node replica set for transaction support (required for multi-document operations)
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: <%= baseName.toLowerCase() %>-mongodb
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "
+          try {
+            rs.status();
+          } catch (e) {
+            rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]});
+          }
+          db.adminCommand('ping');
+        "
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  # One-time initialization container
+  mongo-init:
+    image: mongo:7.0
+    container_name: <%= baseName.toLowerCase() %>-mongo-init
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./scripts/mongodb_init.js:/scripts/mongodb_init.js:ro
+    command: ["mongosh", "--host", "mongodb:27017", "--file", "/scripts/mongodb_init.js"]
+    restart: "no"
+
+volumes:
+  mongodb_data:
+<%_ } _%>

@@ -1,0 +1,78 @@
+// @generated automatically by Diesel CLI.
+// This file is regenerated automatically when you run `diesel migration run`.
+// Do not edit manually - changes will be overwritten.
+
+diesel::table! {
+    authorities (name) {
+<%_ if (devDatabaseTypePostgresql) { _%>
+        name -> Varchar,
+<%_ } else { _%>
+        name -> Text,
+<%_ } _%>
+    }
+}
+
+diesel::table! {
+    users (id) {
+<%_ if (devDatabaseTypePostgresql) { _%>
+        id -> Int4,
+        login -> Varchar,
+        password_hash -> Varchar,
+        first_name -> Nullable<Varchar>,
+        last_name -> Nullable<Varchar>,
+        email -> Varchar,
+        activated -> Bool,
+<%_ if (enableEmail) { _%>
+        activation_key -> Nullable<Varchar>,
+        reset_key -> Nullable<Varchar>,
+        reset_date -> Nullable<Timestamp>,
+<%_ } _%>
+        lang_key -> Nullable<Varchar>,
+        image_url -> Nullable<Varchar>,
+        created_by -> Nullable<Varchar>,
+        created_date -> Nullable<Timestamp>,
+        last_modified_by -> Nullable<Varchar>,
+        last_modified_date -> Nullable<Timestamp>,
+<%_ } else { _%>
+        id -> Integer,
+        login -> Text,
+        password_hash -> Text,
+        first_name -> Nullable<Text>,
+        last_name -> Nullable<Text>,
+        email -> Text,
+        activated -> Bool,
+<%_ if (enableEmail) { _%>
+        activation_key -> Nullable<Text>,
+        reset_key -> Nullable<Text>,
+        reset_date -> Nullable<Timestamp>,
+<%_ } _%>
+        lang_key -> Nullable<Text>,
+        image_url -> Nullable<Text>,
+        created_by -> Nullable<Text>,
+        created_date -> Nullable<Timestamp>,
+        last_modified_by -> Nullable<Text>,
+        last_modified_date -> Nullable<Timestamp>,
+<%_ } _%>
+    }
+}
+
+diesel::table! {
+    user_authorities (user_id, authority_name) {
+<%_ if (devDatabaseTypePostgresql) { _%>
+        user_id -> Int4,
+        authority_name -> Varchar,
+<%_ } else { _%>
+        user_id -> Integer,
+        authority_name -> Text,
+<%_ } _%>
+    }
+}
+
+diesel::joinable!(user_authorities -> users (user_id));
+diesel::joinable!(user_authorities -> authorities (authority_name));
+
+diesel::allow_tables_to_appear_in_same_query!(
+    authorities,
+    users,
+    user_authorities,
+);

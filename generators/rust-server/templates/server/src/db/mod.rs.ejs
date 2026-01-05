@@ -1,0 +1,10 @@
+<%_ if (devDatabaseTypeMongodb) { _%>
+pub mod mongodb_connection;
+
+pub use mongodb_connection::*;
+<%_ } else { _%>
+pub mod connection;
+pub mod schema;
+
+pub use connection::*;
+<%_ } _%>

@@ -1,0 +1,17 @@
+mod app_config;
+mod database;
+<%_ if (authenticationTypeOauth2) { _%>
+mod oauth2_config;
+<%_ } _%>
+<%_ if (enableEmail) { _%>
+mod email_config;
+<%_ } _%>
+
+pub use app_config::*;
+pub use database::*;
+<%_ if (authenticationTypeOauth2) { _%>
+pub use oauth2_config::*;
+<%_ } _%>
+<%_ if (enableEmail) { _%>
+pub use email_config::*;
+<%_ } _%>

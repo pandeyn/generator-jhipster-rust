@@ -1,0 +1,280 @@
+//! Common DTO types shared across entity DTOs
+
+use serde::{Deserialize, Deserializer};
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+use bson::oid::ObjectId;
+use bson::DateTime as BsonDateTime;
+<%_ } else { _%>
+use chrono::NaiveDateTime;
+<%_ } _%>
+
+<%_ if (!devDatabaseTypeMongodb) { _%>
+/// Helper struct to deserialize relationship references that can be either:
+/// - A plain integer ID: 1
+/// - An object with an id field: {"id": 1, "name": "..."}
+#[derive(Debug, Clone<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+pub struct RelationshipId(pub i32);
+
+impl<'de> Deserialize<'de> for RelationshipId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum IdOrObject {
+            Id(i32),
+            Object { id: i32 },
+        }
+
+        match IdOrObject::deserialize(deserializer)? {
+            IdOrObject::Id(id) => Ok(RelationshipId(id)),
+            IdOrObject::Object { id } => Ok(RelationshipId(id)),
+        }
+    }
+}
+
+/// Custom deserializer for optional relationship fields
+/// Handles: null, plain integer ID, or object with id field from JHipster Angular frontend
+pub fn deserialize_optional_relationship<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum IdOrObject {
+        Null,
+        Id(i32),
+        Object { id: i32 },
+    }
+
+    let opt: Option<IdOrObject> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(IdOrObject::Null) => Ok(None),
+        Some(IdOrObject::Id(id)) => Ok(Some(id)),
+        Some(IdOrObject::Object { id }) => Ok(Some(id)),
+    }
+}
+
+/// Custom deserializer for NaiveDateTime that handles ISO 8601 format from frontend
+pub fn deserialize_naive_datetime<'de, D>(deserializer: D) -> Result<NaiveDateTime, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    // Try ISO 8601 format first (from Angular frontend)
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+        return Ok(dt.naive_utc());
+    }
+    // Try parsing as DateTime with Z suffix
+    if let Ok(dt) = chrono::DateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        return Ok(dt.naive_utc());
+    }
+    // Try standard NaiveDateTime format
+    if let Ok(dt) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f") {
+        return Ok(dt);
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S") {
+        return Ok(dt);
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+        return Ok(dt);
+    }
+    Err(serde::de::Error::custom(format!("Unable to parse datetime: {}", s)))
+}
+
+/// Custom deserializer for Option<NaiveDateTime> that handles ISO 8601 format from frontend
+pub fn deserialize_option_naive_datetime<'de, D>(deserializer: D) -> Result<Option<NaiveDateTime>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(s) if s.is_empty() => Ok(None),
+        Some(s) => {
+            // Try ISO 8601 format first (from Angular frontend)
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                return Ok(Some(dt.naive_utc()));
+            }
+            // Try parsing as DateTime with Z suffix
+            if let Ok(dt) = chrono::DateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+                return Ok(Some(dt.naive_utc()));
+            }
+            // Try standard NaiveDateTime format
+            if let Ok(dt) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f") {
+                return Ok(Some(dt));
+            }
+            if let Ok(dt) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S") {
+                return Ok(Some(dt));
+            }
+            if let Ok(dt) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+                return Ok(Some(dt));
+            }
+            Err(serde::de::Error::custom(format!("Unable to parse datetime: {}", s)))
+        }
+    }
+}
+<%_ } _%>
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+/// Helper struct to deserialize relationship references that can be either:
+/// - A plain string ObjectId: "507f1f77bcf86cd799439011"
+/// - An object with an id field: {"id": "507f1f77bcf86cd799439011", "name": "..."}
+#[derive(Debug, Clone<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+<%_ if (enableSwaggerCodegen) { _%>
+#[schema(value_type = String)]
+<%_ } _%>
+pub struct ObjectIdRelationship(pub ObjectId);
+
+impl<'de> Deserialize<'de> for ObjectIdRelationship {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum IdOrObject {
+            Id(String),
+            Object { id: String },
+        }
+
+        match IdOrObject::deserialize(deserializer)? {
+            IdOrObject::Id(id) => {
+                let oid = ObjectId::parse_str(&id)
+                    .map_err(|e| serde::de::Error::custom(format!("Invalid ObjectId: {}", e)))?;
+                Ok(ObjectIdRelationship(oid))
+            }
+            IdOrObject::Object { id } => {
+                let oid = ObjectId::parse_str(&id)
+                    .map_err(|e| serde::de::Error::custom(format!("Invalid ObjectId: {}", e)))?;
+                Ok(ObjectIdRelationship(oid))
+            }
+        }
+    }
+}
+
+/// Custom deserializer for optional ObjectId relationship fields in Create DTOs
+/// Handles: null, plain string ObjectId, or object with id field from JHipster Angular frontend
+/// Returns Option<ObjectId> - None if not present or null
+pub fn deserialize_optional_object_id_relationship<'de, D>(deserializer: D) -> Result<Option<ObjectId>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum IdOrObject {
+        Null,
+        Id(String),
+        Object { id: String },
+    }
+
+    let opt: Option<IdOrObject> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(IdOrObject::Null) => Ok(None),
+        Some(IdOrObject::Id(id)) => {
+            if id.is_empty() {
+                return Ok(None);
+            }
+            let oid = ObjectId::parse_str(&id)
+                .map_err(|e| serde::de::Error::custom(format!("Invalid ObjectId: {}", e)))?;
+            Ok(Some(oid))
+        }
+        Some(IdOrObject::Object { id }) => {
+            if id.is_empty() {
+                return Ok(None);
+            }
+            let oid = ObjectId::parse_str(&id)
+                .map_err(|e| serde::de::Error::custom(format!("Invalid ObjectId: {}", e)))?;
+            Ok(Some(oid))
+        }
+    }
+}
+
+/// Custom deserializer for optional ObjectId relationship fields in Update DTOs
+/// Returns Option<Option<ObjectId>> to distinguish between:
+/// - Field not present in JSON → None (don't update)
+/// - Field is null in JSON → Some(None) (clear the relationship)
+/// - Field has value → Some(Some(ObjectId)) (update to this value)
+pub fn deserialize_update_object_id_relationship<'de, D>(deserializer: D) -> Result<Option<Option<ObjectId>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum IdOrObject {
+        Null,
+        Id(String),
+        Object { id: String },
+    }
+
+    // Use a custom wrapper to detect if the field was present
+    let opt: Option<Option<IdOrObject>> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None), // Field not present - don't update
+        Some(None) => Ok(Some(None)), // Field is null - clear the relationship
+        Some(Some(IdOrObject::Null)) => Ok(Some(None)), // Explicit null variant
+        Some(Some(IdOrObject::Id(id))) => {
+            if id.is_empty() {
+                return Ok(Some(None)); // Empty string means clear
+            }
+            let oid = ObjectId::parse_str(&id)
+                .map_err(|e| serde::de::Error::custom(format!("Invalid ObjectId: {}", e)))?;
+            Ok(Some(Some(oid)))
+        }
+        Some(Some(IdOrObject::Object { id })) => {
+            if id.is_empty() {
+                return Ok(Some(None)); // Empty string means clear
+            }
+            let oid = ObjectId::parse_str(&id)
+                .map_err(|e| serde::de::Error::custom(format!("Invalid ObjectId: {}", e)))?;
+            Ok(Some(Some(oid)))
+        }
+    }
+}
+
+/// Custom deserializer for BsonDateTime that handles ISO 8601 format from frontend
+pub fn deserialize_bson_datetime<'de, D>(deserializer: D) -> Result<BsonDateTime, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    // Try ISO 8601 format first (from Angular frontend)
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+        return Ok(BsonDateTime::from_chrono(dt.with_timezone(&chrono::Utc)));
+    }
+    // Try parsing as DateTime with Z suffix
+    if let Ok(dt) = chrono::DateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        return Ok(BsonDateTime::from_chrono(dt.with_timezone(&chrono::Utc)));
+    }
+    Err(serde::de::Error::custom(format!("Unable to parse datetime: {}", s)))
+}
+
+/// Custom deserializer for Option<BsonDateTime> that handles ISO 8601 format from frontend
+pub fn deserialize_option_bson_datetime<'de, D>(deserializer: D) -> Result<Option<BsonDateTime>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(s) if s.is_empty() => Ok(None),
+        Some(s) => {
+            // Try ISO 8601 format first (from Angular frontend)
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                return Ok(Some(BsonDateTime::from_chrono(dt.with_timezone(&chrono::Utc))));
+            }
+            // Try parsing as DateTime with Z suffix
+            if let Ok(dt) = chrono::DateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+                return Ok(Some(BsonDateTime::from_chrono(dt.with_timezone(&chrono::Utc))));
+            }
+            Err(serde::de::Error::custom(format!("Unable to parse datetime: {}", s)))
+        }
+    }
+}
+<%_ } _%>

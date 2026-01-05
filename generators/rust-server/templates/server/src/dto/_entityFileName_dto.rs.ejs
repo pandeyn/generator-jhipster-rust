@@ -1,0 +1,635 @@
+<%_ const fieldsWithPattern = fields.filter(f => f.fieldValidateRulesPattern); _%>
+<%_ const hasDateTimeFields = fields.some(f => ['Instant', 'ZonedDateTime'].includes(f.fieldType)); _%>
+<%_ const manyToManyOwnerRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
+<%_ const manyToOneRels = relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide)); _%>
+<%_ const hasAnyRelationships = manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0; _%>
+use serde::{Deserialize, Serialize};
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+use validator::Validate;
+<%_ if (fieldsWithPattern.length > 0) { _%>
+use lazy_static::lazy_static;
+use regex::Regex;
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+<%_ if (hasAnyRelationships || manyToManyOwnerRels.length > 0) { _%>
+use bson::oid::ObjectId;
+<%_ } _%>
+<%_ if (hasDateTimeFields) { _%>
+use crate::dto::common::{deserialize_bson_datetime, deserialize_option_bson_datetime};
+<%_ } _%>
+<%_ } else if (hasDateTimeFields) { _%>
+use chrono::NaiveDateTime;
+use crate::dto::common::{deserialize_naive_datetime, deserialize_option_naive_datetime};
+<%_ } _%>
+<%_ if (manyToOneRels.length > 0) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+use crate::dto::common::{deserialize_optional_object_id_relationship, deserialize_update_object_id_relationship};
+<%_ } else { _%>
+use crate::dto::common::deserialize_optional_relationship;
+<%_ } _%>
+<%_ } _%>
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+use crate::dto::common::ObjectIdRelationship;
+<%_ } else { _%>
+use crate::dto::common::RelationshipId;
+<%_ } _%>
+<%_ } _%>
+
+<%_ if (manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0) { _%>
+use crate::models::{<%= persistClass %><% for (const rel of manyToManyOwnerRels) { %>, <%= rel.otherEntity.persistClass %><% } %><% for (const rel of manyToOneRels) { %>, <%= rel.otherEntity.persistClass %><% } %>};
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+use crate::dto::<%= rel.otherEntity.entityClass %>Dto;
+<%_ } _%>
+<%_ } else { _%>
+use crate::models::<%= persistClass %>;
+<%_ } _%>
+<%_ if (fieldsWithPattern.length > 0) { _%>
+
+lazy_static! {
+<%_ for (const field of fieldsWithPattern) { _%>
+    static ref <%= field.fieldNameUnderscored.toUpperCase() %>_REGEX: Regex = Regex::new(r"<%= field.fieldValidateRulesPattern %>").unwrap();
+<%_ } _%>
+}
+<%_ } _%>
+<%_ for (const rel of manyToOneRels) { _%>
+
+/// Minimal DTO for <%= rel.otherEntity.entityClass %> relationship in <%= entityClass %> responses
+#[derive(Debug, Clone, Serialize, Deserialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+#[serde(rename_all = "camelCase")]
+pub struct <%= entityClass %><%= rel.otherEntity.entityClass %>RelationDto {
+<%_ if (devDatabaseTypeMongodb) { _%>
+    pub id: String,
+<%_ } else { _%>
+    pub id: i32,
+<%_ } _%>
+<%_ // Include the display field (usually 'name') if it exists _%>
+<%_ const otherEntityFields = rel.otherEntity.fields || []; _%>
+<%_ const displayField = otherEntityFields.find(f => f.fieldName === 'name' || f.fieldName === 'title' || f.fieldName === 'label'); _%>
+<%_ if (displayField) { _%>
+<%_ if (displayField.fieldValidationRequired) { _%>
+    pub <%= displayField.fieldNameUnderscored %>: String,
+<%_ } else { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub <%= displayField.fieldNameUnderscored %>: Option<String>,
+<%_ } _%>
+<%_ } _%>
+}
+
+impl From<<%= rel.otherEntity.persistClass %>> for <%= entityClass %><%= rel.otherEntity.entityClass %>RelationDto {
+    fn from(entity: <%= rel.otherEntity.persistClass %>) -> Self {
+        Self {
+<%_ if (devDatabaseTypeMongodb) { _%>
+            id: entity.id.map(|id| id.to_hex()).unwrap_or_default(),
+<%_ } else { _%>
+            id: entity.id,
+<%_ } _%>
+<%_ if (displayField) { _%>
+            <%= displayField.fieldNameUnderscored %>: entity.<%= displayField.fieldNameUnderscored %>,
+<%_ } _%>
+        }
+    }
+}
+<%_ } _%>
+
+/// <%= entityClass %> DTO for API responses
+#[derive(Debug, Clone, Serialize, Deserialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+#[serde(rename_all = "camelCase")]
+pub struct <%= entityClass %>Dto {
+<%_ if (devDatabaseTypeMongodb) { _%>
+    pub id: String,
+<%_ } else { _%>
+    pub id: i32,
+<%_ } _%>
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ if (!field.fieldValidationRequired) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    <%_ } _%>
+    <%_ // For MongoDB datetime fields, use String in response DTO (converted to RFC3339) _%>
+    <%_ // For other fields, use mongoFieldType for MongoDB, rustFieldType otherwise _%>
+    <%_ const isDateTimeType = ['Instant', 'ZonedDateTime'].includes(field.fieldType); _%>
+    <%_ if (devDatabaseTypeMongodb && isDateTimeType) { _%>
+    <%_ if (field.fieldValidationRequired) { _%>
+    pub <%= field.fieldNameUnderscored %>: String,
+    <%_ } else { _%>
+    pub <%= field.fieldNameUnderscored %>: Option<String>,
+    <%_ } _%>
+    <%_ } else { _%>
+    pub <%= field.fieldNameUnderscored %>: <%- devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType %>,
+    <%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub <%= relationship.relationshipFieldName %>: Option<<%= entityClass %><%= relationship.otherEntity.entityClass %>RelationDto>,
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub <%= rel.relationshipFieldNamePlural %>: Option<Vec<<%= rel.otherEntity.entityClass %>Dto>>,
+<%_ } _%>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_modified_date: Option<String>,
+}
+
+impl From<<%= persistClass %>> for <%= entityClass %>Dto {
+    fn from(entity: <%= persistClass %>) -> Self {
+        Self {
+<%_ if (devDatabaseTypeMongodb) { _%>
+            id: entity.id.map(|id| id.to_hex()).unwrap_or_default(),
+<%_ } else { _%>
+            id: entity.id,
+<%_ } _%>
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+<%_ if (devDatabaseTypeMongodb && (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime')) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+            <%= field.fieldNameUnderscored %>: entity.<%= field.fieldNameUnderscored %>.try_to_rfc3339_string().unwrap_or_default(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: entity.<%= field.fieldNameUnderscored %>.and_then(|d| d.try_to_rfc3339_string().ok()),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: entity.<%= field.fieldNameUnderscored %>,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>: None,
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+            <%= rel.relationshipFieldNamePlural %>: None,
+<%_ } _%>
+            created_by: entity.created_by,
+<%_ if (devDatabaseTypeMongodb) { _%>
+            created_date: entity.created_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+            last_modified_by: entity.last_modified_by,
+            last_modified_date: entity.last_modified_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+<%_ } else { _%>
+            created_date: entity.created_date.map(|d| d.to_string()),
+            last_modified_by: entity.last_modified_by,
+            last_modified_date: entity.last_modified_date.map(|d| d.to_string()),
+<%_ } _%>
+        }
+    }
+}
+<%_ if (manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0) { _%>
+
+impl <%= entityClass %>Dto {
+    /// Create a DTO from entity with related entities
+    pub fn from_with_relations(
+        entity: <%= persistClass %>,
+<%_ for (const rel of manyToOneRels) { _%>
+        <%= rel.relationshipFieldName %>: Option<<%= rel.otherEntity.persistClass %>>,
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+        <%= rel.relationshipFieldNamePlural %>: Vec<<%= rel.otherEntity.persistClass %>>,
+<%_ } _%>
+    ) -> Self {
+        Self {
+<%_ if (devDatabaseTypeMongodb) { _%>
+            id: entity.id.map(|id| id.to_hex()).unwrap_or_default(),
+<%_ } else { _%>
+            id: entity.id,
+<%_ } _%>
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+<%_ if (devDatabaseTypeMongodb && (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime')) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+            <%= field.fieldNameUnderscored %>: entity.<%= field.fieldNameUnderscored %>.try_to_rfc3339_string().unwrap_or_default(),
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: entity.<%= field.fieldNameUnderscored %>.and_then(|d| d.try_to_rfc3339_string().ok()),
+<%_ } _%>
+<%_ } else { _%>
+            <%= field.fieldNameUnderscored %>: entity.<%= field.fieldNameUnderscored %>,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const rel of manyToOneRels) { _%>
+            <%= rel.relationshipFieldName %>: <%= rel.relationshipFieldName %>.map(<%= entityClass %><%= rel.otherEntity.entityClass %>RelationDto::from),
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+            <%= rel.relationshipFieldNamePlural %>: Some(<%= rel.relationshipFieldNamePlural %>.into_iter().map(<%= rel.otherEntity.entityClass %>Dto::from).collect()),
+<%_ } _%>
+            created_by: entity.created_by,
+<%_ if (devDatabaseTypeMongodb) { _%>
+            created_date: entity.created_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+            last_modified_by: entity.last_modified_by,
+            last_modified_date: entity.last_modified_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+<%_ } else { _%>
+            created_date: entity.created_date.map(|d| d.to_string()),
+            last_modified_by: entity.last_modified_by,
+            last_modified_date: entity.last_modified_date.map(|d| d.to_string()),
+<%_ } _%>
+        }
+    }
+}
+<%_ } _%>
+
+/// DTO for creating a new <%= entityClass %>
+#[derive(Debug, Clone, Deserialize, Validate<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+#[serde(rename_all = "camelCase")]
+pub struct Create<%= entityClass %>Dto {
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ const isStringType = ['String', 'TextBlob'].includes(field.fieldType); _%>
+    <%_ const isNumericType = ['Integer', 'Long', 'Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
+    <%_ const isDateTimeType = ['Instant', 'ZonedDateTime'].includes(field.fieldType); _%>
+    <%_ if (isStringType) { _%>
+    <%_ // Determine min and max for length validation _%>
+    <%_ let minLen = field.fieldValidateRulesMinlength; _%>
+    <%_ let maxLen = field.fieldValidateRulesMaxlength; _%>
+    <%_ if (field.fieldValidationRequired && !minLen) { minLen = 1; } _%>
+    <%_ if (minLen || maxLen) { _%>
+    #[validate(length(<% if (minLen) { %>min = <%= minLen %><% } %><% if (minLen && maxLen) { %>, <% } %><% if (maxLen) { %>max = <%= maxLen %><% } %>))]
+    <%_ } _%>
+    <%_ if (field.fieldValidateRulesPattern) { _%>
+    #[validate(regex(path = *<%= field.fieldNameUnderscored.toUpperCase() %>_REGEX))]
+    <%_ } _%>
+    <%_ } _%>
+    <%_ if (isNumericType && (field.fieldValidateRulesMin !== undefined || field.fieldValidateRulesMax !== undefined)) { _%>
+    <%_ const isFloatType = ['Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
+    <%_ const minVal = field.fieldValidateRulesMin !== undefined ? (isFloatType && !String(field.fieldValidateRulesMin).includes('.') ? field.fieldValidateRulesMin + '.0' : field.fieldValidateRulesMin) : undefined; _%>
+    <%_ const maxVal = field.fieldValidateRulesMax !== undefined ? (isFloatType && !String(field.fieldValidateRulesMax).includes('.') ? field.fieldValidateRulesMax + '.0' : field.fieldValidateRulesMax) : undefined; _%>
+    #[validate(range(<% if (minVal !== undefined) { %>min = <%= minVal %><% } %><% if (minVal !== undefined && maxVal !== undefined) { %>, <% } %><% if (maxVal !== undefined) { %>max = <%= maxVal %><% } %>))]
+    <%_ } _%>
+    <%_ if (isDateTimeType) { _%>
+    <%_ if (devDatabaseTypeMongodb) { _%>
+    <%_ if (field.fieldValidationRequired) { _%>
+    #[serde(deserialize_with = "deserialize_bson_datetime")]
+    <%_ } else { _%>
+    #[serde(default, deserialize_with = "deserialize_option_bson_datetime")]
+    <%_ } _%>
+    <%_ } else { _%>
+    <%_ if (field.fieldValidationRequired) { _%>
+    #[serde(deserialize_with = "deserialize_naive_datetime")]
+    <%_ } else { _%>
+    #[serde(default, deserialize_with = "deserialize_option_naive_datetime")]
+    <%_ } _%>
+    <%_ } _%>
+    <%_ } _%>
+    <%_ // Use mongoFieldType for MongoDB to ensure type consistency with model _%>
+    pub <%= field.fieldNameUnderscored %>: <%- devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType %>,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    #[serde(default, rename = "<%= relationship.relationshipFieldName %>", deserialize_with = "deserialize_optional_object_id_relationship")]
+<%_ if (enableSwaggerCodegen) { _%>
+    #[schema(value_type = Option<String>)]
+<%_ } _%>
+    pub <%= relationship.relationshipFieldName %>_id: Option<ObjectId>,
+<%_ } else { _%>
+    #[serde(default, rename = "<%= relationship.relationshipFieldName %>", deserialize_with = "deserialize_optional_relationship")]
+    pub <%= relationship.relationshipFieldName %>_id: Option<i32>,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    #[serde(default)]
+    pub <%= rel.relationshipFieldNamePlural %>: Option<Vec<ObjectIdRelationship>>,
+<%_ } else { _%>
+    #[serde(default)]
+    pub <%= rel.relationshipFieldNamePlural %>: Option<Vec<RelationshipId>>,
+<%_ } _%>
+<%_ } _%>
+}
+
+impl Create<%= entityClass %>Dto {
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    /// Extract <%= rel.relationshipFieldNamePlural %> IDs from the relationship references
+<%_ if (devDatabaseTypeMongodb) { _%>
+    pub fn get_<%= rel.relationshipFieldNamePlural %>_ids(&self) -> Option<Vec<ObjectId>> {
+        self.<%= rel.relationshipFieldNamePlural %>.as_ref().map(|refs| refs.iter().map(|r| r.0).collect())
+    }
+<%_ } else { _%>
+    pub fn get_<%= rel.relationshipFieldNamePlural %>_ids(&self) -> Option<Vec<i32>> {
+        self.<%= rel.relationshipFieldNamePlural %>.as_ref().map(|refs| refs.iter().map(|r| r.0).collect())
+    }
+<%_ } _%>
+<%_ } _%>
+}
+
+/// DTO for updating a <%= entityClass %>
+#[derive(Debug, Clone, Deserialize, Validate<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+#[serde(rename_all = "camelCase")]
+pub struct Update<%= entityClass %>Dto {
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ const isStringType = ['String', 'TextBlob'].includes(field.fieldType); _%>
+    <%_ const isNumericType = ['Integer', 'Long', 'Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
+    <%_ const isDateTimeType = ['Instant', 'ZonedDateTime'].includes(field.fieldType); _%>
+    <%_ if (isStringType) { _%>
+    <%_ // For update DTO, we don't require min=1 for required fields since all are optional _%>
+    <%_ const minLen = field.fieldValidateRulesMinlength; _%>
+    <%_ const maxLen = field.fieldValidateRulesMaxlength; _%>
+    <%_ if (minLen || maxLen) { _%>
+    #[validate(length(<% if (minLen) { %>min = <%= minLen %><% } %><% if (minLen && maxLen) { %>, <% } %><% if (maxLen) { %>max = <%= maxLen %><% } %>))]
+    <%_ } _%>
+    <%_ if (field.fieldValidateRulesPattern) { _%>
+    #[validate(regex(path = *<%= field.fieldNameUnderscored.toUpperCase() %>_REGEX))]
+    <%_ } _%>
+    <%_ } _%>
+    <%_ if (isNumericType && (field.fieldValidateRulesMin !== undefined || field.fieldValidateRulesMax !== undefined)) { _%>
+    <%_ const isFloatType = ['Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
+    <%_ const minVal = field.fieldValidateRulesMin !== undefined ? (isFloatType && !String(field.fieldValidateRulesMin).includes('.') ? field.fieldValidateRulesMin + '.0' : field.fieldValidateRulesMin) : undefined; _%>
+    <%_ const maxVal = field.fieldValidateRulesMax !== undefined ? (isFloatType && !String(field.fieldValidateRulesMax).includes('.') ? field.fieldValidateRulesMax + '.0' : field.fieldValidateRulesMax) : undefined; _%>
+    #[validate(range(<% if (minVal !== undefined) { %>min = <%= minVal %><% } %><% if (minVal !== undefined && maxVal !== undefined) { %>, <% } %><% if (maxVal !== undefined) { %>max = <%= maxVal %><% } %>))]
+    <%_ } _%>
+    <%_ if (isDateTimeType) { _%>
+    <%_ if (devDatabaseTypeMongodb) { _%>
+    #[serde(default, deserialize_with = "deserialize_option_bson_datetime")]
+    <%_ } else { _%>
+    #[serde(default, deserialize_with = "deserialize_option_naive_datetime")]
+    <%_ } _%>
+    <%_ } _%>
+    <%_ // Use mongoFieldType for MongoDB to ensure type consistency with model _%>
+    <%_ const baseFieldType = devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType; _%>
+    pub <%= field.fieldNameUnderscored %>: Option<<%- baseFieldType.replace('Option<', '').replace('>', '') %>>,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    #[serde(default, rename = "<%= relationship.relationshipFieldName %>", deserialize_with = "deserialize_update_object_id_relationship")]
+<%_ if (enableSwaggerCodegen) { _%>
+    #[schema(value_type = Option<String>)]
+<%_ } _%>
+    pub <%= relationship.relationshipFieldName %>_id: Option<Option<ObjectId>>,
+<%_ } else { _%>
+    #[serde(default, rename = "<%= relationship.relationshipFieldName %>", deserialize_with = "deserialize_optional_relationship")]
+    pub <%= relationship.relationshipFieldName %>_id: Option<i32>,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    #[serde(default)]
+    pub <%= rel.relationshipFieldNamePlural %>: Option<Vec<ObjectIdRelationship>>,
+<%_ } else { _%>
+    #[serde(default)]
+    pub <%= rel.relationshipFieldNamePlural %>: Option<Vec<RelationshipId>>,
+<%_ } _%>
+<%_ } _%>
+}
+
+impl Update<%= entityClass %>Dto {
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    /// Extract <%= rel.relationshipFieldNamePlural %> IDs from the relationship references
+<%_ if (devDatabaseTypeMongodb) { _%>
+    pub fn get_<%= rel.relationshipFieldNamePlural %>_ids(&self) -> Option<Vec<ObjectId>> {
+        self.<%= rel.relationshipFieldNamePlural %>.as_ref().map(|refs| refs.iter().map(|r| r.0).collect())
+    }
+<%_ } else { _%>
+    pub fn get_<%= rel.relationshipFieldNamePlural %>_ids(&self) -> Option<Vec<i32>> {
+        self.<%= rel.relationshipFieldNamePlural %>.as_ref().map(|refs| refs.iter().map(|r| r.0).collect())
+    }
+<%_ } _%>
+<%_ } _%>
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+<%_ if (devDatabaseTypeMongodb) { _%>
+    use bson::oid::ObjectId;
+    use bson::DateTime as BsonDateTime;
+<%_ } else { _%>
+    use chrono::NaiveDateTime;
+<%_ } _%>
+    use validator::Validate;
+
+    mod <%= entityInstance %>_dto_tests {
+        use super::*;
+
+        fn create_test_entity() -> <%= persistClass %> {
+            <%= persistClass %> {
+<%_ if (devDatabaseTypeMongodb) { _%>
+                id: Some(ObjectId::new()),
+<%_ } else { _%>
+                id: 1,
+<%_ } _%>
+<%_ const allFields = fields.filter(f => !f.id); _%>
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+                <%= field.fieldNameUnderscored %>: "test_value".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+                <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Long') { _%>
+                <%= field.fieldNameUnderscored %>: 42,
+<%_ } else if (field.fieldType === 'Float') { _%>
+                <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Double') { _%>
+                <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+                <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+<%_ } _%>
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: "test_value".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+                <%= field.fieldNameUnderscored %>: Some("test_value".to_string()),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+                <%= field.fieldNameUnderscored %>: Some(42),
+<%_ } else if (field.fieldType === 'Long') { _%>
+                <%= field.fieldNameUnderscored %>: Some(42),
+<%_ } else if (field.fieldType === 'Float') { _%>
+                <%= field.fieldNameUnderscored %>: Some(42.5),
+<%_ } else if (field.fieldType === 'Double') { _%>
+                <%= field.fieldNameUnderscored %>: Some(42.5),
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+                <%= field.fieldNameUnderscored %>: Some(true),
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: Some(BsonDateTime::now()),
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: Some(NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()),
+<%_ } _%>
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: Some("test_value".to_string()),
+<%_ } _%>
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= relationship.relationshipFieldName %>_id: Some(ObjectId::new()),
+<%_ } else { _%>
+                <%= relationship.relationshipFieldName %>_id: Some(1),
+<%_ } _%>
+<%_ } _%>
+                created_by: Some("system".to_string()),
+<%_ if (devDatabaseTypeMongodb) { _%>
+                created_date: Some(BsonDateTime::now()),
+                last_modified_by: Some("admin".to_string()),
+                last_modified_date: Some(BsonDateTime::now()),
+<%_ } else { _%>
+                created_date: Some(NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()),
+                last_modified_by: Some("admin".to_string()),
+                last_modified_date: Some(NaiveDateTime::parse_from_str("2024-01-02 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap()),
+<%_ } _%>
+            }
+        }
+
+        #[test]
+        fn test_<%= entityInstance %>_dto_from_entity() {
+            let entity = create_test_entity();
+            let dto = <%= entityClass %>Dto::from(entity);
+<%_ if (devDatabaseTypeMongodb) { _%>
+            assert!(!dto.id.is_empty());
+<%_ } else { _%>
+            assert_eq!(dto.id, 1);
+<%_ } _%>
+            assert_eq!(dto.created_by, Some("system".to_string()));
+            assert!(dto.created_date.is_some());
+        }
+
+        #[test]
+        fn test_<%= entityInstance %>_dto_serialization() {
+            let entity = create_test_entity();
+            let dto = <%= entityClass %>Dto::from(entity);
+            let json = serde_json::to_string(&dto).unwrap();
+<%_ if (devDatabaseTypeMongodb) { _%>
+            assert!(json.contains("\"id\":\""));
+<%_ } else { _%>
+            assert!(json.contains("\"id\":1"));
+<%_ } _%>
+        }
+
+        #[test]
+        fn test_<%= entityInstance %>_dto_deserialization() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+            let json = r#"{"id":"507f1f77bcf86cd799439011"<% for (const field of allFields) { %><% if (field.fieldValidationRequired) { %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>,"<%= field.fieldName %>":"test"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>,"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { %>,"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>,"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>,"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>,"<%= field.fieldName %>":"test"<% } %><% } %><% } %>}"#;
+            let dto: <%= entityClass %>Dto = serde_json::from_str(json).unwrap();
+            assert_eq!(dto.id, "507f1f77bcf86cd799439011");
+<%_ } else { _%>
+            let json = r#"{"id":1<% for (const field of allFields) { %><% if (field.fieldValidationRequired) { %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>,"<%= field.fieldName %>":"test"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>,"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { %>,"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>,"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>,"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>,"<%= field.fieldName %>":"test"<% } %><% } %><% } %>}"#;
+            let dto: <%= entityClass %>Dto = serde_json::from_str(json).unwrap();
+            assert_eq!(dto.id, 1);
+<%_ } _%>
+        }
+    }
+
+    mod create_<%= entityInstance %>_dto_tests {
+        use super::*;
+
+        #[test]
+        fn test_create_<%= entityInstance %>_dto_valid() {
+            let dto = Create<%= entityClass %>Dto {
+<%_ for (const field of allFields) { _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+                <%= field.fieldNameUnderscored %>: "valid_value".to_string(),
+<%_ } else if (field.fieldType === 'Integer') { _%>
+                <%= field.fieldNameUnderscored %>: 1,
+<%_ } else if (field.fieldType === 'Long') { _%>
+                <%= field.fieldNameUnderscored %>: 1,
+<%_ } else if (field.fieldType === 'Float') { _%>
+                <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else if (field.fieldType === 'Double') { _%>
+                <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+                <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+<%_ } _%>
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: "valid_value".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+                <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+                <%= rel.relationshipFieldNamePlural %>: None,
+<%_ } _%>
+            };
+            assert!(dto.validate().is_ok());
+        }
+
+        #[test]
+        fn test_create_<%= entityInstance %>_dto_deserialization() {
+            let json = r#"{<% const reqFields = allFields.filter(f => f.fieldValidationRequired); for (let i = 0; i < reqFields.length; i++) { const field = reqFields[i]; const isLast = i === reqFields.length - 1; %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>"<%= field.fieldName %>":"test_value"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { %>"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>"<%= field.fieldName %>":"test_value"<% } %><% if (!isLast) { %>,<% } %><% } %>}"#;
+            let result: Result<Create<%= entityClass %>Dto, _> = serde_json::from_str(json);
+            assert!(result.is_ok());
+        }
+<%_ const stringRequiredFields = allFields.filter(f => f.fieldValidationRequired && (f.fieldType === 'String' || f.fieldType === 'TextBlob')); _%>
+<%_ if (stringRequiredFields.length > 0) { _%>
+
+        #[test]
+        fn test_create_<%= entityInstance %>_dto_empty_string_invalid() {
+            let dto = Create<%= entityClass %>Dto {
+<%_ for (const field of allFields) { _%>
+<%_ const isFirstStringRequired = stringRequiredFields.length > 0 && field.fieldName === stringRequiredFields[0].fieldName; _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+                <%= field.fieldNameUnderscored %>: <% if (isFirstStringRequired) { %>"".to_string()<% } else { %>"valid".to_string()<% } %>,
+<%_ } else if (field.fieldType === 'Integer') { _%>
+                <%= field.fieldNameUnderscored %>: 1,
+<%_ } else if (field.fieldType === 'Long') { _%>
+                <%= field.fieldNameUnderscored %>: 1,
+<%_ } else if (field.fieldType === 'Float') { _%>
+                <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else if (field.fieldType === 'Double') { _%>
+                <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+                <%= field.fieldNameUnderscored %>: true,
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+<%_ } _%>
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: "valid".to_string(),
+<%_ } _%>
+<%_ } else { _%>
+                <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+                <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+                <%= rel.relationshipFieldNamePlural %>: None,
+<%_ } _%>
+            };
+            assert!(dto.validate().is_err());
+        }
+<%_ } _%>
+    }
+
+    mod update_<%= entityInstance %>_dto_tests {
+        use super::*;
+
+        #[test]
+        fn test_update_<%= entityInstance %>_dto_all_none_valid() {
+            let dto = Update<%= entityClass %>Dto {
+<%_ for (const field of allFields) { _%>
+                <%= field.fieldNameUnderscored %>: None,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+                <%= relationship.relationshipFieldName %>_id: None,
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+                <%= rel.relationshipFieldNamePlural %>: None,
+<%_ } _%>
+            };
+            assert!(dto.validate().is_ok());
+        }
+
+        #[test]
+        fn test_update_<%= entityInstance %>_dto_deserialization() {
+            let json = r#"{}"#;
+            let result: Result<Update<%= entityClass %>Dto, _> = serde_json::from_str(json);
+            assert!(result.is_ok());
+        }
+    }
+}

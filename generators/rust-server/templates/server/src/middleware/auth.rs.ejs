@@ -1,0 +1,360 @@
+use std::future::Future;
+use std::pin::Pin;
+
+use axum::{
+    body::Body,
+    extract::{Request, State},
+    http::{header, StatusCode},
+    middleware::Next,
+    response::Response,
+};
+<%_ if (authenticationTypeJwt) { _%>
+use jsonwebtoken::{decode, DecodingKey, Validation};
+
+use crate::services::Claims;
+<%_ } _%>
+use crate::errors::AppError;
+use crate::AppState;
+
+/// Type alias for role middleware future to reduce type complexity
+type RoleMiddlewareFuture = Pin<Box<dyn Future<Output = Result<Response, (StatusCode, String)>> + Send>>;
+
+/// Authenticated user information extracted from JWT
+#[derive(Clone, Debug)]
+pub struct AuthUser {
+    pub login: String,
+    pub authorities: Vec<String>,
+<%_ if (authenticationTypeOauth2) { _%>
+    pub email: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+<%_ } _%>
+}
+
+impl AuthUser {
+    pub fn has_authority(&self, authority: &str) -> bool {
+        self.authorities.iter().any(|a| a == authority)
+    }
+
+    /// Creates an anonymous user (unauthenticated)
+    pub fn anonymous() -> Self {
+        Self {
+            login: "anonymous".to_string(),
+            authorities: vec![],
+<%_ if (authenticationTypeOauth2) { _%>
+            email: None,
+            first_name: None,
+            last_name: None,
+<%_ } _%>
+        }
+    }
+
+    /// Check if this is an anonymous (unauthenticated) user
+    pub fn is_anonymous(&self) -> bool {
+        self.login == "anonymous"
+    }
+}
+
+<%_ if (authenticationTypeOauth2) { _%>
+impl From<&crate::security::OidcClaims> for AuthUser {
+    fn from(claims: &crate::security::OidcClaims) -> Self {
+        Self {
+            login: claims.get_username(),
+            authorities: claims.get_authorities(),
+            email: claims.email.clone(),
+            first_name: claims.given_name.clone(),
+            last_name: claims.family_name.clone(),
+        }
+    }
+}
+<%_ } _%>
+
+/// Authentication middleware layer
+pub struct AuthLayer;
+
+<%_ if (authenticationTypeOauth2) { _%>
+/// Extract access token from cookies
+fn extract_token_from_cookies(request: &Request<Body>) -> Option<String> {
+    request
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|cookies| {
+            cookies
+                .split(';')
+                .map(|s| s.trim())
+                .find(|s| s.starts_with("access_token="))
+                .map(|s| s.trim_start_matches("access_token=").to_string())
+        })
+}
+
+/// Authentication middleware
+pub async fn auth_middleware(
+    State(state): State<AppState>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Result<Response, AppError> {
+    // Try to get token from Authorization header first, then from cookies
+    let token = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .filter(|header| header.starts_with("Bearer "))
+        .map(|header| header.trim_start_matches("Bearer ").to_string())
+        .or_else(|| extract_token_from_cookies(&request));
+
+    let auth_user = match token {
+        Some(token) => {
+            match state.oauth2_validator.validate_token(&token).await {
+                Ok(claims) => AuthUser::from(&claims),
+                Err(e) => {
+                    tracing::warn!("OAuth2 token validation failed: {:?}", e);
+                    AuthUser::anonymous()
+                }
+            }
+        }
+        None => {
+            // Allow unauthenticated access for public endpoints
+            AuthUser::anonymous()
+        }
+    };
+
+    // Insert auth user into request extensions
+    request.extensions_mut().insert(auth_user);
+
+    Ok(next.run(request).await)
+}
+<%_ } else { _%>
+pub async fn auth_middleware(
+    State(state): State<AppState>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Result<Response, AppError> {
+    // Get authorization header
+    let auth_header = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+
+    let auth_user = match auth_header {
+        Some(header) if header.starts_with("Bearer ") => {
+            let token = header.trim_start_matches("Bearer ");
+            validate_token(&state.config.jwt_secret, token)?
+        }
+        _ => {
+            // Allow unauthenticated access for public endpoints
+            AuthUser::anonymous()
+        }
+    };
+
+    // Insert auth user into request extensions
+    request.extensions_mut().insert(auth_user);
+
+    Ok(next.run(request).await)
+}
+
+/// Validate JWT token and extract claims
+fn validate_token(secret: &str, token: &str) -> Result<AuthUser, AppError> {
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|e| AppError::Unauthorized(format!("Invalid token: {}", e)))?;
+
+    Ok(AuthUser {
+        login: token_data.claims.sub,
+        authorities: token_data.claims.auth,
+    })
+}
+<%_ } _%>
+
+/// Require authentication middleware
+pub async fn require_auth(
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    let auth_user = request
+        .extensions()
+        .get::<AuthUser>()
+        .cloned()
+        .ok_or((StatusCode::UNAUTHORIZED, "Not authenticated".to_string()))?;
+
+    if auth_user.is_anonymous() {
+        return Err((StatusCode::UNAUTHORIZED, "Authentication required".to_string()));
+    }
+
+    Ok(next.run(request).await)
+}
+
+/// Require specific role middleware
+pub fn require_role(
+    role: &'static str,
+) -> impl Fn(Request<Body>, Next) -> RoleMiddlewareFuture + Clone {
+    move |request: Request<Body>, next: Next| {
+        Box::pin(async move {
+            let auth_user = request
+                .extensions()
+                .get::<AuthUser>()
+                .cloned()
+                .ok_or((StatusCode::UNAUTHORIZED, "Not authenticated".to_string()))?;
+
+            if !auth_user.has_authority(role) {
+                return Err((StatusCode::FORBIDDEN, format!("Role {} required", role)));
+            }
+
+            Ok(next.run(request).await)
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod auth_user_tests {
+        use super::*;
+
+        #[test]
+        fn test_auth_user_has_authority_true() {
+            let user = AuthUser {
+                login: "testuser".to_string(),
+                authorities: vec!["ROLE_USER".to_string(), "ROLE_ADMIN".to_string()],
+<%_ if (authenticationTypeOauth2) { _%>
+                email: Some("test@example.com".to_string()),
+                first_name: Some("Test".to_string()),
+                last_name: Some("User".to_string()),
+<%_ } _%>
+            };
+            assert!(user.has_authority("ROLE_USER"));
+            assert!(user.has_authority("ROLE_ADMIN"));
+        }
+
+        #[test]
+        fn test_auth_user_has_authority_false() {
+            let user = AuthUser {
+                login: "testuser".to_string(),
+                authorities: vec!["ROLE_USER".to_string()],
+<%_ if (authenticationTypeOauth2) { _%>
+                email: None,
+                first_name: None,
+                last_name: None,
+<%_ } _%>
+            };
+            assert!(!user.has_authority("ROLE_ADMIN"));
+        }
+
+        #[test]
+        fn test_auth_user_anonymous() {
+            let user = AuthUser::anonymous();
+            assert!(user.is_anonymous());
+            assert!(!user.has_authority("ROLE_USER"));
+        }
+
+        #[test]
+        fn test_auth_user_clone() {
+            let user = AuthUser {
+                login: "testuser".to_string(),
+                authorities: vec!["ROLE_USER".to_string()],
+<%_ if (authenticationTypeOauth2) { _%>
+                email: None,
+                first_name: None,
+                last_name: None,
+<%_ } _%>
+            };
+            let cloned = user.clone();
+            assert_eq!(cloned.login, "testuser");
+            assert_eq!(cloned.authorities.len(), 1);
+        }
+
+        #[test]
+        fn test_auth_user_debug() {
+            let user = AuthUser {
+                login: "testuser".to_string(),
+                authorities: vec!["ROLE_USER".to_string()],
+<%_ if (authenticationTypeOauth2) { _%>
+                email: None,
+                first_name: None,
+                last_name: None,
+<%_ } _%>
+            };
+            let debug_str = format!("{:?}", user);
+            assert!(debug_str.contains("testuser"));
+            assert!(debug_str.contains("ROLE_USER"));
+        }
+    }
+
+<%_ if (authenticationTypeJwt) { _%>
+    mod validate_token_tests {
+        use super::*;
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use chrono::{Duration, Utc};
+
+        fn create_test_token(secret: &str, login: &str, authorities: Vec<String>, expired: bool) -> String {
+            let now = Utc::now();
+            let exp = if expired {
+                now - Duration::hours(1)
+            } else {
+                now + Duration::hours(24)
+            };
+
+            let claims = Claims {
+                sub: login.to_string(),
+                auth: authorities,
+                iat: now.timestamp() as usize,
+                exp: exp.timestamp() as usize,
+            };
+
+            encode(
+                &Header::default(),
+                &claims,
+                &EncodingKey::from_secret(secret.as_bytes()),
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn test_validate_token_success() {
+            let secret = "test_secret_key_for_jwt_token";
+            let token = create_test_token(secret, "testuser", vec!["ROLE_USER".to_string()], false);
+            let result = validate_token(secret, &token);
+            assert!(result.is_ok());
+            let auth_user = result.unwrap();
+            assert_eq!(auth_user.login, "testuser");
+            assert_eq!(auth_user.authorities, vec!["ROLE_USER"]);
+        }
+
+        #[test]
+        fn test_validate_token_invalid_secret() {
+            let token = create_test_token("correct_secret", "testuser", vec!["ROLE_USER".to_string()], false);
+            let result = validate_token("wrong_secret", &token);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_token_expired() {
+            let secret = "test_secret";
+            let token = create_test_token(secret, "testuser", vec!["ROLE_USER".to_string()], true);
+            let result = validate_token(secret, &token);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_token_malformed() {
+            let result = validate_token("secret", "not.a.valid.token");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_token_multiple_authorities() {
+            let secret = "test_secret";
+            let authorities = vec!["ROLE_USER".to_string(), "ROLE_ADMIN".to_string()];
+            let token = create_test_token(secret, "admin", authorities.clone(), false);
+            let result = validate_token(secret, &token);
+            assert!(result.is_ok());
+            let auth_user = result.unwrap();
+            assert_eq!(auth_user.authorities.len(), 2);
+        }
+    }
+<%_ } _%>
+}

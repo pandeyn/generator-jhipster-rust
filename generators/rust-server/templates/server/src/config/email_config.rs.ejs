@@ -1,0 +1,106 @@
+//! Email configuration for SMTP transport
+//!
+//! Email is disabled by default. Set MAIL_ENABLED=true and configure
+//! SMTP settings to enable email functionality.
+
+use std::env;
+
+/// Email service configuration
+#[derive(Debug, Clone)]
+pub struct EmailConfig {
+    /// Whether email sending is enabled
+    pub enabled: bool,
+    /// SMTP server hostname
+    pub host: String,
+    /// SMTP server port
+    pub port: u16,
+    /// SMTP username (optional)
+    pub username: Option<String>,
+    /// SMTP password (optional)
+    pub password: Option<String>,
+    /// From email address
+    pub from: String,
+    /// From display name
+    pub from_name: String,
+    /// Use TLS connection
+    pub use_tls: bool,
+    /// Use STARTTLS
+    pub use_starttls: bool,
+    /// Base URL for links in emails (e.g., activation links)
+    pub base_url: String,
+}
+
+impl Default for EmailConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: "localhost".to_string(),
+            port: 1025,
+            username: None,
+            password: None,
+            from: "noreply@localhost".to_string(),
+            from_name: "<%= baseName %>".to_string(),
+            use_tls: false,
+            use_starttls: false,
+            base_url: "http://localhost:9000".to_string(),
+        }
+    }
+}
+
+impl EmailConfig {
+    /// Load email configuration from environment variables
+    pub fn from_env() -> Self {
+        Self {
+            enabled: env::var("MAIL_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+            host: env::var("MAIL_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            port: env::var("MAIL_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(1025),
+            username: env::var("MAIL_USERNAME").ok().filter(|s| !s.is_empty()),
+            password: env::var("MAIL_PASSWORD").ok().filter(|s| !s.is_empty()),
+            from: env::var("MAIL_FROM").unwrap_or_else(|_| "noreply@localhost".to_string()),
+            from_name: env::var("MAIL_FROM_NAME").unwrap_or_else(|_| "<%= baseName %>".to_string()),
+            use_tls: env::var("MAIL_USE_TLS")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+            use_starttls: env::var("MAIL_USE_STARTTLS")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+            base_url: env::var("MAIL_BASE_URL").unwrap_or_else(|_| "http://localhost:9000".to_string()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = EmailConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.host, "localhost");
+        assert_eq!(config.port, 1025);
+        assert!(config.username.is_none());
+        assert!(config.password.is_none());
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = EmailConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.host, config.host);
+        assert_eq!(cloned.port, config.port);
+    }
+
+    #[test]
+    fn test_config_debug() {
+        let config = EmailConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("localhost"));
+        assert!(debug_str.contains("1025"));
+    }
+}

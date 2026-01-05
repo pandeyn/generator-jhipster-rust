@@ -1,0 +1,702 @@
+use axum::{
+    extract::{Path, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+    routing::get,
+    Extension, Json, Router,
+};
+use serde::Serialize;
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+
+use crate::dto::{CreateUserDto, PageRequest, QsQuery, UpdateUserDto, UserDto};
+use crate::errors::AppError;
+use crate::middleware::auth::AuthUser;
+use crate::models::RoleType;
+use crate::services::UserService;
+use crate::AppState;
+<%_ if (devDatabaseTypeMongodb) { _%>
+use crate::models::{NewUser, UpdateUser};
+<%_ } _%>
+
+/// Public user routes (limited info)
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(get_public_users))
+}
+
+/// Admin user management routes
+pub fn admin_routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(get_all_users).post(create_user).put(update_user_from_body))
+        .route("/:login", get(get_user).delete(delete_user))
+}
+
+/// Authority routes
+pub fn authority_routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(get_authorities))
+}
+
+#[derive(Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+pub struct AuthorityDto {
+    /// Authority name (e.g., ROLE_ADMIN, ROLE_USER)
+    pub name: String,
+}
+
+/// Get all authorities
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/authorities",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "List of all authorities", body = Vec<AuthorityDto>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+<%_ } _%>
+pub async fn get_authorities(
+    Extension(auth_user): Extension<AuthUser>,
+) -> Result<Json<Vec<AuthorityDto>>, AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+    Ok(Json(vec![
+        AuthorityDto { name: "ROLE_ADMIN".to_string() },
+        AuthorityDto { name: "ROLE_USER".to_string() },
+    ]))
+}
+
+/// Get public user list (limited info, for non-admin users)
+async fn get_public_users(
+    State(state): State<AppState>,
+    QsQuery(page_request): QsQuery<PageRequest>,
+) -> Result<Response, AppError> {
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let (users, total) = UserService::find_all(&state.db, &page_request).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let (users, total) = UserService::find_all(&mut conn, &page_request)?;
+<%_ } _%>
+
+    let user_dtos: Vec<UserDto> = users.into_iter().map(UserDto::from).collect();
+
+    let response = (
+        [(header::HeaderName::from_static("x-total-count"), total.to_string())],
+        Json(user_dtos),
+    );
+
+    Ok(response.into_response())
+}
+
+/// Get all users with pagination (admin only)
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/admin/users",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    params(
+        ("page" = Option<i64>, Query, description = "Page number (0-indexed)"),
+        ("size" = Option<i64>, Query, description = "Page size"),
+        ("sort" = Option<String>, Query, description = "Sort field and direction (e.g., 'id,asc')")
+    ),
+    responses(
+        (status = 200, description = "List of users with pagination", body = Vec<UserDto>,
+            headers(
+                ("x-total-count" = i64, description = "Total number of users")
+            )
+        ),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+<%_ } _%>
+pub async fn get_all_users(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    QsQuery(page_request): QsQuery<PageRequest>,
+) -> Result<Response, AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let (users, total) = UserService::find_all(&state.db, &page_request).await?;
+
+    let mut user_dtos: Vec<UserDto> = Vec::new();
+    for user in users {
+        let mut dto = UserDto::from(user.clone());
+        if let Ok(authorities) = UserService::get_authorities(&state.db, user.id.unwrap()).await {
+            dto.authorities = Some(authorities);
+        }
+        user_dtos.push(dto);
+    }
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let (users, total) = UserService::find_all(&mut conn, &page_request)?;
+
+    let user_dtos: Vec<UserDto> = users.into_iter().map(|user| {
+        let mut dto = UserDto::from(user.clone());
+        // Load authorities for admin view
+        if let Ok(authorities) = UserService::get_authorities(&mut conn, user.id) {
+            dto.authorities = Some(authorities);
+        }
+        dto
+    }).collect();
+<%_ } _%>
+
+    let response = (
+        [(header::HeaderName::from_static("x-total-count"), total.to_string())],
+        Json(user_dtos),
+    );
+
+    Ok(response.into_response())
+}
+
+/// Get user by login (admin only)
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/admin/users/{login}",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    params(
+        ("login" = String, Path, description = "User login")
+    ),
+    responses(
+        (status = 200, description = "User found", body = UserDto),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 404, description = "User not found")
+    )
+)]
+<%_ } _%>
+pub async fn get_user(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(login): Path<String>,
+) -> Result<Json<UserDto>, AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let user = UserService::find_by_login(&state.db, &login).await?
+        .ok_or_else(|| AppError::NotFound(format!("User {} not found", login)))?;
+    let mut user_dto = UserDto::from(user.clone());
+
+    // Load authorities
+    if let Some(id) = user.id {
+        if let Ok(authorities) = UserService::get_authorities(&state.db, id).await {
+            user_dto.authorities = Some(authorities);
+        }
+    }
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let user = UserService::find_by_login(&mut conn, &login)?;
+    let mut user_dto = UserDto::from(user.clone());
+
+    // Load authorities
+    if let Ok(authorities) = UserService::get_authorities(&mut conn, user.id) {
+        user_dto.authorities = Some(authorities);
+    }
+<%_ } _%>
+
+    Ok(Json(user_dto))
+}
+
+/// Create a new user (admin only)
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    post,
+    path = "/api/admin/users",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    request_body = CreateUserDto,
+    responses(
+        (status = 201, description = "User created successfully", body = UserDto),
+        (status = 400, description = "Invalid input"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+<%_ } _%>
+pub async fn create_user(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(create_dto): Json<CreateUserDto>,
+) -> Result<(StatusCode, Json<UserDto>), AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let password_hash = UserService::hash_password(&create_dto.password)?;
+    let now = bson::DateTime::now();
+
+    let new_user = NewUser {
+        login: create_dto.login,
+        password_hash,
+        first_name: create_dto.first_name,
+        last_name: create_dto.last_name,
+        email: create_dto.email,
+        activated: create_dto.activated.unwrap_or(true),
+        lang_key: create_dto.lang_key,
+        image_url: create_dto.image_url,
+        authorities: create_dto.authorities.unwrap_or_else(|| vec!["ROLE_USER".to_string()]),
+        created_by: Some(auth_user.login.clone()),
+        created_date: Some(now),
+        last_modified_by: Some(auth_user.login.clone()),
+        last_modified_date: Some(now),
+    };
+
+    let user = UserService::create(&state.db, new_user).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let user = UserService::create(&mut conn, create_dto, &auth_user.login)?;
+<%_ } _%>
+
+    Ok((StatusCode::CREATED, Json(UserDto::from(user))))
+}
+
+/// Update an existing user (admin only) - uses login from request body
+/// This endpoint is used by JHipster Angular UI which sends the full user object
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    put,
+    path = "/api/admin/users",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    request_body = UpdateUserDto,
+    responses(
+        (status = 200, description = "User updated successfully", body = UserDto),
+        (status = 400, description = "Invalid input or missing login"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 404, description = "User not found")
+    )
+)]
+<%_ } _%>
+pub async fn update_user_from_body(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(update_dto): Json<UpdateUserDto>,
+) -> Result<Json<UserDto>, AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+    // Extract login from the body
+    let login = update_dto.login.clone()
+        .ok_or_else(|| AppError::BadRequest("Login is required".to_string()))?;
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let user = UserService::find_by_login(&state.db, &login).await?
+        .ok_or_else(|| AppError::NotFound(format!("User {} not found", login)))?;
+
+    let now = bson::DateTime::now();
+    let update = UpdateUser {
+        first_name: update_dto.first_name,
+        last_name: update_dto.last_name,
+        email: update_dto.email,
+        activated: update_dto.activated,
+        lang_key: update_dto.lang_key,
+        image_url: update_dto.image_url,
+        authorities: update_dto.authorities,
+        last_modified_by: Some(auth_user.login.clone()),
+        last_modified_date: Some(now),
+    };
+
+    let updated_user = UserService::update(&state.db, user.id.unwrap(), update, &auth_user.login).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let user = UserService::find_by_login(&mut conn, &login)?;
+    let updated_user = UserService::update(&mut conn, user.id, update_dto, &auth_user.login)?;
+<%_ } _%>
+
+    Ok(Json(UserDto::from(updated_user)))
+}
+
+/// Delete a user (admin only)
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    delete,
+    path = "/api/admin/users/{login}",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    params(
+        ("login" = String, Path, description = "User login")
+    ),
+    responses(
+        (status = 204, description = "User deleted successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 404, description = "User not found")
+    )
+)]
+<%_ } _%>
+pub async fn delete_user(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(login): Path<String>,
+) -> Result<StatusCode, AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let user = UserService::find_by_login(&state.db, &login).await?
+        .ok_or_else(|| AppError::NotFound(format!("User {} not found", login)))?;
+    UserService::delete(&state.db, user.id.unwrap()).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let user = UserService::find_by_login(&mut conn, &login)?;
+    UserService::delete(&mut conn, user.id)?;
+<%_ } _%>
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_authority_dto_serialization() {
+        let dto = AuthorityDto {
+            name: "ROLE_ADMIN".to_string(),
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("ROLE_ADMIN"));
+    }
+}
+
+<%_ if (authenticationTypeJwt && !devDatabaseTypeMongodb) { _%>
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use axum::middleware;
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
+    use crate::test_utils::{create_test_pool, create_test_config, create_test_admin, create_test_user, generate_test_token};
+    use crate::middleware::auth::auth_middleware;
+
+    fn create_test_app() -> (TestServer, crate::AppState) {
+        let pool = create_test_pool();
+        let config = create_test_config();
+        let state = crate::AppState { pool, config };
+
+        let app = Router::new()
+            .nest("/api/users", routes())
+            .nest("/api/admin/users", admin_routes())
+            .nest("/api/authorities", authority_routes())
+            .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+            .with_state(state.clone());
+
+        let server = TestServer::new(app).unwrap();
+        (server, state)
+    }
+
+    #[tokio::test]
+    async fn test_get_public_users() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/users")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_all_users_as_admin() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/admin/users")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let text = response.text();
+        assert!(text.contains("admin"));
+    }
+
+    #[tokio::test]
+    async fn test_get_all_users_forbidden_for_regular_user() {
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "user",
+            &["ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/admin/users")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_get_user_by_login() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/admin/users/admin")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let text = response.text();
+        assert!(text.contains("admin"));
+        assert!(text.contains("admin@localhost"));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_not_found() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/admin/users/nonexistent")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_create_user() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let new_user = serde_json::json!({
+            "login": "newuser",
+            "password": "password123",
+            "email": "newuser@example.com",
+            "firstName": "New",
+            "lastName": "User",
+            "activated": true,
+            "langKey": "en"
+        });
+
+        let response = server
+            .post("/api/admin/users")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&new_user)
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::CREATED);
+        let text = response.text();
+        assert!(text.contains("newuser"));
+    }
+
+    #[tokio::test]
+    async fn test_create_user_forbidden_for_regular_user() {
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "user",
+            &["ROLE_USER".to_string()],
+        );
+
+        let new_user = serde_json::json!({
+            "login": "hackeruser",
+            "password": "password123",
+            "email": "hacker@example.com"
+        });
+
+        let response = server
+            .post("/api/admin/users")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&new_user)
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_update_user() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        // JHipster Angular UI sends PUT /api/admin/users with login in body
+        let update_data = serde_json::json!({
+            "login": "user",
+            "firstName": "Updated",
+            "lastName": "Name"
+        });
+
+        let response = server
+            .put("/api/admin/users")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&update_data)
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let text = response.text();
+        assert!(text.contains("Updated"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_user() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .delete("/api/admin/users/user")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+
+        // Verify user is deleted
+        let get_response = server
+            .get("/api/admin/users/user")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_authorities_as_admin() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let text = response.text();
+        assert!(text.contains("ROLE_ADMIN"));
+        assert!(text.contains("ROLE_USER"));
+    }
+
+    #[tokio::test]
+    async fn test_get_authorities_forbidden_for_regular_user() {
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "user",
+            &["ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .get("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_unauthorized_access_without_token() {
+        let (server, _state) = create_test_app();
+
+        let response = server
+            .get("/api/admin/users")
+            .await;
+
+        // Without token, anonymous user doesn't have ROLE_ADMIN so gets forbidden
+        assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_pagination_headers() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        // Use separate query parameters instead of URL-encoded string
+        let response = server
+            .get("/api/admin/users")
+            .add_query_param("page", "0")
+            .add_query_param("size", "10")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        // Check x-total-count header exists
+        let headers = response.headers();
+        assert!(headers.contains_key("x-total-count"));
+    }
+}
+<%_ } _%>

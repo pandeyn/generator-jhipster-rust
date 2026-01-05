@@ -1,0 +1,549 @@
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+    Argon2,
+};
+use bson::{doc, oid::ObjectId, DateTime as BsonDateTime};
+use futures::TryStreamExt;
+use mongodb::Collection;
+
+use crate::db::MongoPool;
+use crate::dto::PageRequest;
+use crate::errors::AppError;
+use crate::models::{NewUser, UpdateUser, User};
+
+pub struct UserService;
+
+impl UserService {
+    fn collection(db: &MongoPool) -> Collection<User> {
+        db.collection::<User>("users")
+    }
+
+    /// Hash a password using Argon2
+    pub fn hash_password(password: &str) -> Result<String, AppError> {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+
+        argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map(|hash| hash.to_string())
+            .map_err(|e| AppError::Internal(format!("Failed to hash password: {}", e)))
+    }
+
+    /// Update user password
+    pub async fn update_password(
+        db: &MongoPool,
+        login: &str,
+        password_hash: &str,
+    ) -> Result<(), AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        collection
+            .update_one(
+                doc! { "login": login },
+                doc! {
+                    "$set": {
+                        "password_hash": password_hash,
+                        "last_modified_date": now
+                    }
+                }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Update current user's account settings (used by POST /api/account)
+    pub async fn update_account(
+        db: &MongoPool,
+        login: &str,
+        first_name: Option<String>,
+        last_name: Option<String>,
+        email: String,
+        lang_key: Option<String>,
+        image_url: Option<String>,
+    ) -> Result<(), AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        collection
+            .update_one(
+                doc! { "login": login },
+                doc! {
+                    "$set": {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "email": email,
+                        "lang_key": lang_key,
+                        "image_url": image_url,
+                        "last_modified_by": login,
+                        "last_modified_date": now
+                    }
+                }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Find user by login
+    pub async fn find_by_login(db: &MongoPool, login: &str) -> Result<Option<User>, AppError> {
+        let collection = Self::collection(db);
+
+        collection
+            .find_one(doc! { "login": login })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Find user by email
+    pub async fn find_by_email(db: &MongoPool, email: &str) -> Result<Option<User>, AppError> {
+        let collection = Self::collection(db);
+
+        collection
+            .find_one(doc! { "email": email })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Find user by ID
+    pub async fn find_by_id(db: &MongoPool, id: ObjectId) -> Result<User, AppError> {
+        let collection = Self::collection(db);
+
+        collection
+            .find_one(doc! { "_id": id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or_else(|| AppError::NotFound(format!("User {} not found", id)))
+    }
+
+    /// Find all users with pagination
+    pub async fn find_all(
+        db: &MongoPool,
+        page_request: &PageRequest,
+    ) -> Result<(Vec<User>, i64), AppError> {
+        let collection = Self::collection(db);
+        let page = page_request.page.unwrap_or(0) as u64;
+        let size = page_request.size.unwrap_or(20).min(100) as i64;
+        let skip = page * size as u64;
+
+        // Get total count
+        let total = collection
+            .count_documents(doc! {})
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Build sort document
+        let (sort_field, sort_dir) = page_request.primary_sort().unwrap_or(("login", "asc"));
+        let sort_order = if sort_dir.eq_ignore_ascii_case("desc") { -1 } else { 1 };
+        let sort_doc = doc! { sort_field: sort_order };
+
+        // Execute query with pagination
+        let cursor = collection
+            .find(doc! {})
+            .sort(sort_doc)
+            .skip(skip)
+            .limit(size)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let results: Vec<User> = cursor
+            .try_collect()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok((results, total as i64))
+    }
+
+    /// Create a new user
+    pub async fn create(
+        db: &MongoPool,
+        new_user: NewUser,
+    ) -> Result<User, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        let user = User {
+            id: None,
+            login: new_user.login,
+            password_hash: new_user.password_hash,
+            first_name: new_user.first_name,
+            last_name: new_user.last_name,
+            email: new_user.email,
+            activated: new_user.activated,
+<%_ if (enableEmail) { _%>
+            activation_key: new_user.activation_key,
+            reset_key: new_user.reset_key,
+            reset_date: new_user.reset_date,
+<%_ } _%>
+            lang_key: new_user.lang_key,
+            image_url: new_user.image_url,
+            authorities: new_user.authorities,
+            created_by: new_user.created_by,
+            created_date: Some(now),
+            last_modified_by: new_user.last_modified_by,
+            last_modified_date: Some(now),
+        };
+
+        let result = collection
+            .insert_one(&user)
+            .await?;
+
+        let id = result.inserted_id.as_object_id()
+            .ok_or_else(|| AppError::Internal("Failed to get inserted ID".to_string()))?;
+
+        Self::find_by_id(db, id).await
+    }
+
+    /// Update an existing user
+    pub async fn update(
+        db: &MongoPool,
+        id: ObjectId,
+        update: UpdateUser,
+        modified_by: &str,
+    ) -> Result<User, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        // Build update document dynamically
+        let mut update_doc = doc! {
+            "last_modified_by": modified_by,
+            "last_modified_date": now,
+        };
+
+        if let Some(first_name) = update.first_name {
+            update_doc.insert("first_name", first_name);
+        }
+        if let Some(last_name) = update.last_name {
+            update_doc.insert("last_name", last_name);
+        }
+        if let Some(email) = update.email {
+            update_doc.insert("email", email);
+        }
+        if let Some(activated) = update.activated {
+            update_doc.insert("activated", activated);
+        }
+        if let Some(lang_key) = update.lang_key {
+            update_doc.insert("lang_key", lang_key);
+        }
+        if let Some(image_url) = update.image_url {
+            update_doc.insert("image_url", image_url);
+        }
+        if let Some(authorities) = update.authorities {
+            update_doc.insert("authorities", authorities);
+        }
+
+        collection
+            .update_one(doc! { "_id": id }, doc! { "$set": update_doc })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, id).await
+    }
+
+    /// Delete a user
+    pub async fn delete(db: &MongoPool, id: ObjectId) -> Result<(), AppError> {
+        let collection = Self::collection(db);
+
+        collection
+            .delete_one(doc! { "_id": id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get authorities for a user
+    pub async fn get_authorities(db: &MongoPool, user_id: ObjectId) -> Result<Vec<String>, AppError> {
+        let user = Self::find_by_id(db, user_id).await?;
+        Ok(user.authorities)
+    }
+
+    /// Update user authorities
+    pub async fn update_authorities(
+        db: &MongoPool,
+        user_id: ObjectId,
+        authorities: Vec<String>,
+    ) -> Result<User, AppError> {
+        let collection = Self::collection(db);
+
+        collection
+            .update_one(
+                doc! { "_id": user_id },
+                doc! { "$set": { "authorities": &authorities } }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, user_id).await
+    }
+
+<%_ if (!enableEmail) { _%>
+    /// Create a new registered user (already activated, used when email is disabled)
+    pub async fn create_registered_user(
+        db: &MongoPool,
+        login: String,
+        email: String,
+        password: &str,
+        lang_key: Option<String>,
+    ) -> Result<User, AppError> {
+        // Check if login already exists
+        if let Some(_) = Self::find_by_login(db, &login).await? {
+            return Err(AppError::BadRequest("Login already exists".to_string()));
+        }
+
+        // Check if email already exists
+        if let Some(_) = Self::find_by_email(db, &email).await? {
+            return Err(AppError::BadRequest("Email already exists".to_string()));
+        }
+
+        // Hash the password
+        let password_hash = Self::hash_password(password)?;
+        let now = BsonDateTime::now();
+
+        let new_user = NewUser {
+            login: login.to_lowercase(),
+            password_hash,
+            first_name: None,
+            last_name: None,
+            email: email.to_lowercase(),
+            activated: true,  // Already activated since email is disabled
+            lang_key,
+            image_url: None,
+            authorities: vec!["ROLE_USER".to_string()],
+            created_by: Some("anonymousUser".to_string()),
+            created_date: Some(now),
+            last_modified_by: Some("anonymousUser".to_string()),
+            last_modified_date: Some(now),
+        };
+
+        Self::create(db, new_user).await
+    }
+<%_ } _%>
+
+<%_ if (enableEmail) { _%>
+    /// Find user by email (case-insensitive)
+    pub async fn find_by_email_ignore_case(db: &MongoPool, email: &str) -> Result<Option<User>, AppError> {
+        let collection = Self::collection(db);
+        let email_lower = email.to_lowercase();
+
+        // MongoDB regex for case-insensitive match
+        collection
+            .find_one(doc! { "email": { "$regex": format!("^{}$", regex::escape(&email_lower)), "$options": "i" } })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Find user by login (case-insensitive) that is not activated
+    pub async fn find_non_activated_by_login(db: &MongoPool, login: &str) -> Result<Option<User>, AppError> {
+        let collection = Self::collection(db);
+        let login_lower = login.to_lowercase();
+
+        collection
+            .find_one(doc! {
+                "login": { "$regex": format!("^{}$", regex::escape(&login_lower)), "$options": "i" },
+                "activated": false
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Delete non-activated user by login (used to clean up before re-registration)
+    pub async fn delete_non_activated_by_login(db: &MongoPool, login: &str) -> Result<(), AppError> {
+        if let Some(user) = Self::find_non_activated_by_login(db, login).await? {
+            if let Some(id) = user.id {
+                Self::delete(db, id).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Create a new user with activation key for email verification
+    pub async fn create_with_activation(
+        db: &MongoPool,
+        login: String,
+        email: String,
+        password: &str,
+        lang_key: Option<String>,
+        activation_key: String,
+    ) -> Result<User, AppError> {
+        // Check if login already exists (activated user)
+        if let Some(existing) = Self::find_by_login(db, &login).await? {
+            if existing.activated {
+                return Err(AppError::BadRequest("Login already exists".to_string()));
+            }
+        }
+
+        // Check if email already exists (activated user)
+        if let Some(existing) = Self::find_by_email_ignore_case(db, &email).await? {
+            if existing.activated {
+                return Err(AppError::BadRequest("Email already exists".to_string()));
+            }
+        }
+
+        // Delete any existing non-activated user with the same login
+        Self::delete_non_activated_by_login(db, &login).await?;
+
+        // Hash the password
+        let password_hash = Self::hash_password(password)?;
+        let now = BsonDateTime::now();
+
+        let new_user = NewUser {
+            login: login.to_lowercase(),
+            password_hash,
+            first_name: None,
+            last_name: None,
+            email: email.to_lowercase(),
+            activated: false,
+            activation_key: Some(activation_key),
+            reset_key: None,
+            reset_date: None,
+            lang_key,
+            image_url: None,
+            authorities: vec!["ROLE_USER".to_string()],
+            created_by: Some("system".to_string()),
+            created_date: Some(now),
+            last_modified_by: Some("system".to_string()),
+            last_modified_date: Some(now),
+        };
+
+        Self::create(db, new_user).await
+    }
+
+    /// Activate a user by activation key
+    pub async fn activate_by_key(db: &MongoPool, key: &str) -> Result<Option<User>, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        // Find user with this activation key
+        let user = collection
+            .find_one(doc! { "activation_key": key })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if let Some(user) = user {
+            if let Some(id) = user.id {
+                // Activate the user and clear activation key
+                collection
+                    .update_one(
+                        doc! { "_id": id },
+                        doc! {
+                            "$set": {
+                                "activated": true,
+                                "last_modified_by": "system",
+                                "last_modified_date": now
+                            },
+                            "$unset": { "activation_key": "" }
+                        }
+                    )
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+                return Self::find_by_id(db, id).await.map(Some);
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Set reset key for password reset
+    pub async fn set_reset_key(db: &MongoPool, user_id: ObjectId, reset_key: String) -> Result<User, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        collection
+            .update_one(
+                doc! { "_id": user_id },
+                doc! {
+                    "$set": {
+                        "reset_key": &reset_key,
+                        "reset_date": now,
+                        "last_modified_by": "system",
+                        "last_modified_date": now
+                    }
+                }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, user_id).await
+    }
+
+    /// Complete password reset using reset key
+    /// Returns None if key not found or expired (24 hours)
+    pub async fn complete_password_reset(
+        db: &MongoPool,
+        new_password: &str,
+        key: &str,
+    ) -> Result<Option<User>, AppError> {
+        use chrono::Duration;
+
+        let collection = Self::collection(db);
+
+        // Find user with this reset key
+        let user = collection
+            .find_one(doc! { "reset_key": key })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if let Some(user) = user {
+            // Check if reset key is expired (24 hours)
+            if let Some(reset_date) = user.reset_date {
+                let now = chrono::Utc::now();
+                let reset_chrono = reset_date.to_chrono();
+                let expiry = reset_chrono + Duration::hours(24);
+
+                if now > expiry {
+                    // Reset key expired
+                    return Ok(None);
+                }
+            } else {
+                // No reset date set, invalid state
+                return Ok(None);
+            }
+
+            if let Some(id) = user.id {
+                // Hash new password
+                let password_hash = Self::hash_password(new_password)?;
+                let now = BsonDateTime::now();
+
+                // Update password and clear reset key
+                collection
+                    .update_one(
+                        doc! { "_id": id },
+                        doc! {
+                            "$set": {
+                                "password_hash": &password_hash,
+                                "last_modified_by": "system",
+                                "last_modified_date": now
+                            },
+                            "$unset": {
+                                "reset_key": "",
+                                "reset_date": ""
+                            }
+                        }
+                    )
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+                return Self::find_by_id(db, id).await.map(Some);
+            }
+        }
+
+        Ok(None)
+    }
+<%_ } _%>
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_service_struct() {
+        // Verify UserService can be instantiated
+        let _service = UserService;
+    }
+}

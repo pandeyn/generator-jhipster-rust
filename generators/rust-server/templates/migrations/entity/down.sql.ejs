@@ -1,0 +1,7 @@
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
+-- Drop join table for <%= relationship.relationshipName %> many-to-many relationship
+DROP TABLE IF EXISTS <%= relationship.joinTable.name %>;
+
+<%_ } _%>
+-- Drop <%= entityTableName %> table
+DROP TABLE IF EXISTS <%= entityTableName %>;

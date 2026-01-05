@@ -1,0 +1,805 @@
+use axum::{
+    extract::{Path, State},
+    http::{HeaderMap, HeaderValue, StatusCode},
+    response::IntoResponse,
+    routing::get,
+    Extension, Json, Router,
+};
+<%_ if (devDatabaseTypeMongodb) { _%>
+use bson::oid::ObjectId;
+<%_ } _%>
+<%_ const manyToManyOwnerRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
+<%_ const manyToOneRels = relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide)); _%>
+<%_ const hasAnyRelationships = manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0; _%>
+
+use crate::dto::{<%= entityClass %>Dto, Create<%= entityClass %>Dto, Update<%= entityClass %>Dto, PageRequest, QsQuery};
+use crate::errors::{AppError, ErrorResponse};
+use crate::middleware::auth::AuthUser;
+use crate::models::RoleType;
+use crate::services::<%= entityClass %>Service;
+use crate::AppState;
+
+/// <%= entityClass %> routes
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(get_all).post(create))
+        .route("/:id", get(get_one).put(update).delete(remove))
+}
+
+/// Get all <%= entityInstancePlural %> with pagination
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/<%= entityApiUrl %>",
+    tag = "<%= entityApiUrl %>",
+    security(("bearer_auth" = [])),
+    params(
+        ("page" = Option<i64>, Query, description = "Page number (0-indexed)"),
+        ("size" = Option<i64>, Query, description = "Page size"),
+        ("sort" = Option<String>, Query, description = "Sort field and direction (e.g., 'id,asc')")
+    ),
+    responses(
+        (status = 200, description = "List of <%= entityInstancePlural %> with pagination", body = Vec<<%= entityClass %>Dto>,
+            headers(
+                ("X-Total-Count" = i64, description = "Total number of items")
+            )
+        ),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
+<%_ } _%>
+pub async fn get_all(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    QsQuery(page_request): QsQuery<PageRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    if !auth_user.has_authority(RoleType::USER) {
+        return Err(AppError::Forbidden("Access denied".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let (items, total) = <%= entityClass %>Service::find_all(&state.db, &page_request).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let (items, total) = <%= entityClass %>Service::find_all(&mut conn, &page_request)?;
+<%_ } _%>
+
+<%_ if (hasAnyRelationships) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let mut dtos: Vec<<%= entityClass %>Dto> = Vec::with_capacity(items.len());
+    for item in items {
+        let item_id = item.id.clone();
+<%_ for (const rel of manyToOneRels) { _%>
+        let <%= rel.relationshipFieldName %> = if let Some(ref id) = item.<%= rel.relationshipFieldName %>_id {
+            <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&state.db, *id).await?
+        } else {
+            None
+        };
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+        let <%= rel.relationshipFieldNamePlural %> = if let Some(id) = item_id {
+            <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&state.db, id).await?
+        } else {
+            vec![]
+        };
+<%_ } _%>
+        dtos.push(<%= entityClass %>Dto::from_with_relations(item, <%= manyToOneRels.map(r => r.relationshipFieldName).concat(manyToManyOwnerRels.map(r => r.relationshipFieldNamePlural)).join(', ') %>));
+    }
+<%_ } else { _%>
+    let dtos: Vec<<%= entityClass %>Dto> = items
+        .into_iter()
+        .map(|item| {
+<%_ for (const rel of manyToOneRels) { _%>
+            let <%= rel.relationshipFieldName %> = item.<%= rel.relationshipFieldName %>_id
+                .and_then(|id| <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&mut conn, id).ok().flatten());
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+            let <%= rel.relationshipFieldNamePlural %> = <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&mut conn, item.id).unwrap_or_default();
+<%_ } _%>
+            <%= entityClass %>Dto::from_with_relations(item, <%= manyToOneRels.map(r => r.relationshipFieldName).concat(manyToManyOwnerRels.map(r => r.relationshipFieldNamePlural)).join(', ') %>)
+        })
+        .collect();
+<%_ } _%>
+<%_ } else { _%>
+    let dtos: Vec<<%= entityClass %>Dto> = items.into_iter().map(<%= entityClass %>Dto::from).collect();
+<%_ } _%>
+
+    let mut headers = HeaderMap::new();
+    headers.insert("X-Total-Count", HeaderValue::from_str(&total.to_string()).unwrap());
+
+    Ok((headers, Json(dtos)))
+}
+
+/// Get <%= entityInstance %> by ID
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/<%= entityApiUrl %>/{id}",
+    tag = "<%= entityApiUrl %>",
+    security(("bearer_auth" = [])),
+    params(
+<%_ if (devDatabaseTypeMongodb) { _%>
+        ("id" = String, Path, description = "<%= entityClass %> ID")
+<%_ } else { _%>
+        ("id" = i32, Path, description = "<%= entityClass %> ID")
+<%_ } _%>
+    ),
+    responses(
+        (status = 200, description = "<%= entityClass %> found", body = <%= entityClass %>Dto),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "<%= entityClass %> not found")
+    )
+)]
+<%_ } _%>
+pub async fn get_one(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+<%_ if (devDatabaseTypeMongodb) { _%>
+    Path(id): Path<String>,
+<%_ } else { _%>
+    Path(id): Path<i32>,
+<%_ } _%>
+) -> Result<Json<<%= entityClass %>Dto>, AppError> {
+    if !auth_user.has_authority(RoleType::USER) {
+        return Err(AppError::Forbidden("Access denied".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let object_id = ObjectId::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid ID format".to_string()))?;
+    let item = <%= entityClass %>Service::find_by_id(&state.db, object_id).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let item = <%= entityClass %>Service::find_by_id(&mut conn, id)?;
+<%_ } _%>
+
+<%_ if (hasAnyRelationships) { _%>
+    // Fetch related entities
+<%_ if (devDatabaseTypeMongodb) { _%>
+<%_ for (const rel of manyToOneRels) { _%>
+    let <%= rel.relationshipFieldName %> = if let Some(ref id) = item.<%= rel.relationshipFieldName %>_id {
+        <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&state.db, *id).await?
+    } else {
+        None
+    };
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %> = if let Some(id) = item.id {
+        <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&state.db, id).await?
+    } else {
+        vec![]
+    };
+<%_ } _%>
+<%_ } else { _%>
+<%_ for (const rel of manyToOneRels) { _%>
+    let <%= rel.relationshipFieldName %> = item.<%= rel.relationshipFieldName %>_id
+        .and_then(|id| <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&mut conn, id).ok().flatten());
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %> = <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&mut conn, id)?;
+<%_ } _%>
+<%_ } _%>
+
+    Ok(Json(<%= entityClass %>Dto::from_with_relations(item, <%= manyToOneRels.map(r => r.relationshipFieldName).concat(manyToManyOwnerRels.map(r => r.relationshipFieldNamePlural)).join(', ') %>)))
+<%_ } else { _%>
+    Ok(Json(<%= entityClass %>Dto::from(item)))
+<%_ } _%>
+}
+
+/// Create a new <%= entityInstance %>
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    post,
+    path = "/api/<%= entityApiUrl %>",
+    tag = "<%= entityApiUrl %>",
+    security(("bearer_auth" = [])),
+    request_body = Create<%= entityClass %>Dto,
+    responses(
+        (status = 201, description = "<%= entityClass %> created successfully", body = <%= entityClass %>Dto),
+        (status = 400, description = "Invalid input"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
+<%_ } _%>
+pub async fn create(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(dto): Json<Create<%= entityClass %>Dto>,
+) -> Result<(StatusCode, Json<<%= entityClass %>Dto>), AppError> {
+    if !auth_user.has_authority(RoleType::USER) {
+        return Err(AppError::Forbidden("Access denied".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Extract relationship IDs before creating the entity
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %>_ids = dto.get_<%= rel.relationshipFieldNamePlural %>_ids();
+<%_ } _%>
+<%_ } _%>
+    let item = <%= entityClass %>Service::create(&state.db, dto, &auth_user.login).await?;
+
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Sync many-to-many relationships
+    if let Some(item_id) = item.id {
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+        if let Some(<%= rel.relationshipFieldNamePlural %>) = <%= rel.relationshipFieldNamePlural %>_ids {
+            <%= entityClass %>Service::sync_<%= rel.otherEntity.entityInstancePlural %>(&state.db, item_id, <%= rel.relationshipFieldNamePlural %>).await?;
+        }
+<%_ } _%>
+    }
+<%_ } _%>
+<%_ } else { _%>
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Extract relationship IDs before creating the entity
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %>_ids = dto.get_<%= rel.relationshipFieldNamePlural %>_ids();
+<%_ } _%>
+<%_ } _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let item = <%= entityClass %>Service::create(&mut conn, dto, &auth_user.login)?;
+
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Sync many-to-many relationships
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    if let Some(<%= rel.relationshipFieldNamePlural %>) = <%= rel.relationshipFieldNamePlural %>_ids {
+        <%= entityClass %>Service::sync_<%= rel.otherEntity.entityInstancePlural %>(&mut conn, item.id, <%= rel.relationshipFieldNamePlural %>)?;
+    }
+<%_ } _%>
+<%_ } _%>
+<%_ } _%>
+
+<%_ if (hasAnyRelationships) { _%>
+    // Fetch related entities for response
+<%_ if (devDatabaseTypeMongodb) { _%>
+<%_ for (const rel of manyToOneRels) { _%>
+    let <%= rel.relationshipFieldName %> = if let Some(ref id) = item.<%= rel.relationshipFieldName %>_id {
+        <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&state.db, *id).await?
+    } else {
+        None
+    };
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %> = if let Some(id) = item.id {
+        <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&state.db, id).await?
+    } else {
+        vec![]
+    };
+<%_ } _%>
+<%_ } else { _%>
+<%_ for (const rel of manyToOneRels) { _%>
+    let <%= rel.relationshipFieldName %> = item.<%= rel.relationshipFieldName %>_id
+        .and_then(|id| <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&mut conn, id).ok().flatten());
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %> = <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&mut conn, item.id)?;
+<%_ } _%>
+<%_ } _%>
+
+    Ok((StatusCode::CREATED, Json(<%= entityClass %>Dto::from_with_relations(item, <%= manyToOneRels.map(r => r.relationshipFieldName).concat(manyToManyOwnerRels.map(r => r.relationshipFieldNamePlural)).join(', ') %>))))
+<%_ } else { _%>
+    Ok((StatusCode::CREATED, Json(<%= entityClass %>Dto::from(item))))
+<%_ } _%>
+}
+
+/// Update an existing <%= entityInstance %>
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    put,
+    path = "/api/<%= entityApiUrl %>/{id}",
+    tag = "<%= entityApiUrl %>",
+    security(("bearer_auth" = [])),
+    params(
+<%_ if (devDatabaseTypeMongodb) { _%>
+        ("id" = String, Path, description = "<%= entityClass %> ID")
+<%_ } else { _%>
+        ("id" = i32, Path, description = "<%= entityClass %> ID")
+<%_ } _%>
+    ),
+    request_body = Update<%= entityClass %>Dto,
+    responses(
+        (status = 200, description = "<%= entityClass %> updated successfully", body = <%= entityClass %>Dto),
+        (status = 400, description = "Invalid input"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "<%= entityClass %> not found")
+    )
+)]
+<%_ } _%>
+pub async fn update(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+<%_ if (devDatabaseTypeMongodb) { _%>
+    Path(id): Path<String>,
+<%_ } else { _%>
+    Path(id): Path<i32>,
+<%_ } _%>
+    Json(dto): Json<Update<%= entityClass %>Dto>,
+) -> Result<Json<<%= entityClass %>Dto>, AppError> {
+    if !auth_user.has_authority(RoleType::USER) {
+        return Err(AppError::Forbidden("Access denied".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let object_id = ObjectId::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid ID format".to_string()))?;
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Extract relationship IDs before updating the entity
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %>_ids = dto.get_<%= rel.relationshipFieldNamePlural %>_ids();
+<%_ } _%>
+<%_ } _%>
+    let item = <%= entityClass %>Service::update(&state.db, object_id, dto, &auth_user.login).await?;
+
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Sync many-to-many relationships
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    if let Some(<%= rel.relationshipFieldNamePlural %>) = <%= rel.relationshipFieldNamePlural %>_ids {
+        <%= entityClass %>Service::sync_<%= rel.otherEntity.entityInstancePlural %>(&state.db, object_id, <%= rel.relationshipFieldNamePlural %>).await?;
+    }
+<%_ } _%>
+<%_ } _%>
+<%_ } else { _%>
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Extract relationship IDs before updating the entity
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %>_ids = dto.get_<%= rel.relationshipFieldNamePlural %>_ids();
+<%_ } _%>
+<%_ } _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let item = <%= entityClass %>Service::update(&mut conn, id, dto, &auth_user.login)?;
+
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+    // Sync many-to-many relationships
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    if let Some(<%= rel.relationshipFieldNamePlural %>) = <%= rel.relationshipFieldNamePlural %>_ids {
+        <%= entityClass %>Service::sync_<%= rel.otherEntity.entityInstancePlural %>(&mut conn, id, <%= rel.relationshipFieldNamePlural %>)?;
+    }
+<%_ } _%>
+<%_ } _%>
+<%_ } _%>
+
+<%_ if (hasAnyRelationships) { _%>
+    // Fetch related entities for response
+<%_ if (devDatabaseTypeMongodb) { _%>
+<%_ for (const rel of manyToOneRels) { _%>
+    let <%= rel.relationshipFieldName %> = if let Some(ref id) = item.<%= rel.relationshipFieldName %>_id {
+        <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&state.db, *id).await?
+    } else {
+        None
+    };
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %> = <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&state.db, object_id).await?;
+<%_ } _%>
+<%_ } else { _%>
+<%_ for (const rel of manyToOneRels) { _%>
+    let <%= rel.relationshipFieldName %> = item.<%= rel.relationshipFieldName %>_id
+        .and_then(|id| <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&mut conn, id).ok().flatten());
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+    let <%= rel.relationshipFieldNamePlural %> = <%= entityClass %>Service::get_<%= rel.otherEntity.entityInstancePlural %>(&mut conn, id)?;
+<%_ } _%>
+<%_ } _%>
+
+    Ok(Json(<%= entityClass %>Dto::from_with_relations(item, <%= manyToOneRels.map(r => r.relationshipFieldName).concat(manyToManyOwnerRels.map(r => r.relationshipFieldNamePlural)).join(', ') %>)))
+<%_ } else { _%>
+    Ok(Json(<%= entityClass %>Dto::from(item)))
+<%_ } _%>
+}
+
+/// Delete a <%= entityInstance %>
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    delete,
+    path = "/api/<%= entityApiUrl %>/{id}",
+    tag = "<%= entityApiUrl %>",
+    security(("bearer_auth" = [])),
+    params(
+<%_ if (devDatabaseTypeMongodb) { _%>
+        ("id" = String, Path, description = "<%= entityClass %> ID")
+<%_ } else { _%>
+        ("id" = i32, Path, description = "<%= entityClass %> ID")
+<%_ } _%>
+    ),
+    responses(
+        (status = 204, description = "<%= entityClass %> deleted successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "<%= entityClass %> not found")
+    )
+)]
+<%_ } _%>
+pub async fn remove(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+<%_ if (devDatabaseTypeMongodb) { _%>
+    Path(id): Path<String>,
+<%_ } else { _%>
+    Path(id): Path<i32>,
+<%_ } _%>
+) -> Result<StatusCode, AppError> {
+    if !auth_user.has_authority(RoleType::USER) {
+        return Err(AppError::Forbidden("Access denied".to_string()));
+    }
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let object_id = ObjectId::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Invalid ID format".to_string()))?;
+    <%= entityClass %>Service::delete(&state.db, object_id).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    <%= entityClass %>Service::delete(&mut conn, id)?;
+<%_ } _%>
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+<%_ if (authenticationTypeJwt) { _%>
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use axum::middleware;
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
+<%_ if (devDatabaseTypeMongodb) { _%>
+    use crate::test_utils::{create_test_mongo_pool, create_test_config, create_test_user_mongo, generate_test_token};
+<%_ } else { _%>
+    use crate::test_utils::{create_test_pool, create_test_config, create_test_user, generate_test_token};
+<%_ } _%>
+    use crate::middleware::auth::auth_middleware;
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    async fn create_test_app() -> (TestServer, crate::AppState) {
+        let db = create_test_mongo_pool().await;
+        let config = create_test_config();
+        let state = crate::AppState { db, config };
+
+        let app = Router::new()
+            .nest("/api/<%= entityApiUrl %>", routes())
+            .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+            .with_state(state.clone());
+
+        let server = TestServer::new(app).unwrap();
+        (server, state)
+    }
+<%_ } else { _%>
+    fn create_test_app() -> (TestServer, crate::AppState) {
+        let pool = create_test_pool();
+        let config = create_test_config();
+        let state = crate::AppState { pool, config };
+
+        let app = Router::new()
+            .nest("/api/<%= entityApiUrl %>", routes())
+            .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+            .with_state(state.clone());
+
+        let server = TestServer::new(app).unwrap();
+        (server, state)
+    }
+<%_ } _%>
+
+    fn get_auth_token(state: &crate::AppState) -> String {
+        generate_test_token(
+            &state.config,
+            "user",
+            &["ROLE_USER".to_string()],
+        )
+    }
+
+    #[tokio::test]
+    async fn test_get_all_<%= entityInstancePlural %>() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        let response = server
+            .get("/api/<%= entityApiUrl %>")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_all_<%= entityInstancePlural %>_unauthorized() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, _state) = create_test_app().await;
+<%_ } else { _%>
+        let (server, _state) = create_test_app();
+<%_ } _%>
+
+        let response = server
+            .get("/api/<%= entityApiUrl %>")
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_create_<%= entityInstance %>() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        let new_entity = serde_json::json!({
+<%_ const requiredFields = fields.filter(f => !f.id && f.fieldValidationRequired); _%>
+<%_ const optionalFields = fields.filter(f => !f.id && !f.fieldValidationRequired); _%>
+<%_ for (let i = 0; i < requiredFields.length; i++) { _%>
+<%_ const field = requiredFields[i]; _%>
+<%_ const isLast = i === requiredFields.length - 1 && optionalFields.length === 0; _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            "<%= field.fieldName %>": "test_value"<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            "<%= field.fieldName %>": 1<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { _%>
+            "<%= field.fieldName %>": 1.0<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            "<%= field.fieldName %>": true<% if (!isLast) { %>,<% } %>
+<%_ } else { _%>
+            "<%= field.fieldName %>": "test_value"<% if (!isLast) { %>,<% } %>
+<%_ } _%>
+<%_ } _%>
+        });
+
+        let response = server
+            .post("/api/<%= entityApiUrl %>")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&new_entity)
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_get_<%= entityInstance %>_not_found() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        let response = server
+<%_ if (devDatabaseTypeMongodb) { _%>
+            .get("/api/<%= entityApiUrl %>/507f1f77bcf86cd799439011")
+<%_ } else { _%>
+            .get("/api/<%= entityApiUrl %>/99999")
+<%_ } _%>
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_<%= entityInstance %>() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        // Create a new entity
+        let new_entity = serde_json::json!({
+<%_ for (let i = 0; i < requiredFields.length; i++) { _%>
+<%_ const field = requiredFields[i]; _%>
+<%_ const isLast = i === requiredFields.length - 1; _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            "<%= field.fieldName %>": "test_create_get"<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            "<%= field.fieldName %>": 42<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { _%>
+            "<%= field.fieldName %>": 42.5<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            "<%= field.fieldName %>": true<% if (!isLast) { %>,<% } %>
+<%_ } else { _%>
+            "<%= field.fieldName %>": "test_create_get"<% if (!isLast) { %>,<% } %>
+<%_ } _%>
+<%_ } _%>
+        });
+
+        let create_response = server
+            .post("/api/<%= entityApiUrl %>")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&new_entity)
+            .await;
+
+        assert_eq!(create_response.status_code(), StatusCode::CREATED);
+        let created: serde_json::Value = create_response.json();
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let id = created["id"].as_str().unwrap();
+<%_ } else { _%>
+        let id = created["id"].as_i64().unwrap();
+<%_ } _%>
+
+        // Get the created entity
+        let get_response = server
+            .get(&format!("/api/<%= entityApiUrl %>/{}", id))
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(get_response.status_code(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_update_<%= entityInstance %>() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        // First create an entity
+        let new_entity = serde_json::json!({
+<%_ for (let i = 0; i < requiredFields.length; i++) { _%>
+<%_ const field = requiredFields[i]; _%>
+<%_ const isLast = i === requiredFields.length - 1; _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            "<%= field.fieldName %>": "original_value"<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            "<%= field.fieldName %>": 1<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { _%>
+            "<%= field.fieldName %>": 1.0<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            "<%= field.fieldName %>": false<% if (!isLast) { %>,<% } %>
+<%_ } else { _%>
+            "<%= field.fieldName %>": "original_value"<% if (!isLast) { %>,<% } %>
+<%_ } _%>
+<%_ } _%>
+        });
+
+        let create_response = server
+            .post("/api/<%= entityApiUrl %>")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&new_entity)
+            .await;
+
+        assert_eq!(create_response.status_code(), StatusCode::CREATED);
+        let created: serde_json::Value = create_response.json();
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let id = created["id"].as_str().unwrap();
+<%_ } else { _%>
+        let id = created["id"].as_i64().unwrap();
+<%_ } _%>
+
+        // Update the entity
+        let update_data = serde_json::json!({
+<%_ if (requiredFields.length > 0) { _%>
+<%_ const firstField = requiredFields[0]; _%>
+<%_ if (firstField.fieldType === 'String' || firstField.fieldType === 'TextBlob') { _%>
+            "<%= firstField.fieldName %>": "updated_value"
+<%_ } else if (firstField.fieldType === 'Integer' || firstField.fieldType === 'Long') { _%>
+            "<%= firstField.fieldName %>": 999
+<%_ } else if (firstField.fieldType === 'Float' || firstField.fieldType === 'Double' || firstField.fieldType === 'BigDecimal') { _%>
+            "<%= firstField.fieldName %>": 999.99
+<%_ } else if (firstField.fieldType === 'Boolean') { _%>
+            "<%= firstField.fieldName %>": true
+<%_ } else { _%>
+            "<%= firstField.fieldName %>": "updated_value"
+<%_ } _%>
+<%_ } _%>
+        });
+
+        let update_response = server
+            .put(&format!("/api/<%= entityApiUrl %>/{}", id))
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&update_data)
+            .await;
+
+        assert_eq!(update_response.status_code(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_delete_<%= entityInstance %>() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        // First create an entity
+        let new_entity = serde_json::json!({
+<%_ for (let i = 0; i < requiredFields.length; i++) { _%>
+<%_ const field = requiredFields[i]; _%>
+<%_ const isLast = i === requiredFields.length - 1; _%>
+<%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            "<%= field.fieldName %>": "to_be_deleted"<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            "<%= field.fieldName %>": 1<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { _%>
+            "<%= field.fieldName %>": 1.0<% if (!isLast) { %>,<% } %>
+<%_ } else if (field.fieldType === 'Boolean') { _%>
+            "<%= field.fieldName %>": true<% if (!isLast) { %>,<% } %>
+<%_ } else { _%>
+            "<%= field.fieldName %>": "to_be_deleted"<% if (!isLast) { %>,<% } %>
+<%_ } _%>
+<%_ } _%>
+        });
+
+        let create_response = server
+            .post("/api/<%= entityApiUrl %>")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&new_entity)
+            .await;
+
+        assert_eq!(create_response.status_code(), StatusCode::CREATED);
+        let created: serde_json::Value = create_response.json();
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let id = created["id"].as_str().unwrap();
+<%_ } else { _%>
+        let id = created["id"].as_i64().unwrap();
+<%_ } _%>
+
+        // Delete the entity
+        let delete_response = server
+            .delete(&format!("/api/<%= entityApiUrl %>/{}", id))
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(delete_response.status_code(), StatusCode::NO_CONTENT);
+
+        // Verify it's deleted
+        let get_response = server
+            .get(&format!("/api/<%= entityApiUrl %>/{}", id))
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_pagination_headers() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        let (server, state) = create_test_app().await;
+        create_test_user_mongo(&state.db).await;
+<%_ } else { _%>
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+<%_ } _%>
+
+        let token = get_auth_token(&state);
+
+        let response = server
+            .get("/api/<%= entityApiUrl %>")
+            .add_query_param("page", "0")
+            .add_query_param("size", "10")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let headers = response.headers();
+        assert!(headers.contains_key("x-total-count"));
+    }
+}
+<%_ } _%>

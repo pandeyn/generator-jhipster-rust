@@ -1,0 +1,440 @@
+//! OAuth2 authentication handlers
+
+use axum::{
+    extract::{Query, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Json, Redirect, Response},
+    routing::{get, post},
+    Router,
+};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use utoipa::ToSchema;
+
+use crate::AppState;
+
+/// Get the frontend redirect URL based on configuration.
+/// When static files are served from the Rust backend, redirect to the backend URL.
+/// Otherwise, use the configured frontend URL (e.g., Angular dev server).
+fn get_frontend_redirect_url(state: &AppState) -> String {
+<%_ if (applicationTypeMonolith) { _%>
+    if state.config.serve_static_files {
+        // When serving static files, redirect to the Rust server itself
+        let protocol = if state.config.app_https { "https" } else { "http" };
+        let host = if state.config.app_host == "0.0.0.0" {
+            "localhost"
+        } else {
+            &state.config.app_host
+        };
+        format!("{}://{}:{}", protocol, host, state.config.app_port)
+    } else {
+        state.config.frontend_url.clone()
+    }
+<%_ } else { _%>
+    state.config.frontend_url.clone()
+<%_ } _%>
+}
+
+/// OAuth2 configuration information for frontend clients
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuth2Info {
+    /// The OIDC issuer URI
+    pub issuer_uri: String,
+    /// Authorization endpoint URL
+    pub authorization_endpoint: String,
+    /// Token endpoint URL
+    pub token_endpoint: String,
+    /// End session (logout) endpoint URL
+    pub end_session_endpoint: String,
+    /// OAuth2 client ID
+    pub client_id: String,
+}
+
+/// Logout response with redirect URL
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogoutResponse {
+    /// URL to redirect for OAuth2 logout
+    pub logout_url: String,
+    /// ID token for logout (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_token: Option<String>,
+}
+
+/// OAuth2 callback query parameters
+#[derive(Debug, Deserialize)]
+pub struct OAuth2Callback {
+    pub code: String,
+    #[serde(default)]
+    pub state: Option<String>,
+}
+
+/// Token response from OAuth2 provider
+#[derive(Debug, Deserialize)]
+pub struct TokenResponse {
+    pub access_token: String,
+    #[serde(default)]
+    pub id_token: Option<String>,
+    pub token_type: String,
+    #[serde(default)]
+    pub expires_in: Option<i64>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+}
+
+/// GET /api/oauth2/info - Returns OAuth2 configuration for frontend
+///
+/// This endpoint provides the necessary OAuth2/OIDC configuration for
+/// frontend applications to initiate the authentication flow.
+#[utoipa::path(
+    get,
+    path = "/api/oauth2/info",
+    tag = "oauth2",
+    responses(
+        (status = 200, description = "OAuth2 configuration", body = OAuth2Info)
+    )
+)]
+pub async fn oauth2_info(State(state): State<AppState>) -> Json<OAuth2Info> {
+    let config = &state.oauth2_config;
+    Json(OAuth2Info {
+        issuer_uri: config.issuer_uri.clone(),
+        authorization_endpoint: config.authorization_endpoint.clone(),
+        token_endpoint: config.token_endpoint.clone(),
+        end_session_endpoint: config.end_session_endpoint.clone(),
+        client_id: config.client_id.clone(),
+    })
+}
+
+/// POST /api/logout - Returns logout URL and clears auth cookies
+///
+/// For OAuth2 authentication, logout requires redirecting to the
+/// identity provider's logout endpoint. This endpoint returns
+/// the URL to redirect to (with post_logout_redirect_uri) and clears
+/// the authentication cookies.
+///
+/// The logout URL includes:
+/// - post_logout_redirect_uri: Where to redirect after logout (frontend URL)
+/// - id_token_hint: The ID token for proper session termination (if available)
+/// - client_id: Fallback if id_token_hint is not available (required by Keycloak)
+#[utoipa::path(
+    post,
+    path = "/api/logout",
+    tag = "oauth2",
+    responses(
+        (status = 200, description = "Logout successful, returns logout URL", body = LogoutResponse)
+    )
+)]
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    let config = &state.oauth2_config;
+
+    // Extract id_token from cookie if present (needed for proper logout)
+    let id_token = headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|cookies| {
+            cookies
+                .split(';')
+                .map(|s| s.trim())
+                .find(|s| s.starts_with("id_token="))
+                .map(|s| s.trim_start_matches("id_token=").to_string())
+        });
+
+    // Build the logout URL with post_logout_redirect_uri
+    // Keycloak requires either id_token_hint or client_id when using post_logout_redirect_uri
+    let frontend_url = get_frontend_redirect_url(&state);
+    let post_logout_redirect = urlencoding::encode(&frontend_url);
+
+    let logout_url = if let Some(ref token) = id_token {
+        // Use id_token_hint for proper session termination
+        format!(
+            "{}?id_token_hint={}&post_logout_redirect_uri={}",
+            config.end_session_endpoint,
+            urlencoding::encode(token),
+            post_logout_redirect
+        )
+    } else {
+        // Fallback to client_id if no id_token available
+        format!(
+            "{}?client_id={}&post_logout_redirect_uri={}",
+            config.end_session_endpoint,
+            urlencoding::encode(&config.client_id),
+            post_logout_redirect
+        )
+    };
+
+    let response_body = LogoutResponse {
+        logout_url,
+        id_token,
+    };
+
+    // Clear authentication cookies by setting them to expire immediately
+    // Note: We don't set Domain so the cookie matches the origin that set it
+    let clear_access_cookie = "access_token=; Path=/; Max-Age=0; SameSite=Lax";
+    let clear_id_cookie = "id_token=; Path=/; Max-Age=0; SameSite=Lax";
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::SET_COOKIE, clear_access_cookie)
+        .header(header::SET_COOKIE, clear_id_cookie)
+        .body(axum::body::Body::from(serde_json::to_string(&response_body).unwrap()))
+        .unwrap()
+}
+
+/// GET /oauth2/authorization/oidc - Initiates OAuth2 login flow
+///
+/// This endpoint redirects the user to the OAuth2 provider's authorization
+/// endpoint to begin the authentication flow.
+pub async fn authorize(State(state): State<AppState>) -> Response {
+    let config = &state.oauth2_config;
+
+    // Generate a random state parameter for CSRF protection
+    let state_param = generate_random_state();
+
+    // Build the authorization URL
+    // Use localhost for redirect_uri since 0.0.0.0 is not a valid callback host
+<%_ if (applicationTypeMonolith) { _%>
+    let protocol = if state.config.app_https { "https" } else { "http" };
+<%_ } else { _%>
+    let protocol = "http"; // TODO: Add APP_HTTPS support for non-monolith apps
+<%_ } _%>
+    let callback_host = if state.config.app_host == "0.0.0.0" {
+        "localhost"
+    } else {
+        &state.config.app_host
+    };
+    let redirect_uri = format!(
+        "{}://{}:{}/login/oauth2/code/oidc",
+        protocol,
+        callback_host,
+        state.config.app_port
+    );
+
+    let auth_url = format!(
+        "{}?response_type=code&client_id={}&redirect_uri={}&scope=openid%20profile%20email&state={}",
+        config.authorization_endpoint,
+        urlencoding::encode(&config.client_id),
+        urlencoding::encode(&redirect_uri),
+        urlencoding::encode(&state_param)
+    );
+
+    tracing::info!("Redirecting to OAuth2 provider: {}", config.authorization_endpoint);
+
+    Redirect::temporary(&auth_url).into_response()
+}
+
+/// GET /login/oauth2/code/oidc - OAuth2 callback handler
+///
+/// This endpoint handles the callback from the OAuth2 provider after
+/// successful authentication. It exchanges the authorization code for
+/// tokens and redirects to the frontend with the tokens.
+pub async fn callback(
+    State(state): State<AppState>,
+    Query(params): Query<OAuth2Callback>,
+) -> Response {
+    let config = &state.oauth2_config;
+
+    tracing::info!("OAuth2 callback received with code");
+
+    // Build redirect URI (must match what was sent in authorization request)
+    // Use localhost for redirect_uri since 0.0.0.0 is not a valid callback host
+<%_ if (applicationTypeMonolith) { _%>
+    let protocol = if state.config.app_https { "https" } else { "http" };
+<%_ } else { _%>
+    let protocol = "http"; // TODO: Add APP_HTTPS support for non-monolith apps
+<%_ } _%>
+    let callback_host = if state.config.app_host == "0.0.0.0" {
+        "localhost"
+    } else {
+        &state.config.app_host
+    };
+    let redirect_uri = format!(
+        "{}://{}:{}/login/oauth2/code/oidc",
+        protocol,
+        callback_host,
+        state.config.app_port
+    );
+
+    // Exchange authorization code for tokens
+    let client = reqwest::Client::new();
+
+    let mut token_params = HashMap::new();
+    token_params.insert("grant_type", "authorization_code");
+    token_params.insert("code", &params.code);
+    token_params.insert("redirect_uri", &redirect_uri);
+    token_params.insert("client_id", &config.client_id);
+
+    // Add client secret if configured
+    let client_secret_ref;
+    if let Some(ref secret) = config.client_secret {
+        client_secret_ref = secret.clone();
+        token_params.insert("client_secret", &client_secret_ref);
+    }
+
+    let token_response = client
+        .post(&config.token_endpoint)
+        .form(&token_params)
+        .send()
+        .await;
+
+    match token_response {
+        Ok(response) => {
+            if response.status().is_success() {
+                match response.json::<TokenResponse>().await {
+                    Ok(tokens) => {
+                        tracing::info!("Successfully obtained tokens from OAuth2 provider");
+
+                        // Set the access token as a cookie for subsequent requests
+                        // Note: We omit Domain to let the browser use the origin that set it
+                        // SameSite=Lax allows the cookie to be sent on top-level navigation and GET requests
+                        let access_cookie = format!(
+                            "access_token={}; Path=/; SameSite=Lax; Max-Age={}",
+                            tokens.access_token,
+                            tokens.expires_in.unwrap_or(3600)
+                        );
+
+                        // Redirect to the frontend URL after successful authentication
+                        // When serving static files, redirect to the Rust server itself
+                        // Otherwise, redirect to the Angular dev server (e.g., http://localhost:9000)
+                        let frontend_url = get_frontend_redirect_url(&state);
+                        tracing::info!("Redirecting to frontend: {}", frontend_url);
+
+                        // Build response with cookies
+                        let mut response = Response::builder()
+                            .status(StatusCode::FOUND)
+                            .header(header::LOCATION, &frontend_url)
+                            .header(header::SET_COOKIE, access_cookie);
+
+                        // Also set id_token cookie if present (needed for logout)
+                        if let Some(ref id_token) = tokens.id_token {
+                            let id_cookie = format!(
+                                "id_token={}; Path=/; SameSite=Lax; Max-Age={}",
+                                id_token,
+                                tokens.expires_in.unwrap_or(3600)
+                            );
+                            response = response.header(header::SET_COOKIE, id_cookie);
+                        }
+
+                        response.body(axum::body::Body::empty()).unwrap()
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to parse token response: {}", e);
+                        let frontend_url = get_frontend_redirect_url(&state);
+                        error_response(&frontend_url, "Failed to parse token response")
+                    }
+                }
+            } else {
+                let error_text = response.text().await.unwrap_or_default();
+                tracing::error!("Token exchange failed: {}", error_text);
+                let frontend_url = get_frontend_redirect_url(&state);
+                error_response(&frontend_url, &format!("Token exchange failed: {}", error_text))
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to exchange code for tokens: {}", e);
+            let frontend_url = get_frontend_redirect_url(&state);
+            error_response(&frontend_url, &format!("Failed to exchange code: {}", e))
+        }
+    }
+}
+
+/// Generate a random state parameter for CSRF protection
+fn generate_random_state() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("{:x}", timestamp)
+}
+
+/// Create an error response that redirects to the frontend with an error
+fn error_response(frontend_url: &str, message: &str) -> Response {
+    // Append error query parameter to frontend URL
+    let separator = if frontend_url.contains('?') { "&" } else { "?" };
+    let redirect_url = format!("{}{}error={}", frontend_url, separator, urlencoding::encode(message));
+    Redirect::temporary(&redirect_url).into_response()
+}
+
+/// Create OAuth2 API routes (under /api/oauth2)
+pub fn api_routes() -> Router<AppState> {
+    Router::new()
+        .route("/info", get(oauth2_info))
+}
+
+/// Create logout route (under /api)
+pub fn logout_route() -> Router<AppState> {
+    Router::new()
+        .route("/logout", post(logout))
+}
+
+/// Create OAuth2 authorization routes (at root level)
+pub fn auth_routes() -> Router<AppState> {
+    Router::new()
+        .route("/oauth2/authorization/oidc", get(authorize))
+        .route("/login/oauth2/code/oidc", get(callback))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oauth2_info_serialization() {
+        let info = OAuth2Info {
+            issuer_uri: "http://localhost:9080/realms/jhipster".to_string(),
+            authorization_endpoint: "http://localhost:9080/realms/jhipster/protocol/openid-connect/auth".to_string(),
+            token_endpoint: "http://localhost:9080/realms/jhipster/protocol/openid-connect/token".to_string(),
+            end_session_endpoint: "http://localhost:9080/realms/jhipster/protocol/openid-connect/logout".to_string(),
+            client_id: "web_app".to_string(),
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("issuerUri"));
+        assert!(json.contains("authorizationEndpoint"));
+        assert!(json.contains("clientId"));
+    }
+
+    #[test]
+    fn test_logout_response_serialization() {
+        let response = LogoutResponse {
+            logout_url: "http://localhost:9080/realms/jhipster/protocol/openid-connect/logout".to_string(),
+            id_token: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("logoutUrl"));
+    }
+
+    #[test]
+    fn test_oauth2_callback_deserialization() {
+        let json = r#"{"code":"abc123","state":"xyz789"}"#;
+        let callback: OAuth2Callback = serde_json::from_str(json).unwrap();
+        assert_eq!(callback.code, "abc123");
+        assert_eq!(callback.state, Some("xyz789".to_string()));
+    }
+
+    #[test]
+    fn test_token_response_deserialization() {
+        let json = r#"{"access_token":"eyJ...","id_token":"eyJ...","token_type":"Bearer","expires_in":300}"#;
+        let response: TokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.access_token, "eyJ...");
+        assert_eq!(response.token_type, "Bearer");
+        assert_eq!(response.expires_in, Some(300));
+    }
+
+    #[test]
+    fn test_generate_random_state() {
+        let state1 = generate_random_state();
+        let state2 = generate_random_state();
+        assert!(!state1.is_empty());
+        assert!(!state2.is_empty());
+        // States should have reasonable length
+        assert!(state1.len() >= 16);
+        assert!(state2.len() >= 16);
+    }
+}

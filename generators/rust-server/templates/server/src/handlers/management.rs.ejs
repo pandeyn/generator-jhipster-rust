@@ -1,0 +1,43 @@
+use axum::{routing::get, Json, Router};
+use serde::Serialize;
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+
+use crate::AppState;
+
+/// Application info response for JHipster UI
+#[derive(Debug, Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+#[serde(rename_all = "kebab-case")]
+pub struct InfoResponse {
+    /// Display ribbon indicator on profiles
+    pub display_ribbon_on_profiles: String,
+    /// Currently active profiles
+    #[serde(rename = "activeProfiles")]
+    pub active_profiles: Vec<String>,
+}
+
+/// Management routes
+pub fn routes() -> Router<AppState> {
+    Router::new().route("/info", get(info))
+}
+
+/// Get application info
+///
+/// Returns application metadata for JHipster UI ribbon and profile display.
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/management/info",
+    tag = "management",
+    responses(
+        (status = 200, description = "Application info", body = InfoResponse)
+    )
+)]
+<%_ } _%>
+pub async fn info() -> Json<InfoResponse> {
+    Json(InfoResponse {
+        display_ribbon_on_profiles: "dev".to_string(),
+        active_profiles: vec!["dev".to_string(), "api-docs".to_string()],
+    })
+}

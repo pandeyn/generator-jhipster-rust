@@ -1,0 +1,21 @@
+<%_ if (devDatabaseTypeMongodb) { _%>
+mod user_service_mongodb;
+pub use user_service_mongodb::*;
+<%_ } else { _%>
+mod user_service;
+pub use user_service::*;
+<%_ } _%>
+mod auth_service;
+
+<%_ if (authenticationTypeJwt) { _%>
+pub use auth_service::{AuthService, Claims};
+<%_ } else { _%>
+pub use auth_service::AuthService;
+<%_ } _%>
+
+<%_ if (enableEmail) { _%>
+mod email_service;
+pub use email_service::EmailService;
+<%_ } _%>
+
+// jhipster-needle-add-entity-service - JHipster will add entity services here

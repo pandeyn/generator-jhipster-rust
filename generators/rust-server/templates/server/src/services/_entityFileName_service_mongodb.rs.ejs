@@ -1,0 +1,409 @@
+use bson::{doc, oid::ObjectId, DateTime as BsonDateTime};
+use futures::TryStreamExt;
+use mongodb::{Collection, Database};
+
+use crate::db::MongoPool;
+<%_ const manyToManyOwnerRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
+<%_ const manyToOneRels = relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide)); _%>
+use crate::dto::{Create<%= entityClass %>Dto, PageRequest, Update<%= entityClass %>Dto};
+use crate::errors::AppError;
+<%_ if (manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0) { _%>
+use crate::models::{<%= persistClass %><% for (const rel of manyToOneRels) { %>, <%= rel.otherEntity.persistClass %><% } %><% for (const rel of manyToManyOwnerRels) { %>, <%= persistClass %><%= rel.otherEntity.persistClass %>Link, <%= rel.otherEntity.persistClass %><% } %>};
+<%_ } else { _%>
+use crate::models::<%= persistClass %>;
+<%_ } _%>
+
+pub struct <%= entityClass %>Service;
+
+impl <%= entityClass %>Service {
+    fn collection(db: &Database) -> Collection<<%= persistClass %>> {
+        db.collection::<<%= persistClass %>>("<%= entityTableName %>")
+    }
+
+    /// Find all <%= entityInstancePlural %> with pagination
+    pub async fn find_all(
+        db: &MongoPool,
+        page_request: &PageRequest,
+    ) -> Result<(Vec<<%= persistClass %>>, i64), AppError> {
+        let collection = Self::collection(db);
+        let page = page_request.page.unwrap_or(0) as u64;
+        let size = page_request.size.unwrap_or(20).min(100) as i64;
+        let skip = page * size as u64;
+
+        // Get total count
+        let total = collection
+            .count_documents(doc! {})
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Build sort document
+        let (sort_field, sort_dir) = page_request.primary_sort().unwrap_or(("_id", "asc"));
+        let sort_order = if sort_dir.eq_ignore_ascii_case("desc") { -1 } else { 1 };
+
+        // Map camelCase field names to snake_case for MongoDB
+        let mongo_sort_field = match sort_field {
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+            "<%= field.fieldName %>" => "<%= field.fieldNameUnderscored %>",
+<%_ } _%>
+            "createdDate" => "created_date",
+            "lastModifiedDate" => "last_modified_date",
+            _ => sort_field,
+        };
+
+        let sort_doc = doc! { mongo_sort_field: sort_order };
+
+        // Execute query with pagination
+        let cursor = collection
+            .find(doc! {})
+            .sort(sort_doc)
+            .skip(skip)
+            .limit(size)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let results: Vec<<%= persistClass %>> = cursor
+            .try_collect()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok((results, total as i64))
+    }
+
+    /// Find <%= entityInstance %> by ID
+    pub async fn find_by_id(db: &MongoPool, id: ObjectId) -> Result<<%= persistClass %>, AppError> {
+        let collection = Self::collection(db);
+
+        collection
+            .find_one(doc! { "_id": id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or_else(|| AppError::NotFound(format!("<%= entityClass %> {} not found", id)))
+    }
+
+    /// Create a new <%= entityInstance %>
+    pub async fn create(
+        db: &MongoPool,
+        dto: Create<%= entityClass %>Dto,
+        created_by: &str,
+    ) -> Result<<%= persistClass %>, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        let new_entity = <%= persistClass %> {
+            id: None,
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+            <%= field.fieldNameUnderscored %>: dto.<%= field.fieldNameUnderscored %>,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+            <%= relationship.relationshipFieldName %>_id: dto.<%= relationship.relationshipFieldName %>_id,
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
+            <%= relationship.relationshipFieldNamePlural %>: vec![],
+<%_ } _%>
+            created_by: Some(created_by.to_string()),
+            created_date: Some(now),
+            last_modified_by: Some(created_by.to_string()),
+            last_modified_date: Some(now),
+        };
+
+        let result = collection
+            .insert_one(&new_entity)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let id = result.inserted_id.as_object_id()
+            .ok_or_else(|| AppError::Internal("Failed to get inserted ID".to_string()))?;
+
+        Self::find_by_id(db, id).await
+    }
+
+    /// Update an existing <%= entityInstance %>
+    pub async fn update(
+        db: &MongoPool,
+        id: ObjectId,
+        dto: Update<%= entityClass %>Dto,
+        modified_by: &str,
+    ) -> Result<<%= persistClass %>, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        // Build update document dynamically
+        let mut update_doc = doc! {
+            "last_modified_by": modified_by,
+            "last_modified_date": now,
+        };
+
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+        if let Some(val) = dto.<%= field.fieldNameUnderscored %> {
+<%_ if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            update_doc.insert("<%= field.fieldNameUnderscored %>", val);
+<%_ } else { _%>
+            update_doc.insert("<%= field.fieldNameUnderscored %>", val);
+<%_ } _%>
+        }
+<%_ } _%>
+<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
+        if let Some(val) = dto.<%= relationship.relationshipFieldName %>_id {
+            match val {
+                Some(oid) => update_doc.insert("<%= relationship.relationshipFieldName %>_id", oid),
+                None => update_doc.insert("<%= relationship.relationshipFieldName %>_id", bson::Bson::Null),
+            };
+        }
+<%_ } _%>
+
+        collection
+            .update_one(doc! { "_id": id }, doc! { "$set": update_doc })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, id).await
+    }
+
+    /// Delete a <%= entityInstance %>
+    pub async fn delete(db: &MongoPool, id: ObjectId) -> Result<(), AppError> {
+        let collection = Self::collection(db);
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+
+        // Delete related many-to-many links
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+        Self::link_collection_<%= rel.otherEntityTableName %>(db)
+            .delete_many(doc! { "<%= entityTableName %>_id": id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+<%_ } _%>
+<%_ } _%>
+
+        collection
+            .delete_one(doc! { "_id": id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+<%_ for (const rel of manyToOneRels) { _%>
+
+    /// Find related <%= rel.relationshipFieldName %> by ID
+    pub async fn find_<%= rel.relationshipFieldName %>_by_id(
+        db: &MongoPool,
+        id: ObjectId,
+    ) -> Result<Option<<%= rel.otherEntity.persistClass %>>, AppError> {
+        let collection = db.collection::<<%= rel.otherEntity.persistClass %>>("<%= rel.otherEntityTableName %>");
+
+        collection
+            .find_one(doc! { "_id": id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+<%_ } _%>
+<%_ for (const rel of manyToManyOwnerRels) { _%>
+
+    fn link_collection_<%= rel.otherEntityTableName %>(db: &Database) -> Collection<<%= persistClass %><%= rel.otherEntity.persistClass %>Link> {
+        db.collection::<<%= persistClass %><%= rel.otherEntity.persistClass %>Link>("<%= rel.joinTable.name %>")
+    }
+
+    /// Add a <%= rel.otherEntity.entityInstance %> to this <%= entityInstance %>
+    pub async fn add_<%= rel.otherEntityName %>(
+        db: &MongoPool,
+        <%= entityTableName %>_id: ObjectId,
+        <%= rel.otherEntityTableName %>_id: ObjectId,
+    ) -> Result<(), AppError> {
+        let collection = Self::link_collection_<%= rel.otherEntityTableName %>(db);
+
+        let link = <%= persistClass %><%= rel.otherEntity.persistClass %>Link {
+            id: None,
+            <%= entityTableName %>_id,
+            <%= rel.otherEntityTableName %>_id,
+        };
+
+        collection
+            .insert_one(&link)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Remove a <%= rel.otherEntity.entityInstance %> from this <%= entityInstance %>
+    pub async fn remove_<%= rel.otherEntityName %>(
+        db: &MongoPool,
+        <%= entityTableName %>_id: ObjectId,
+        <%= rel.otherEntityTableName %>_id: ObjectId,
+    ) -> Result<(), AppError> {
+        let collection = Self::link_collection_<%= rel.otherEntityTableName %>(db);
+
+        collection
+            .delete_one(doc! {
+                "<%= entityTableName %>_id": <%= entityTableName %>_id,
+                "<%= rel.otherEntityTableName %>_id": <%= rel.otherEntityTableName %>_id
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get all <%= rel.otherEntity.entityInstancePlural %> for a <%= entityInstance %>
+    pub async fn get_<%= rel.otherEntity.entityInstancePlural %>(
+        db: &MongoPool,
+        <%= entityTableName %>_id: ObjectId,
+    ) -> Result<Vec<<%= rel.otherEntity.persistClass %>>, AppError> {
+        let link_collection = Self::link_collection_<%= rel.otherEntityTableName %>(db);
+        let entity_collection = db.collection::<<%= rel.otherEntity.persistClass %>>("<%= rel.otherEntityTableName %>");
+
+        // Get all linked IDs
+        let cursor = link_collection
+            .find(doc! { "<%= entityTableName %>_id": <%= entityTableName %>_id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let links: Vec<<%= persistClass %><%= rel.otherEntity.persistClass %>Link> = cursor
+            .try_collect()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if links.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let ids: Vec<ObjectId> = links.iter().map(|l| l.<%= rel.otherEntityTableName %>_id).collect();
+
+        // Fetch all related entities
+        let cursor = entity_collection
+            .find(doc! { "_id": { "$in": ids } })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        cursor
+            .try_collect()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Sync <%= rel.otherEntity.entityInstancePlural %> for a <%= entityInstance %> - replaces all existing relationships
+    pub async fn sync_<%= rel.otherEntity.entityInstancePlural %>(
+        db: &MongoPool,
+        <%= entityTableName %>_id: ObjectId,
+        <%= rel.otherEntityTableName %>_ids: Vec<ObjectId>,
+    ) -> Result<(), AppError> {
+        let collection = Self::link_collection_<%= rel.otherEntityTableName %>(db);
+
+        // Remove all existing relationships
+        collection
+            .delete_many(doc! { "<%= entityTableName %>_id": <%= entityTableName %>_id })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Insert new relationships
+        for <%= rel.otherEntityTableName %>_id in <%= rel.otherEntityTableName %>_ids {
+            let link = <%= persistClass %><%= rel.otherEntity.persistClass %>Link {
+                id: None,
+                <%= entityTableName %>_id,
+                <%= rel.otherEntityTableName %>_id,
+            };
+            collection
+                .insert_one(&link)
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
+        Ok(())
+    }
+<%_ } _%>
+<%_ // Embedded OneToMany relationship methods _%>
+<%_ const embeddedOneToManyRels = relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded); _%>
+<%_ for (const rel of embeddedOneToManyRels) { _%>
+
+    /// Add an embedded <%= rel.otherEntity.entityInstance %> to this <%= entityInstance %>
+    pub async fn add_<%= rel.otherEntity.entityInstance %>(
+        db: &MongoPool,
+        parent_id: ObjectId,
+        embedded: crate::models::Embedded<%= rel.otherEntity.persistClass %>,
+    ) -> Result<<%= persistClass %>, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        collection
+            .update_one(
+                doc! { "_id": parent_id },
+                doc! {
+                    "$push": { "<%= rel.relationshipFieldNamePlural %>": bson::to_bson(&embedded).map_err(|e| AppError::Internal(e.to_string()))? },
+                    "$set": { "last_modified_date": now }
+                }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, parent_id).await
+    }
+
+    /// Remove an embedded <%= rel.otherEntity.entityInstance %> from this <%= entityInstance %>
+    pub async fn remove_<%= rel.otherEntity.entityInstance %>(
+        db: &MongoPool,
+        parent_id: ObjectId,
+        embedded_id: &str,
+    ) -> Result<<%= persistClass %>, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        collection
+            .update_one(
+                doc! { "_id": parent_id },
+                doc! {
+                    "$pull": { "<%= rel.relationshipFieldNamePlural %>": { "id": embedded_id } },
+                    "$set": { "last_modified_date": now }
+                }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, parent_id).await
+    }
+
+    /// Update an embedded <%= rel.otherEntity.entityInstance %> within this <%= entityInstance %>
+    pub async fn update_<%= rel.otherEntity.entityInstance %>(
+        db: &MongoPool,
+        parent_id: ObjectId,
+        embedded_id: &str,
+        updated: crate::models::Embedded<%= rel.otherEntity.persistClass %>,
+    ) -> Result<<%= persistClass %>, AppError> {
+        let collection = Self::collection(db);
+        let now = BsonDateTime::now();
+
+        // Use positional operator to update the matching embedded document
+        collection
+            .update_one(
+                doc! { "_id": parent_id, "<%= rel.relationshipFieldNamePlural %>.id": embedded_id },
+                doc! {
+                    "$set": {
+                        "<%= rel.relationshipFieldNamePlural %>.$": bson::to_bson(&updated).map_err(|e| AppError::Internal(e.to_string()))?,
+                        "last_modified_date": now
+                    }
+                }
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Self::find_by_id(db, parent_id).await
+    }
+
+    /// Get all embedded <%= rel.otherEntity.entityInstancePlural %> for this <%= entityInstance %>
+    pub async fn get_<%= rel.otherEntity.entityInstancePlural %>(
+        db: &MongoPool,
+        parent_id: ObjectId,
+    ) -> Result<Vec<crate::models::Embedded<%= rel.otherEntity.persistClass %>>, AppError> {
+        let parent = Self::find_by_id(db, parent_id).await?;
+        Ok(parent.<%= rel.relationshipFieldNamePlural %>)
+    }
+<%_ } _%>
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_<%= entityInstance %>_service_struct() {
+        // Verify <%= entityClass %>Service can be instantiated
+        let _service = <%= entityClass %>Service;
+    }
+}

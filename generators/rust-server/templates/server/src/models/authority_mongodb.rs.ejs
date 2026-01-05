@@ -1,0 +1,56 @@
+use serde::{Deserialize, Serialize};
+
+/// Authority entity for MongoDB
+/// Uses the authority name as the document _id for efficient lookups
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Authority {
+    #[serde(rename = "_id")]
+    pub name: String,
+}
+
+impl Authority {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+        }
+    }
+}
+
+/// Role type constants for authorization checks
+pub struct RoleType;
+
+impl RoleType {
+    pub const ADMIN: &'static str = "ROLE_ADMIN";
+    pub const USER: &'static str = "ROLE_USER";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_authority_creation() {
+        let authority = Authority::new("ROLE_ADMIN");
+        assert_eq!(authority.name, "ROLE_ADMIN");
+    }
+
+    #[test]
+    fn test_authority_clone() {
+        let authority = Authority::new("ROLE_USER");
+        let cloned = authority.clone();
+        assert_eq!(cloned.name, "ROLE_USER");
+    }
+
+    #[test]
+    fn test_authority_serialization() {
+        let authority = Authority::new("ROLE_ADMIN");
+        let json = serde_json::to_string(&authority).unwrap();
+        assert!(json.contains("\"_id\":\"ROLE_ADMIN\""));
+    }
+
+    #[test]
+    fn test_role_type_constants() {
+        assert_eq!(RoleType::ADMIN, "ROLE_ADMIN");
+        assert_eq!(RoleType::USER, "ROLE_USER");
+    }
+}

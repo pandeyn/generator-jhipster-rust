@@ -1,0 +1,125 @@
+// MongoDB initialization script for <%= baseName %>
+// This script runs when the MongoDB container starts for the first time
+
+// Switch to the application database
+db = db.getSiblingDB('<%= baseName.toLowerCase() %>');
+
+// Create collections with validation schemas
+db.createCollection('users', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['login', 'email', 'password_hash', 'activated'],
+      properties: {
+        login: {
+          bsonType: 'string',
+          description: 'Username - required and unique'
+        },
+        email: {
+          bsonType: 'string',
+          description: 'Email address - required and unique'
+        },
+        password_hash: {
+          bsonType: 'string',
+          description: 'Hashed password - required'
+        },
+        first_name: {
+          bsonType: ['string', 'null'],
+          description: 'First name'
+        },
+        last_name: {
+          bsonType: ['string', 'null'],
+          description: 'Last name'
+        },
+        activated: {
+          bsonType: 'bool',
+          description: 'Whether the account is activated'
+        },
+        lang_key: {
+          bsonType: ['string', 'null'],
+          description: 'Language preference'
+        },
+        image_url: {
+          bsonType: ['string', 'null'],
+          description: 'Profile image URL'
+        },
+        authorities: {
+          bsonType: 'array',
+          items: {
+            bsonType: 'string'
+          },
+          description: 'User roles/authorities'
+        },
+        created_by: {
+          bsonType: ['string', 'null'],
+          description: 'User who created this record'
+        },
+        created_date: {
+          bsonType: ['date', 'null'],
+          description: 'Creation timestamp'
+        },
+        last_modified_by: {
+          bsonType: ['string', 'null'],
+          description: 'User who last modified this record'
+        },
+        last_modified_date: {
+          bsonType: ['date', 'null'],
+          description: 'Last modification timestamp'
+        }
+      }
+    }
+  }
+});
+
+// Create unique indexes for users
+db.users.createIndex({ login: 1 }, { unique: true });
+db.users.createIndex({ email: 1 }, { unique: true });
+
+// Create authorities collection (simple name-based collection)
+db.createCollection('authorities');
+
+// Insert default authorities
+db.authorities.insertMany([
+  { _id: 'ROLE_ADMIN' },
+  { _id: 'ROLE_USER' }
+]);
+
+// Insert default admin user
+// Password: admin (hashed with argon2id)
+// Note: In production, generate a secure hash
+db.users.insertOne({
+  login: 'admin',
+  password_hash: '$argon2id$v=19$m=19456,t=2,p=1$3D/So5OjR42pEqKUwnOssQ$HOxpRQIzUupf+JKUdf5HOH8Hf2LzIQNHtudQgQLvXc8',
+  first_name: 'Administrator',
+  last_name: 'Administrator',
+  email: 'admin@localhost',
+  activated: true,
+  lang_key: 'en',
+  image_url: null,
+  authorities: ['ROLE_ADMIN', 'ROLE_USER'],
+  created_by: 'system',
+  created_date: new Date(),
+  last_modified_by: 'system',
+  last_modified_date: new Date()
+});
+
+// Insert default user
+// Password: user (hashed with argon2id)
+db.users.insertOne({
+  login: 'user',
+  password_hash: '$argon2id$v=19$m=19456,t=2,p=1$XpB0cIS+eXjn5quJtMjGqQ$3LUROxTStA6zsd6yNbG0xfThfr19aegv6kXuaK2p5Is',
+  first_name: 'User',
+  last_name: 'User',
+  email: 'user@localhost',
+  activated: true,
+  lang_key: 'en',
+  image_url: null,
+  authorities: ['ROLE_USER'],
+  created_by: 'system',
+  created_date: new Date(),
+  last_modified_by: 'system',
+  last_modified_date: new Date()
+});
+
+print('MongoDB initialization script completed successfully');
+print('Default users created: admin/admin, user/user');

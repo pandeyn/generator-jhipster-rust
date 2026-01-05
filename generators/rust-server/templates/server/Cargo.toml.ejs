@@ -1,0 +1,58 @@
+[package]
+name = "<%= rustCrateName %>"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "<%= rustCrateName %>"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+tokio.workspace = true
+<%_ if (devDatabaseTypeMongodb) { _%>
+mongodb.workspace = true
+bson.workspace = true
+futures.workspace = true
+<%_ } else { _%>
+diesel.workspace = true
+diesel_migrations.workspace = true
+<%_ } _%>
+dotenvy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_qs.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+argon2.workspace = true
+rand.workspace = true
+jsonwebtoken.workspace = true
+validator.workspace = true
+<%_ if (authenticationTypeOauth2) { _%>
+reqwest.workspace = true
+urlencoding.workspace = true
+<%_ } _%>
+async-trait.workspace = true
+lazy_static.workspace = true
+regex.workspace = true
+<%_ if (enableSwaggerCodegen) { _%>
+utoipa.workspace = true
+utoipa-scalar.workspace = true
+<%_ } _%>
+<%_ if (enableEmail) { _%>
+lettre.workspace = true
+tera.workspace = true
+<%_ } _%>
+
+[dev-dependencies]
+axum-test = "14"
+<%_ if (applicationTypeMonolith) { _%>
+tempfile = "3"
+<%_ } _%>

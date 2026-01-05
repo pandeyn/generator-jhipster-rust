@@ -1,0 +1,152 @@
+//! OpenAPI/Swagger documentation configuration
+//!
+//! This module configures the OpenAPI specification for API documentation.
+//! Available documentation endpoints:
+//! - Swagger UI: /swagger-ui (served from static files, JHipster's custom UI with auth integration)
+//! - Scalar UI: /scalar (alternative API documentation viewer)
+//! - OpenAPI JSON: /v3/api-docs (Spring Boot compatible endpoint)
+
+use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+
+use crate::dto::*;
+use crate::errors::ErrorResponse;
+use crate::handlers;
+
+/// API Documentation
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "<%= baseName %> API",
+        description = "<%= baseName %> REST API documentation",
+        version = "1.0.0",
+        license(name = "Apache 2.0", url = "https://www.apache.org/licenses/LICENSE-2.0"),
+        contact(
+            name = "<%= baseName %> Team",
+            email = "team@<%= dasherizedBaseName %>.com"
+        )
+    ),
+    servers(
+        (url = "http://localhost:8080", description = "Local development server")
+    ),
+    paths(
+        // Health endpoint
+        handlers::health::health_check,
+        // Management endpoint
+        handlers::management::info,
+        // Account endpoints
+        handlers::account::get_account,
+        handlers::account::save_account,
+<%_ if (authenticationTypeJwt) { _%>
+        handlers::account::authenticate,
+        handlers::account::change_password,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+        handlers::oauth2::oauth2_info,
+        handlers::oauth2::logout,
+<%_ } _%>
+        // User management endpoints
+        handlers::user::get_all_users,
+        handlers::user::get_user,
+        handlers::user::create_user,
+        handlers::user::update_user_from_body,
+        handlers::user::delete_user,
+        handlers::user::get_authorities,
+        // jhipster-needle-add-openapi-path - JHipster will add OpenAPI paths here
+    ),
+    components(
+        schemas(
+            // Common schemas
+            ErrorResponse,
+            PageRequest,
+            // User schemas
+            UserDto,
+            CreateUserDto,
+            UpdateUserDto,
+            handlers::account::SaveAccountRequest,
+<%_ if (authenticationTypeJwt) { _%>
+            handlers::account::LoginRequest,
+            handlers::account::LoginResponse,
+            handlers::account::ChangePasswordRequest,
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            handlers::oauth2::OAuth2Info,
+            handlers::oauth2::LogoutResponse,
+<%_ } _%>
+            // Management schemas
+            handlers::management::InfoResponse,
+            // Health schemas
+            HealthStatus,
+            HealthComponent,
+            HealthResponse,
+            // jhipster-needle-add-openapi-schema - JHipster will add OpenAPI schemas here
+        )
+    ),
+    modifiers(&SecurityAddon),
+    tags(
+        (name = "health", description = "Health check endpoints"),
+        (name = "management", description = "Management/actuator endpoints"),
+        (name = "account", description = "Account management endpoints"),
+<%_ if (authenticationTypeJwt) { _%>
+        (name = "authentication", description = "Authentication endpoints"),
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+        (name = "oauth2", description = "OAuth2/OIDC authentication endpoints"),
+<%_ } _%>
+        (name = "user-management", description = "User administration endpoints"),
+        // jhipster-needle-add-openapi-tag - JHipster will add OpenAPI tags here
+    )
+)]
+pub struct ApiDoc;
+
+/// Security scheme modifier for JWT Bearer authentication
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap();
+        components.add_security_scheme(
+            "bearer_auth",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("JWT")
+                    .description(Some("Enter your JWT token"))
+                    .build(),
+            ),
+        );
+    }
+}
+
+// Helper structs for documentation
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+/// Health check status
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct HealthStatus {
+    /// Overall status (UP, DOWN)
+    pub status: String,
+}
+
+/// Health component status
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct HealthComponent {
+    /// Component name
+    pub name: String,
+    /// Component status
+    pub status: String,
+    /// Additional details
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+}
+
+/// Health check response
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct HealthResponse {
+    /// Overall status
+    pub status: String,
+    /// Individual component statuses
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub components: Option<Vec<HealthComponent>>,
+}
