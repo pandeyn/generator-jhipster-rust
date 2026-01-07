@@ -35,6 +35,30 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succ
   "docker/swagger-editor.yml": {
     "stateCleared": "modified",
   },
+  "docs/DOCKER.md": {
+    "stateCleared": "modified",
+  },
+  "docs/EMAIL_INTEGRATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/ENTITY_GENERATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/OPENAPI.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SECURITY.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SQLITE.md": {
+    "stateCleared": "modified",
+  },
+  "docs/STATIC_HOSTING.md": {
+    "stateCleared": "modified",
+  },
+  "docs/TESTING.md": {
+    "stateCleared": "modified",
+  },
   "migrations/00000000000000_diesel_initial_setup/down.sql": {
     "stateCleared": "modified",
   },
