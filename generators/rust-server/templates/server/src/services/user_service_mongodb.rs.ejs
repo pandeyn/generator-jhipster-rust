@@ -126,7 +126,7 @@ impl UserService {
     ) -> Result<(Vec<User>, i64), AppError> {
         let collection = Self::collection(db);
         let page = page_request.page.unwrap_or(0) as u64;
-        let size = page_request.size.unwrap_or(20).min(100) as i64;
+        let size = page_request.size.unwrap_or(20).min(100);
         let skip = page * size as u64;
 
         // Get total count
@@ -290,12 +290,12 @@ impl UserService {
         lang_key: Option<String>,
     ) -> Result<User, AppError> {
         // Check if login already exists
-        if let Some(_) = Self::find_by_login(db, &login).await? {
+        if Self::find_by_login(db, &login).await?.is_some() {
             return Err(AppError::BadRequest("Login already exists".to_string()));
         }
 
         // Check if email already exists
-        if let Some(_) = Self::find_by_email(db, &email).await? {
+        if Self::find_by_email(db, &email).await?.is_some() {
             return Err(AppError::BadRequest("Email already exists".to_string()));
         }
 

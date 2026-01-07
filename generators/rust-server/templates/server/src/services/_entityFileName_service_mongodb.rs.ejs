@@ -27,7 +27,7 @@ impl <%= entityClass %>Service {
     ) -> Result<(Vec<<%= persistClass %>>, i64), AppError> {
         let collection = Self::collection(db);
         let page = page_request.page.unwrap_or(0) as u64;
-        let size = page_request.size.unwrap_or(20).min(100) as i64;
+        let size = page_request.size.unwrap_or(20).min(100);
         let skip = page * size as u64;
 
         // Get total count

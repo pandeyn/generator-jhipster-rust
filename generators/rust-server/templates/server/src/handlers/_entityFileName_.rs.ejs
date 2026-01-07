@@ -13,7 +13,7 @@ use bson::oid::ObjectId;
 <%_ const hasAnyRelationships = manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0; _%>
 
 use crate::dto::{<%= entityClass %>Dto, Create<%= entityClass %>Dto, Update<%= entityClass %>Dto, PageRequest, QsQuery};
-use crate::errors::{AppError, ErrorResponse};
+use crate::errors::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::models::RoleType;
 use crate::services::<%= entityClass %>Service;
