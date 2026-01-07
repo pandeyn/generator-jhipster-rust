@@ -3,8 +3,9 @@
 > JHipster blueprint for generating Rust backends with Axum
 
 [![NPM version][npm-image]][npm-url]
-[![Generator][github-generator-image]][github-generator-url]
-[![Samples][github-samples-image]][github-samples-url]
+
+<!-- [![Generator][github-generator-image]][github-generator-url]
+[![Samples][github-samples-image]][github-samples-url] -->
 
 # Introduction
 
