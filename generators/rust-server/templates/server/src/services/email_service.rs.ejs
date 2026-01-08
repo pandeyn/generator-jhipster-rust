@@ -283,7 +283,7 @@ mod tests {
         assert!(result.is_ok());
         let html = result.unwrap();
         assert!(html.contains("Test User"));
-        assert!(html.contains("activation_url"));
+        assert!(html.contains("http://localhost/activate?key=123"));
     }
 
     #[test]

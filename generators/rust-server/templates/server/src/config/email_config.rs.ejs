@@ -48,6 +48,43 @@ impl Default for EmailConfig {
 }
 
 impl EmailConfig {
+    /// Resolve the base URL for email links
+    ///
+    /// Priority:
+    /// 1. MAIL_BASE_URL if explicitly set
+    /// 2. For monolith apps with SERVE_STATIC_FILES=true: use server host/port
+    /// 3. Default: http://localhost:9000 (Angular dev server)
+    fn resolve_base_url() -> String {
+        // If MAIL_BASE_URL is explicitly set, use it
+        if let Ok(url) = env::var("MAIL_BASE_URL") {
+            return url;
+        }
+
+<%_ if (applicationTypeMonolith) { _%>
+        // For monolith apps: if serving static files, use the server URL
+        let serve_static = env::var("SERVE_STATIC_FILES")
+            .map(|v| v.to_lowercase() == "true")
+            .unwrap_or(false);
+
+        if serve_static {
+            let host = env::var("APP_HOST").unwrap_or_else(|_| "localhost".to_string());
+            let port = env::var("APP_PORT").unwrap_or_else(|_| "8080".to_string());
+            let https = env::var("APP_HTTPS")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false);
+            let scheme = if https { "https" } else { "http" };
+
+            // Use localhost for 0.0.0.0 bindings since emails go to users' browsers
+            let display_host = if host == "0.0.0.0" { "localhost" } else { &host };
+
+            return format!("{}://{}:{}", scheme, display_host, port);
+        }
+<%_ } _%>
+
+        // Default to Angular dev server URL
+        "http://localhost:9000".to_string()
+    }
+
     /// Load email configuration from environment variables
     pub fn from_env() -> Self {
         Self {
@@ -69,7 +106,7 @@ impl EmailConfig {
             use_starttls: env::var("MAIL_USE_STARTTLS")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(false),
-            base_url: env::var("MAIL_BASE_URL").unwrap_or_else(|_| "http://localhost:9000".to_string()),
+            base_url: Self::resolve_base_url(),
         }
     }
 }

@@ -263,6 +263,11 @@ impl UserService {
             last_name: dto.last_name,
             email: dto.email,
             activated: dto.activated.unwrap_or(false),
+<%_ if (enableEmail) { _%>
+            activation_key: None,
+            reset_key: None,
+            reset_date: None,
+<%_ } _%>
             lang_key: dto.lang_key,
             image_url: dto.image_url,
             created_by: Some(created_by.to_string()),
@@ -1215,6 +1220,11 @@ mod tests {
                 last_name: Some("Create".to_string()),
                 email: "directcreate@example.com".to_string(),
                 activated: true,
+<%_ if (enableEmail) { _%>
+                activation_key: None,
+                reset_key: None,
+                reset_date: None,
+<%_ } _%>
                 lang_key: Some("en".to_string()),
                 image_url: None,
                 created_by: Some("test".to_string()),

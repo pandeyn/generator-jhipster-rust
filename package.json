@@ -1,6 +1,6 @@
 {
   "name": "generator-jhipster-rust",
-  "version": "0.7.4",
+  "version": "0.7.8",
   "private": false,
   "description": "A JHipster blueprint to generate Rust applications using Axum and Tokio",
   "keywords": [

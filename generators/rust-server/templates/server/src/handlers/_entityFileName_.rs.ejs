@@ -456,7 +456,13 @@ mod integration_tests {
     async fn create_test_app() -> (TestServer, crate::AppState) {
         let db = create_test_mongo_pool().await;
         let config = create_test_config();
-        let state = crate::AppState { db, config };
+        let state = crate::AppState {
+            db,
+            config,
+<%_ if (enableEmail) { _%>
+            email_service: None, // Email disabled for tests
+<%_ } _%>
+        };
 
         let app = Router::new()
             .nest("/api/<%= entityApiUrl %>", routes())
@@ -470,7 +476,13 @@ mod integration_tests {
     fn create_test_app() -> (TestServer, crate::AppState) {
         let pool = create_test_pool();
         let config = create_test_config();
-        let state = crate::AppState { pool, config };
+        let state = crate::AppState {
+            pool,
+            config,
+<%_ if (enableEmail) { _%>
+            email_service: None, // Email disabled for tests
+<%_ } _%>
+        };
 
         let app = Router::new()
             .nest("/api/<%= entityApiUrl %>", routes())
@@ -551,6 +563,8 @@ mod integration_tests {
             "<%= field.fieldName %>": 1.0<% if (!isLast) { %>,<% } %>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             "<%= field.fieldName %>": true<% if (!isLast) { %>,<% } %>
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+            "<%= field.fieldName %>": "2024-01-01T00:00:00Z"<% if (!isLast) { %>,<% } %>
 <%_ } else { _%>
             "<%= field.fieldName %>": "test_value"<% if (!isLast) { %>,<% } %>
 <%_ } _%>
@@ -615,6 +629,8 @@ mod integration_tests {
             "<%= field.fieldName %>": 42.5<% if (!isLast) { %>,<% } %>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             "<%= field.fieldName %>": true<% if (!isLast) { %>,<% } %>
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+            "<%= field.fieldName %>": "2024-01-01T12:00:00Z"<% if (!isLast) { %>,<% } %>
 <%_ } else { _%>
             "<%= field.fieldName %>": "test_create_get"<% if (!isLast) { %>,<% } %>
 <%_ } _%>
@@ -669,6 +685,8 @@ mod integration_tests {
             "<%= field.fieldName %>": 1.0<% if (!isLast) { %>,<% } %>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             "<%= field.fieldName %>": false<% if (!isLast) { %>,<% } %>
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+            "<%= field.fieldName %>": "2024-01-01T00:00:00Z"<% if (!isLast) { %>,<% } %>
 <%_ } else { _%>
             "<%= field.fieldName %>": "original_value"<% if (!isLast) { %>,<% } %>
 <%_ } _%>
@@ -701,6 +719,8 @@ mod integration_tests {
             "<%= firstField.fieldName %>": 999.99
 <%_ } else if (firstField.fieldType === 'Boolean') { _%>
             "<%= firstField.fieldName %>": true
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(firstField.fieldType)) { _%>
+            "<%= firstField.fieldName %>": "2024-12-31T23:59:59Z"
 <%_ } else { _%>
             "<%= firstField.fieldName %>": "updated_value"
 <%_ } _%>
@@ -741,6 +761,8 @@ mod integration_tests {
             "<%= field.fieldName %>": 1.0<% if (!isLast) { %>,<% } %>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             "<%= field.fieldName %>": true<% if (!isLast) { %>,<% } %>
+<%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
+            "<%= field.fieldName %>": "2024-01-01T00:00:00Z"<% if (!isLast) { %>,<% } %>
 <%_ } else { _%>
             "<%= field.fieldName %>": "to_be_deleted"<% if (!isLast) { %>,<% } %>
 <%_ } _%>

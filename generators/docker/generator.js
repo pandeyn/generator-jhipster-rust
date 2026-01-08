@@ -52,6 +52,12 @@ export default class extends BaseApplicationGenerator {
                 path: 'docker/',
                 templates: ['mongodb.yml'],
               },
+              // MySQL-specific docker files
+              {
+                condition: ctx => ctx.devDatabaseTypeMysql,
+                path: 'docker/',
+                templates: ['mysql.yml'],
+              },
             ],
             files: [{ templates: ['template-file-docker'] }],
           },

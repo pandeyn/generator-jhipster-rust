@@ -40,8 +40,21 @@ export default asCommand({
       prompt: {
         type: 'confirm',
         message: `Would you like to enable ${chalk.yellow('*Swagger/OpenAPI*')} documentation with Swagger UI and Scalar?`,
+        default: true,
       },
       default: true,
+    },
+    enableEmail: {
+      cli: {
+        type: Boolean,
+      },
+      prompt: generator => ({
+        type: 'confirm',
+        message: `Would you like to enable ${chalk.yellow('*email*')} support for user registration and password reset?`,
+        when: generator.jhipsterConfigWithDefaults.authenticationType === 'jwt',
+        default: false,
+      }),
+      default: false,
     },
   },
 });

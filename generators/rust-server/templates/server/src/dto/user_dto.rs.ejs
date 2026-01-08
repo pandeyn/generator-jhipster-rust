@@ -140,6 +140,11 @@ mod tests {
                 last_name: Some("User".to_string()),
                 email: "test@example.com".to_string(),
                 activated: true,
+<%_ if (enableEmail) { _%>
+                activation_key: None,
+                reset_key: None,
+                reset_date: None,
+<%_ } _%>
                 lang_key: Some("en".to_string()),
                 image_url: Some("https://example.com/avatar.png".to_string()),
                 created_by: Some("system".to_string()),
@@ -178,6 +183,11 @@ mod tests {
                 last_name: None,
                 email: "user2@example.com".to_string(),
                 activated: false,
+<%_ if (enableEmail) { _%>
+                activation_key: None,
+                reset_key: None,
+                reset_date: None,
+<%_ } _%>
                 lang_key: None,
                 image_url: None,
                 created_by: None,
@@ -261,6 +271,11 @@ mod tests {
                 last_name: Some("User".to_string()),
                 email: "test@example.com".to_string(),
                 activated: true,
+<%_ if (enableEmail) { _%>
+                activation_key: None,
+                reset_key: None,
+                reset_date: None,
+<%_ } _%>
                 lang_key: Some("en".to_string()),
                 image_url: Some("https://example.com/avatar.png".to_string()),
                 authorities: vec!["ROLE_USER".to_string()],
@@ -300,6 +315,11 @@ mod tests {
                 last_name: None,
                 email: "user2@example.com".to_string(),
                 activated: false,
+<%_ if (enableEmail) { _%>
+                activation_key: None,
+                reset_key: None,
+                reset_date: None,
+<%_ } _%>
                 lang_key: None,
                 image_url: None,
                 authorities: vec![],

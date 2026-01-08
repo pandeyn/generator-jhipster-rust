@@ -116,6 +116,9 @@ pub async fn create_test_state() -> AppState {
     AppState {
         db: create_test_mongo_pool().await,
         config: create_test_config(),
+<%_ if (enableEmail) { _%>
+        email_service: None, // Email disabled for tests
+<%_ } _%>
     }
 <%_ } _%>
 }
@@ -139,6 +142,11 @@ pub async fn create_test_admin_mongo(db: &MongoPool) -> String {
         last_name: Some("User".to_string()),
         email: "admin@localhost".to_string(),
         activated: true,
+<%_ if (enableEmail) { _%>
+        activation_key: None,
+        reset_key: None,
+        reset_date: None,
+<%_ } _%>
         lang_key: Some("en".to_string()),
         image_url: None,
         authorities: vec!["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
@@ -173,6 +181,11 @@ pub async fn create_test_user_mongo(db: &MongoPool) -> String {
         last_name: Some("User".to_string()),
         email: "user@localhost".to_string(),
         activated: true,
+<%_ if (enableEmail) { _%>
+        activation_key: None,
+        reset_key: None,
+        reset_date: None,
+<%_ } _%>
         lang_key: Some("en".to_string()),
         image_url: None,
         authorities: vec!["ROLE_USER".to_string()],
@@ -552,6 +565,9 @@ pub fn create_test_state() -> AppState {
     AppState {
         pool: create_test_pool(),
         config: create_test_config(),
+<%_ if (enableEmail) { _%>
+        email_service: None, // Email disabled for tests
+<%_ } _%>
     }
 <%_ } _%>
 }
@@ -582,6 +598,11 @@ pub fn create_test_admin(pool: &DbPool) -> String {
         last_name: Some("User".to_string()),
         email: "admin@localhost".to_string(),
         activated: true,
+<%_ if (enableEmail) { _%>
+        activation_key: None,
+        reset_key: None,
+        reset_date: None,
+<%_ } _%>
         lang_key: Some("en".to_string()),
         image_url: None,
         created_by: Some("system".to_string()),
@@ -638,6 +659,11 @@ pub fn create_test_user(pool: &DbPool) -> String {
         last_name: Some("User".to_string()),
         email: "user@localhost".to_string(),
         activated: true,
+<%_ if (enableEmail) { _%>
+        activation_key: None,
+        reset_key: None,
+        reset_date: None,
+<%_ } _%>
         lang_key: Some("en".to_string()),
         image_url: None,
         created_by: Some("system".to_string()),

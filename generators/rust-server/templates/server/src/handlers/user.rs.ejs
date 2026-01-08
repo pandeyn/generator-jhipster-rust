@@ -247,6 +247,11 @@ pub async fn create_user(
         last_name: create_dto.last_name,
         email: create_dto.email,
         activated: create_dto.activated.unwrap_or(true),
+<%_ if (enableEmail) { _%>
+        activation_key: None,
+        reset_key: None,
+        reset_date: None,
+<%_ } _%>
         lang_key: create_dto.lang_key,
         image_url: create_dto.image_url,
         authorities: create_dto.authorities.unwrap_or_else(|| vec!["ROLE_USER".to_string()]),
@@ -390,7 +395,13 @@ mod integration_tests {
     fn create_test_app() -> (TestServer, crate::AppState) {
         let pool = create_test_pool();
         let config = create_test_config();
-        let state = crate::AppState { pool, config };
+        let state = crate::AppState {
+            pool,
+            config,
+<%_ if (enableEmail) { _%>
+            email_service: None,
+<%_ } _%>
+        };
 
         let app = Router::new()
             .nest("/api/users", routes())

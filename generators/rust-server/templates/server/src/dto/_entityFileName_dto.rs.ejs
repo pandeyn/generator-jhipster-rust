@@ -116,6 +116,15 @@ pub struct <%= entityClass %>Dto {
     <%_ } else { _%>
     pub <%= field.fieldNameUnderscored %>: Option<String>,
     <%_ } _%>
+    <%_ } else if (!devDatabaseTypeMongodb && isDateTimeType) { _%>
+    <%_ // For SQL databases, add custom deserializer for datetime fields to handle ISO 8601 format _%>
+    <%_ if (field.fieldValidationRequired) { _%>
+    #[serde(deserialize_with = "deserialize_naive_datetime")]
+    pub <%= field.fieldNameUnderscored %>: NaiveDateTime,
+    <%_ } else { _%>
+    #[serde(default, deserialize_with = "deserialize_option_naive_datetime")]
+    pub <%= field.fieldNameUnderscored %>: Option<NaiveDateTime>,
+    <%_ } _%>
     <%_ } else { _%>
     pub <%= field.fieldNameUnderscored %>: <%- devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType %>,
     <%_ } _%>
