@@ -43,6 +43,7 @@ The generated Rust server provides a complete REST API implementation with authe
 | **Deployment**           | Docker support               | ✅     | Multi-stage Dockerfile                     |
 |                          | Docker Compose               | ✅     | Full stack with DB containers              |
 |                          | Monolithic mode              | ✅     | Serve SPA from Rust backend                |
+|                          | Microservice mode            | ✅     | API-only service for microservices arch    |
 | **Testing**              | Rust unit tests              | ✅     | Service and handler tests                  |
 |                          | Cypress E2E tests            | ✅     | End-to-end UI testing                      |
 | **Email**                | SMTP email service           | ✅     | Lettre + Tera templates                    |
@@ -92,7 +93,9 @@ As this is a [JHipster](https://www.jhipster.tech/) blueprint, we expect you hav
 
 - [Docker Guide](docs/DOCKER.md) - Container setup, Docker Compose, and deployment options
 - [Static UI Hosting](docs/STATIC_HOSTING.md) - Serve SPA from Rust backend in monolithic mode
+- [Microservices Architecture](docs/MICROSERVICES.md) - Deploy as part of a microservices architecture
 - [Monolithic Deployment](#monolithic-deployment) - Quick start guide for monolithic deployment
+- [Microservice Deployment](#microservice-deployment) - Quick start guide for microservice deployment
 
 # Installation
 
@@ -198,6 +201,50 @@ When using OAuth2 authentication with `SERVE_STATIC_FILES=true`:
 - The server automatically redirects to itself after authentication (instead of a separate frontend URL)
 - Set `APP_HTTPS=true` in production when behind a TLS-terminating proxy
 - Ensure your Keycloak client has the correct redirect URI configured (e.g., `http://localhost:8080/*`)
+
+## Microservice Deployment
+
+For microservice applications, the Rust backend serves as a standalone API service without UI, designed to work with a separate gateway application.
+
+### Key Characteristics
+
+- **API-only**: No static file serving, UI is handled by gateway
+- **Stateless**: JWT tokens enable horizontal scaling
+- **Independent**: Each microservice has its own database
+- **Discoverable**: Health endpoints for container orchestration
+
+### Configuration
+
+Configure your microservice with a unique port:
+
+```env
+APP_PORT=8081  # Use unique port for each microservice
+JWT_SECRET=shared-jwt-secret-across-microservices  # Same secret for all services
+```
+
+### Running the Microservice
+
+```bash
+cd server
+cargo run
+```
+
+The microservice will:
+
+- Expose REST API endpoints at `/api/*`
+- Provide health checks at `/management/health`
+- Validate JWT tokens from the gateway
+
+### Docker Deployment
+
+Build and run with Docker:
+
+```bash
+docker build -t myservice:latest .
+docker run -p 8081:8081 -e JWT_SECRET=shared-secret myservice:latest
+```
+
+For detailed microservice architecture guidance, see [Microservices Architecture Guide](docs/MICROSERVICES.md).
 
 ## Not Yet Implemented
 

@@ -1,13 +1,17 @@
 {
   "name": "generator-jhipster-rust",
   "version": "0.7.8",
-  "private": false,
-  "description": "A JHipster blueprint to generate Rust applications using Axum and Tokio",
+  "description": "A JHipster blueprint to generate Rust applications (monoliths and microservices) using Axum and Tokio.",
   "keywords": [
     "yeoman-generator",
     "jhipster-blueprint",
     "jhipster-8",
-    "rust"
+    "rust",
+    "axum",
+    "tokio",
+    "diesel",
+    "monolith",
+    "microservice"
   ],
   "homepage": "https://github.com/pandeyn/generator-jhipster-rust",
   "bugs": {

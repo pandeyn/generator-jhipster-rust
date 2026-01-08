@@ -1,3 +1,68 @@
+# Release Notes - v0.7.8
+
+## Overview
+
+JHipster Rust Blueprint v0.7.8 includes bug fixes and improvements for MySQL Docker support and email integration across all database types.
+
+## What's New in v0.7.8
+
+### MySQL Docker Support
+
+- **MySQL Docker Template**: Added `mysql.yml` Docker Compose template for MySQL projects
+- **MySQL 8.4**: Uses MySQL 8.4 container with proper health checks
+- **Consistent Credentials**: MySQL Docker, `.env`, and `test_utils.rs` all use the same credentials (`root:root`)
+
+### Email Integration Improvements
+
+- **Smart Base URL Resolution**: For monolith apps with `SERVE_STATIC_FILES=true`, email links now automatically use the server's host and port (e.g., `http://localhost:8080`) instead of requiring manual configuration
+- **Configurable Override**: `MAIL_BASE_URL` can still be set explicitly to override auto-detection (useful for reverse proxy setups)
+- **Email Template Fixes**: Renamed email templates to `.html.ejs` for proper EJS processing with dynamic app name
+
+### Code Quality
+
+- **Cargo Clippy Fixes**: Resolved minor Clippy warnings in generated templates
+- **DTO Improvements**: Enhanced DTO serialization with `#[serde(skip_serializing_if)]` for optional fields
+- **Handler Improvements**: Better error handling and response formatting in entity handlers
+
+### Microservices Documentation
+
+- **MICROSERVICES.md Guide**: New comprehensive documentation for microservice deployment
+- **Architecture Overview**: Diagrams and explanations for microservices architecture
+- **Inter-Service Communication**: Token propagation and HTTP client patterns
+- **Docker Compose Examples**: Multi-service deployment configurations
+- **Health Checks**: Kubernetes-ready liveness and readiness probes
+
+### Documentation
+
+- **Test Snapshots**: Updated test snapshots to include new `docs/` files
+- **README Updates**: Added microservices deployment section and feature documentation
+
+## Upgrade Notes
+
+### Email Configuration for Monolith Apps
+
+If you have an existing monolith project with `SERVE_STATIC_FILES=true`, you can now remove or comment out `MAIL_BASE_URL` from your `.env` file. The server will automatically construct the correct URL from `APP_HOST` and `APP_PORT`.
+
+Before:
+
+```env
+SERVE_STATIC_FILES=true
+MAIL_BASE_URL=http://localhost:8080
+```
+
+After:
+
+```env
+SERVE_STATIC_FILES=true
+# MAIL_BASE_URL is auto-detected when SERVE_STATIC_FILES=true
+```
+
+### MySQL Projects
+
+For MySQL projects, ensure you have the new `docker/mysql.yml` file. If upgrading an existing project, you may need to regenerate or manually create this file.
+
+---
+
 # Release Notes - v0.7.4
 
 ## Overview

@@ -153,6 +153,11 @@ export const serverFiles = {
       templates: ['docs/STATIC_HOSTING.md'],
     },
     {
+      // Microservices documentation (microservice apps only)
+      condition: generator => generator.applicationTypeMicroservice,
+      templates: ['docs/MICROSERVICES.md'],
+    },
+    {
       // OAuth2/Keycloak documentation
       condition: generator => generator.authenticationTypeOauth2,
       templates: ['docs/KEYCLOAK.md'],
