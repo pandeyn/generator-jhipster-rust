@@ -2,7 +2,9 @@
 // Default database type flags if not set (for standalone docker generation)
 const isPostgresql = typeof devDatabaseTypePostgresql !== 'undefined' ? devDatabaseTypePostgresql : false;
 const isMysql = typeof devDatabaseTypeMysql !== 'undefined' ? devDatabaseTypeMysql : false;
-const isSqlite = typeof devDatabaseTypeSqlite !== 'undefined' ? devDatabaseTypeSqlite : (!isPostgresql && !isMysql);
+const isMongodb = typeof devDatabaseTypeMongodb !== 'undefined' ? devDatabaseTypeMongodb : false;
+const isSqlite = typeof devDatabaseTypeSqlite !== 'undefined' ? devDatabaseTypeSqlite : (!isPostgresql && !isMysql && !isMongodb);
+const hasConsul = typeof serviceDiscoveryConsul !== 'undefined' ? serviceDiscoveryConsul : false;
 _%>
 # This configuration is intended for development purpose, it's **your** responsibility to harden it for production
 name: <%= baseName.toLowerCase() %>
@@ -14,32 +16,71 @@ services:
       dockerfile: Dockerfile
     environment:
       - RUST_LOG=info
-<%_ if (isPostgresql) { _%>
+<%_ if (isMongodb) { _%>
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=<%= baseName.toLowerCase() %>
+<%_ } else if (isPostgresql) { _%>
       - DATABASE_URL=postgres://postgres:postgres@db:5432/<%= baseName.toLowerCase() %>
 <%_ } else if (isMysql) { _%>
       - DATABASE_URL=mysql://root:root@db:3306/<%= baseName.toLowerCase() %>
 <%_ } else { _%>
       - DATABASE_URL=sqlite:./data/<%= baseName.toLowerCase() %>.db
 <%_ } _%>
-      - SERVER_HOST=0.0.0.0
-      - SERVER_PORT=8080
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8080
+<%_ if (authenticationTypeJwt) { _%>
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+<%_ } _%>
+<%_ if (hasConsul) { _%>
+      # Consul service discovery configuration
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - CONSUL_SERVICE_NAME=<%= baseName.toLowerCase() %>
+      - CONSUL_REGISTER_SERVICE=true
+      - CONSUL_REGISTER_HOST=app
+      - CONSUL_HEALTH_CHECK_INTERVAL=10
+<%_ } _%>
     ports:
       - 127.0.0.1:8080:8080
 <%_ if (isSqlite) { _%>
     volumes:
       - ./data:/app/data
 <%_ } _%>
-<%_ if (isPostgresql || isMysql) { _%>
+<%_ if (isPostgresql || isMysql || isMongodb || hasConsul) { _%>
     depends_on:
+<%_ if (isPostgresql) { _%>
       db:
         condition: service_healthy
+<%_ } else if (isMysql) { _%>
+      db:
+        condition: service_healthy
+<%_ } else if (isMongodb) { _%>
+      mongodb:
+        condition: service_healthy
+<%_ } _%>
+<%_ if (hasConsul) { _%>
+      consul:
+        condition: service_healthy
+<%_ } _%>
 <%_ } _%>
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8080/api/health']
       interval: 5s
       timeout: 5s
       retries: 40
+<%_ if (hasConsul) { _%>
+
+  consul:
+    image: hashicorp/consul:1.15
+    ports:
+      - 127.0.0.1:8500:8500  # HTTP API & UI
+    command: consul agent -dev -ui -client 0.0.0.0 -log-level=INFO
+    healthcheck:
+      test: ['CMD', 'consul', 'members']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+<%_ } _%>
 <%_ if (isPostgresql) { _%>
 
   db:
@@ -79,4 +120,20 @@ volumes:
 
 volumes:
   mysql-data:
+<%_ } else if (isMongodb) { _%>
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - 127.0.0.1:27017:27017
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mongodb-data:
 <%_ } _%>

@@ -5,7 +5,7 @@ use axum::Json;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
 use tower_http::services::ServeDir;
 <%_ } _%>
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -22,6 +22,10 @@ use <%= rustCrateName %>::openapi::ApiDoc;
 use <%= rustCrateName %>::config::OAuth2Config;
 use <%= rustCrateName %>::security::OAuth2Validator;
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+use <%= rustCrateName %>::config::ConsulConfig;
+use <%= rustCrateName %>::services::ConsulService;
+<%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
 use <%= rustCrateName %>::db::create_pool;
 <%_ } else { _%>
@@ -30,6 +34,8 @@ use <%= rustCrateName %>::db::connection::establish_connection_pool;
 <%_ if (enableEmail) { _%>
 use <%= rustCrateName %>::config::EmailConfig;
 use <%= rustCrateName %>::services::EmailService;
+<%_ } _%>
+<%_ if (enableEmail || serviceDiscoveryConsul) { _%>
 use std::sync::Arc;
 <%_ } _%>
 use <%= rustCrateName %>::handlers;
@@ -102,6 +108,55 @@ async fn main() {
     };
 
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+    // Initialize Consul service for service discovery
+    let consul_config = ConsulConfig::from_env();
+    let consul_service = if consul_config.register_service {
+        tracing::info!(
+            "Consul service discovery enabled, connecting to {}",
+            consul_config.consul_url()
+        );
+        tracing::info!(
+            "Health check will use: http://{}:{}/api/health",
+            consul_config.health_check_host, config.app_port
+        );
+        let service = ConsulService::new(consul_config.clone());
+
+        // Get the address to register with Consul for service discovery
+        // This is the address other services will use to connect to this service
+        // Note: 0.0.0.0 is not a valid service address, so we use hostname instead
+        let register_address = std::env::var("CONSUL_REGISTER_ADDRESS").ok()
+            .or_else(|| {
+                if config.app_host == "0.0.0.0" {
+                    // Use hostname for Consul registration when binding to all interfaces
+                    hostname::get().ok().and_then(|h| h.into_string().ok())
+                } else {
+                    Some(config.app_host.clone())
+                }
+            })
+            .unwrap_or_else(|| "localhost".to_string());
+
+        // Register with Consul
+        // Note: The health check URL uses consul_config.health_check_host (defaults to localhost)
+        match service.register_service(&register_address, config.app_port).await {
+            Ok(_) => {
+                tracing::info!("Successfully registered with Consul");
+                Some(Arc::new(service))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to register with Consul: {}. Service discovery will be disabled.",
+                    e
+                );
+                None
+            }
+        }
+    } else {
+        tracing::info!("Consul service registration disabled (CONSUL_REGISTER_SERVICE=false)");
+        None
+    };
+
+<%_ } _%>
     // Build CORS layer
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -123,10 +178,13 @@ async fn main() {
 <%_ if (enableEmail) { _%>
         email_service,
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+        consul_service: consul_service.clone(),
+<%_ } _%>
     };
 
     // Build application routes
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
     let mut app = Router::new()
 <%_ } else { _%>
     let app = Router::new()
@@ -149,8 +207,8 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
-<%_ if (applicationTypeMonolith) { _%>
-    // Add static file serving if configured (monolithic mode)
+<%_ if (enableStaticHosting) { _%>
+    // Add static file serving if configured
     if config.serve_static_files {
         let static_dir = config.static_files_dir.clone()
             .unwrap_or_else(|| "./static".to_string());
@@ -174,6 +232,23 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
     tracing::info!("Starting {} server on {}", "<%= baseName %>", addr);
 
+<%_ if (serviceDiscoveryConsul) { _%>
+    // Setup graceful shutdown handler
+    let consul_for_shutdown = consul_service.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!("Received shutdown signal, deregistering from Consul...");
+        if let Some(ref service) = consul_for_shutdown {
+            if let Err(e) = service.deregister_service().await {
+                tracing::warn!("Failed to deregister from Consul: {}", e);
+            } else {
+                tracing::info!("Successfully deregistered from Consul");
+            }
+        }
+        std::process::exit(0);
+    });
+
+<%_ } _%>
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

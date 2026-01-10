@@ -1000,6 +1000,9 @@ mod integration_tests {
 <%_ if (enableEmail) { _%>
             email_service: None,
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+            consul_service: None,
+<%_ } _%>
         };
 
         let app = Router::new()

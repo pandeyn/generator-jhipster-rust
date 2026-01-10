@@ -5,7 +5,7 @@ pub mod account;
 <%_ if (authenticationTypeOauth2) { _%>
 pub mod oauth2;
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
 pub mod static_files;
 <%_ } _%>
 

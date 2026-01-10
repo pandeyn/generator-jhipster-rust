@@ -22,6 +22,13 @@ export default class extends BaseApplicationGenerator {
         application.devDatabaseTypePostgresql = devDbType === 'postgresql';
         application.devDatabaseTypeMysql = devDbType === 'mysql';
         application.devDatabaseTypeMongodb = devDbType === 'mongodb';
+
+        // Set service discovery flags for docker templates
+        const serviceDiscoveryType = this.jhipsterConfig.serviceDiscoveryType || 'no';
+        const appType = this.jhipsterConfig.applicationType || 'monolith';
+        const isMicroservicesApp = appType === 'microservice' || appType === 'gateway';
+        application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
+        application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
       },
     });
   }
@@ -57,6 +64,12 @@ export default class extends BaseApplicationGenerator {
                 condition: ctx => ctx.devDatabaseTypeMysql,
                 path: 'docker/',
                 templates: ['mysql.yml'],
+              },
+              // Consul service discovery files
+              {
+                condition: ctx => ctx.serviceDiscoveryConsul,
+                path: 'docker/',
+                templates: ['consul.yml', 'central-server-config/application.yml'],
               },
             ],
             files: [{ templates: ['template-file-docker'] }],

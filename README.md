@@ -44,6 +44,7 @@ The generated Rust server provides a complete REST API implementation with authe
 |                          | Docker Compose               | ✅     | Full stack with DB containers              |
 |                          | Monolithic mode              | ✅     | Serve SPA from Rust backend                |
 |                          | Microservice mode            | ✅     | API-only service for microservices arch    |
+|                          | Consul Service Discovery     | ✅     | Service registration, discovery, KV config |
 | **Testing**              | Rust unit tests              | ✅     | Service and handler tests                  |
 |                          | Cypress E2E tests            | ✅     | End-to-end UI testing                      |
 | **Email**                | SMTP email service           | ✅     | Lettre + Tera templates                    |
@@ -51,7 +52,7 @@ The generated Rust server provides a complete REST API implementation with authe
 |                          | Password reset               | ✅     | Forgot password flow with email            |
 | **Developer Experience** | Hot reload (cargo-watch)     | ✅     | Auto-rebuild on file changes               |
 |                          | Environment config (.env)    | ✅     | Flexible configuration                     |
-|                          | Health endpoints             | ✅     | /management/health, /management/info       |
+|                          | Health endpoints             | ✅     | /api/health, /management/info              |
 
 # Prerequisites
 
@@ -94,6 +95,7 @@ As this is a [JHipster](https://www.jhipster.tech/) blueprint, we expect you hav
 - [Docker Guide](docs/DOCKER.md) - Container setup, Docker Compose, and deployment options
 - [Static UI Hosting](docs/STATIC_HOSTING.md) - Serve SPA from Rust backend in monolithic mode
 - [Microservices Architecture](docs/MICROSERVICES.md) - Deploy as part of a microservices architecture
+- [Consul Service Discovery](docs/CONSUL.md) - Service registration, discovery, and configuration management
 - [Monolithic Deployment](#monolithic-deployment) - Quick start guide for monolithic deployment
 - [Microservice Deployment](#microservice-deployment) - Quick start guide for microservice deployment
 
@@ -212,6 +214,7 @@ For microservice applications, the Rust backend serves as a standalone API servi
 - **Stateless**: JWT tokens enable horizontal scaling
 - **Independent**: Each microservice has its own database
 - **Discoverable**: Health endpoints for container orchestration
+- **Service Discovery**: Optional Consul integration for auto-registration and discovery (see [Consul Guide](docs/CONSUL.md))
 
 ### Configuration
 
@@ -232,7 +235,7 @@ cargo run
 The microservice will:
 
 - Expose REST API endpoints at `/api/*`
-- Provide health checks at `/management/health`
+- Provide health checks at `/api/health`
 - Validate JWT tokens from the gateway
 
 ### Docker Deployment
@@ -248,16 +251,40 @@ For detailed microservice architecture guidance, see [Microservices Architecture
 
 ## Not Yet Implemented
 
-The following features are planned for future versions:
+The following features from the base JHipster generator are planned for future versions:
 
-| Feature         | Notes                                        |
-| --------------- | -------------------------------------------- |
-| Caching (Redis) | No Redis dependencies or caching layer       |
-| Rate limiting   | No throttle/rate limit middleware (governor) |
-| API versioning  | Routes don't use /v1, /v2 prefixes           |
-| GraphQL         | No async-graphql support                     |
-| WebSocket       | No tokio-tungstenite or ws support           |
-| Embedded assets | No rust-embed for single-binary static files |
+### High Priority (Core Microservices Features)
+
+| Feature                   | Notes                                                         |
+| ------------------------- | ------------------------------------------------------------- |
+| Inter-service HTTP Client | Feign-like client with automatic token propagation            |
+| Circuit Breaker           | Resilience4j equivalent                                       |
+| CI/CD Pipelines           | GitHub Actions, GitLab CI, Jenkins, Azure Pipelines templates |
+| Kubernetes Manifests      | No K8s deployment, service, ingress generation                |
+
+### Medium Priority (Enterprise Features)
+
+| Feature               | Notes                                                    |
+| --------------------- | -------------------------------------------------------- |
+| Cloud Configuration   | Spring Cloud Config equivalent for remote config loading |
+| Message Brokers       | Kafka/Pulsar integration via message binders             |
+| Distributed Tracing   | Zipkin/Jaeger integration for request tracing            |
+| Caching (Redis)       | Redis dependencies or caching layer                      |
+| Gateway Routing Logic | Dynamic route management or request forwarding           |
+
+### Lower Priority (Nice to Have)
+
+| Feature              | Notes                                              |
+| -------------------- | -------------------------------------------------- |
+| WebSocket Support    | tokio-tungstenite or STOMP messaging               |
+| Prometheus Metrics   | metrics collection or Grafana dashboards           |
+| Additional Databases | Cassandra, Neo4j, Couchbase, MSSQL, Oracle support |
+| Elasticsearch        | full-text search integration                       |
+| Helm Charts          | Helm chart generation for Kubernetes               |
+| Rate Limiting        | throttle/rate limit middleware                     |
+| API Versioning       | Routes don't use /v1, /v2 prefixes                 |
+| GraphQL              | async-graphql support                              |
+| Embedded Assets      | rust-embed for single-binary static files          |
 
 [npm-image]: https://img.shields.io/npm/v/generator-jhipster-rust.svg
 [npm-url]: https://npmjs.org/package/generator-jhipster-rust

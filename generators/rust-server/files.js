@@ -99,8 +99,8 @@ export const serverFiles = {
       ],
     },
     {
-      // Static files handler for monolithic deployment
-      condition: generator => generator.applicationTypeMonolith,
+      // Static files handler for serving SPA UI (monolith, gateway, or microservice with microfrontend)
+      condition: generator => generator.enableStaticHosting,
       path: SERVER_RUST_DIR,
       templates: ['src/handlers/static_files.rs'],
     },
@@ -116,6 +116,12 @@ export const serverFiles = {
         { file: 'src/templates/email/password-changed.html', renameTo: () => 'src/templates/email/password-changed.html' },
         { file: 'src/templates/email/account-created.html', renameTo: () => 'src/templates/email/account-created.html' },
       ],
+    },
+    {
+      // Consul service discovery files (gateway and microservice apps)
+      condition: generator => generator.serviceDiscoveryConsul,
+      path: SERVER_RUST_DIR,
+      templates: ['src/config/consul_config.rs', 'src/services/consul_service.rs'],
     },
   ],
   migrations: [
@@ -148,8 +154,8 @@ export const serverFiles = {
       templates: ['docs/OPENAPI.md'],
     },
     {
-      // Static hosting documentation (monolithic apps only)
-      condition: generator => generator.applicationTypeMonolith,
+      // Static hosting documentation (monolith, gateway, or microservice with microfrontend)
+      condition: generator => generator.enableStaticHosting,
       templates: ['docs/STATIC_HOSTING.md'],
     },
     {
@@ -181,6 +187,11 @@ export const serverFiles = {
       // MongoDB documentation
       condition: generator => generator.devDatabaseTypeMongodb,
       templates: ['docs/MONGODB.md'],
+    },
+    {
+      // Consul service discovery documentation
+      condition: generator => generator.serviceDiscoveryConsul,
+      templates: ['docs/CONSUL.md'],
     },
   ],
 };

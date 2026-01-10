@@ -63,7 +63,7 @@ export default class extends BaseApplicationGenerator {
             // Pre-hook for headless E2E tests (empty to prevent npm errors)
             'pree2e:headless': '',
             // Custom script to wait for Rust backend before running tests
-            'e2e:wait-backend': 'wait-on http://localhost:8080/management/health -t 120000',
+            'e2e:wait-backend': 'wait-on http://localhost:8080/api/health -t 120000',
           },
         });
       },

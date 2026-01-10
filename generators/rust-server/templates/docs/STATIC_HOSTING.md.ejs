@@ -1,6 +1,8 @@
 # Static UI Hosting Guide
 
-This guide explains how to serve the Angular/React/Vue frontend directly from the Rust backend in monolithic deployment mode. This enables single-server deployment where both API endpoints and the SPA frontend are served from the same process.
+This guide explains how to serve the Angular/React/Vue frontend directly from the Rust backend. This enables single-server deployment where both API endpoints and the SPA frontend are served from the same process.
+
+Static file hosting is available for all application types (monolith, gateway, microservice) and can be enabled via environment variables.
 
 ## Overview
 
@@ -19,7 +21,7 @@ This eliminates the need for a separate web server (nginx, Apache) or Node.js pr
 Add the following to your `.env` file to enable static file serving:
 
 ```env
-# Static Files Configuration (for monolithic deployment)
+# Static Files Configuration
 # Set to true to enable serving the SPA from the Rust backend
 SERVE_STATIC_FILES=true
 
@@ -186,7 +188,7 @@ server {
 
 ## Docker Multi-Stage Build
 
-The generator creates a Dockerfile optimized for monolithic deployment with a multi-stage build.
+For monolith applications, the generator creates a Dockerfile with a multi-stage build that automatically builds and includes the client. For gateway/microservice applications, static file serving can be enabled at runtime by mounting the built client files.
 
 ### Dockerfile Structure
 

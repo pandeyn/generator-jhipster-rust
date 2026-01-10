@@ -69,7 +69,7 @@ pub fn create_test_config() -> AppConfig {
         app_env: "test".to_string(),
         app_port: 8080,
         app_host: "127.0.0.1".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
         app_https: false,
 <%_ } _%>
         mongodb_uri: std::env::var("TEST_MONGODB_URI")
@@ -85,7 +85,7 @@ pub fn create_test_config() -> AppConfig {
 <%_ if (authenticationTypeOauth2) { _%>
         frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
         static_files_dir: None,
         serve_static_files: false,
 <%_ } _%>
@@ -111,6 +111,9 @@ pub async fn create_test_state() -> AppState {
         config,
         oauth2_config,
         oauth2_validator,
+<%_ if (serviceDiscoveryConsul) { _%>
+        consul_service: None,
+<%_ } _%>
     }
 <%_ } else { _%>
     AppState {
@@ -118,6 +121,9 @@ pub async fn create_test_state() -> AppState {
         config: create_test_config(),
 <%_ if (enableEmail) { _%>
         email_service: None, // Email disabled for tests
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+        consul_service: None,
 <%_ } _%>
     }
 <%_ } _%>
@@ -515,7 +521,7 @@ pub fn create_test_config() -> AppConfig {
         app_env: "test".to_string(),
         app_port: 8080,
         app_host: "127.0.0.1".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
         app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypePostgresql) { _%>
@@ -534,7 +540,7 @@ pub fn create_test_config() -> AppConfig {
 <%_ if (authenticationTypeOauth2) { _%>
         frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
         static_files_dir: None,
         serve_static_files: false,
 <%_ } _%>
@@ -560,6 +566,9 @@ pub fn create_test_state() -> AppState {
         config,
         oauth2_config,
         oauth2_validator,
+<%_ if (serviceDiscoveryConsul) { _%>
+        consul_service: None,
+<%_ } _%>
     }
 <%_ } else { _%>
     AppState {
@@ -567,6 +576,9 @@ pub fn create_test_state() -> AppState {
         config: create_test_config(),
 <%_ if (enableEmail) { _%>
         email_service: None, // Email disabled for tests
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+        consul_service: None,
 <%_ } _%>
     }
 <%_ } _%>

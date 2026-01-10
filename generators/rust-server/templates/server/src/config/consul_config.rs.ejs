@@ -1,0 +1,129 @@
+use std::env;
+
+/// Configuration for Consul service discovery and configuration management
+#[derive(Clone, Debug)]
+pub struct ConsulConfig {
+    /// Consul server host (default: localhost)
+    pub host: String,
+    /// Consul server port (default: 8500)
+    pub port: u16,
+    /// Service name to register with Consul
+    pub service_name: String,
+    /// Service ID (unique identifier for this instance)
+    pub service_id: String,
+    /// Tags to associate with the service
+    pub service_tags: Vec<String>,
+    /// Health check interval in seconds
+    pub health_check_interval: u64,
+    /// Whether to enable service registration
+    pub register_service: bool,
+    /// Whether to enable configuration loading from Consul KV
+    pub enable_config: bool,
+    /// ACL token for Consul (optional)
+    pub acl_token: Option<String>,
+    /// Key prefix for configuration in Consul KV store
+    pub config_key_prefix: String,
+    /// Host address for health check endpoint (default: localhost)
+    /// This should be an address that Consul can use to reach this service's health endpoint
+    pub health_check_host: String,
+}
+
+impl ConsulConfig {
+    pub fn from_env() -> Self {
+        let service_name = env::var("CONSUL_SERVICE_NAME")
+            .unwrap_or_else(|_| "<%= baseName.toLowerCase() %>".to_string());
+
+        // Generate a unique instance ID using hostname and random suffix
+        let instance_id = env::var("CONSUL_SERVICE_ID").unwrap_or_else(|_| {
+            let hostname = hostname::get()
+                .map(|h| h.to_string_lossy().to_string())
+                .unwrap_or_else(|_| "unknown".to_string());
+            let random_suffix: u32 = rand::random();
+            format!("{}-{}-{:08x}", service_name, hostname, random_suffix)
+        });
+
+        let tags = env::var("CONSUL_SERVICE_TAGS")
+            .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_else(|_| vec![
+                format!("version={}", env!("CARGO_PKG_VERSION")),
+                format!("env={}", env::var("APP_ENV").unwrap_or_else(|_| "development".to_string())),
+            ]);
+
+        Self {
+            host: env::var("CONSUL_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            port: env::var("CONSUL_PORT")
+                .unwrap_or_else(|_| "8500".to_string())
+                .parse()
+                .expect("CONSUL_PORT must be a valid port number"),
+            service_name,
+            service_id: instance_id,
+            service_tags: tags,
+            health_check_interval: env::var("CONSUL_HEALTH_CHECK_INTERVAL")
+                .unwrap_or_else(|_| "10".to_string())
+                .parse()
+                .expect("CONSUL_HEALTH_CHECK_INTERVAL must be a valid number"),
+            register_service: env::var("CONSUL_REGISTER_SERVICE")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            enable_config: env::var("CONSUL_ENABLE_CONFIG")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            acl_token: env::var("CONSUL_ACL_TOKEN").ok(),
+            config_key_prefix: env::var("CONSUL_CONFIG_KEY_PREFIX")
+                .unwrap_or_else(|_| format!("config/<%= baseName.toLowerCase() %>")),
+            // Use localhost by default for health checks - this works when Consul runs on the same host
+            // Override with CONSUL_HEALTH_CHECK_HOST when Consul runs remotely or in a different container
+            health_check_host: env::var("CONSUL_HEALTH_CHECK_HOST")
+                .unwrap_or_else(|_| "localhost".to_string()),
+        }
+    }
+
+    /// Get the full Consul URL
+    pub fn consul_url(&self) -> String {
+        format!("http://{}:{}", self.host, self.port)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_consul_url() {
+        let config = ConsulConfig {
+            host: "localhost".to_string(),
+            port: 8500,
+            service_name: "test-service".to_string(),
+            service_id: "test-service-1".to_string(),
+            service_tags: vec!["test".to_string()],
+            health_check_interval: 10,
+            register_service: true,
+            enable_config: true,
+            acl_token: None,
+            config_key_prefix: "config/test".to_string(),
+            health_check_host: "localhost".to_string(),
+        };
+        assert_eq!(config.consul_url(), "http://localhost:8500");
+    }
+
+    #[test]
+    fn test_consul_config_clone() {
+        let config = ConsulConfig {
+            host: "consul.example.com".to_string(),
+            port: 8500,
+            service_name: "my-service".to_string(),
+            service_id: "my-service-abc123".to_string(),
+            service_tags: vec!["prod".to_string(), "v1".to_string()],
+            health_check_interval: 15,
+            register_service: true,
+            enable_config: true,
+            acl_token: Some("secret-token".to_string()),
+            config_key_prefix: "config/my-service".to_string(),
+            health_check_host: "localhost".to_string(),
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.host, config.host);
+        assert_eq!(cloned.service_name, config.service_name);
+        assert_eq!(cloned.acl_token, config.acl_token);
+    }
+}

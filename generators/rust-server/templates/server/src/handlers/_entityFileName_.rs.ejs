@@ -462,6 +462,9 @@ mod integration_tests {
 <%_ if (enableEmail) { _%>
             email_service: None, // Email disabled for tests
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+            consul_service: None,
+<%_ } _%>
         };
 
         let app = Router::new()
@@ -481,6 +484,9 @@ mod integration_tests {
             config,
 <%_ if (enableEmail) { _%>
             email_service: None, // Email disabled for tests
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+            consul_service: None,
 <%_ } _%>
         };
 

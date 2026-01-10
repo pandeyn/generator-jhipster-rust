@@ -1,0 +1,412 @@
+//! Consul service for service registration, discovery, and configuration management.
+//!
+//! This module provides integration with HashiCorp Consul for:
+//! - Service registration with health checks
+//! - Service discovery to find other microservices
+//! - Configuration loading from Consul KV store
+
+use crate::config::ConsulConfig;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{error, info, warn};
+
+/// Service registration payload for Consul
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct ServiceRegistration {
+    #[serde(rename = "ID")]
+    id: String,
+    name: String,
+    tags: Vec<String>,
+    address: String,
+    port: u16,
+    check: HealthCheck,
+    meta: HashMap<String, String>,
+}
+
+/// Health check configuration for Consul
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct HealthCheck {
+    #[serde(rename = "HTTP")]
+    http: String,
+    interval: String,
+    timeout: String,
+    deregister_critical_service_after: String,
+}
+
+/// Service instance information from Consul
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ServiceInstance {
+    #[serde(rename = "ID")]
+    pub id: String,
+    pub service: String,
+    pub tags: Vec<String>,
+    pub address: String,
+    pub port: u16,
+    pub meta: Option<HashMap<String, String>>,
+}
+
+/// Consul service for managing service registration and discovery
+#[derive(Clone)]
+pub struct ConsulService {
+    config: ConsulConfig,
+    client: Client,
+    /// Cache of discovered services (service_name -> instances)
+    service_cache: Arc<RwLock<HashMap<String, Vec<ServiceInstance>>>>,
+}
+
+impl ConsulService {
+    /// Create a new Consul service instance
+    pub fn new(config: ConsulConfig) -> Self {
+        let mut headers = reqwest::header::HeaderMap::new();
+
+        // Add ACL token header if configured
+        if let Some(ref token) = config.acl_token {
+            headers.insert(
+                "X-Consul-Token",
+                reqwest::header::HeaderValue::from_str(token)
+                    .expect("Invalid ACL token"),
+            );
+        }
+
+        let client = Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .expect("Failed to create HTTP client for Consul");
+
+        Self {
+            config,
+            client,
+            service_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Register this service instance with Consul
+    ///
+    /// # Arguments
+    /// * `register_address` - The address to register with Consul for service discovery (how other services find this one)
+    /// * `app_port` - The port the service is listening on
+    ///
+    /// Note: The health check URL uses `config.health_check_host` which defaults to `localhost`.
+    /// This ensures Consul can reach the health endpoint when running on the same host.
+    pub async fn register_service(&self, register_address: &str, app_port: u16) -> Result<(), ConsulError> {
+        if !self.config.register_service {
+            info!("Service registration disabled, skipping Consul registration");
+            return Ok(());
+        }
+
+        // Use health_check_host from config for the health check URL
+        // This defaults to localhost which works when Consul runs on the same host
+        let health_check_url = format!(
+            "http://{}:{}/api/health",
+            self.config.health_check_host, app_port
+        );
+
+        let mut meta = HashMap::new();
+        meta.insert("version".to_string(), env!("CARGO_PKG_VERSION").to_string());
+        meta.insert("framework".to_string(), "axum".to_string());
+
+        let registration = ServiceRegistration {
+            id: self.config.service_id.clone(),
+            name: self.config.service_name.clone(),
+            tags: self.config.service_tags.clone(),
+            address: register_address.to_string(),
+            port: app_port,
+            check: HealthCheck {
+                http: health_check_url,
+                interval: format!("{}s", self.config.health_check_interval),
+                timeout: "5s".to_string(),
+                deregister_critical_service_after: "30s".to_string(),
+            },
+            meta,
+        };
+
+        let url = format!("{}/v1/agent/service/register", self.config.consul_url());
+
+        info!(
+            "Registering service '{}' with Consul at {}",
+            self.config.service_name,
+            self.config.consul_url()
+        );
+
+        let response = self
+            .client
+            .put(&url)
+            .json(&registration)
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        if response.status().is_success() {
+            info!(
+                "Successfully registered service '{}' (ID: {}) with Consul",
+                self.config.service_name, self.config.service_id
+            );
+            Ok(())
+        } else {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to register service with Consul: {} - {}",
+                status, body
+            );
+            Err(ConsulError::RegistrationError(format!(
+                "HTTP {}: {}",
+                status, body
+            )))
+        }
+    }
+
+    /// Deregister this service instance from Consul
+    pub async fn deregister_service(&self) -> Result<(), ConsulError> {
+        if !self.config.register_service {
+            return Ok(());
+        }
+
+        // URL-encode the service ID to handle special characters (dots, etc.)
+        let encoded_id = urlencoding::encode(&self.config.service_id);
+        let url = format!(
+            "{}/v1/agent/service/deregister/{}",
+            self.config.consul_url(),
+            encoded_id
+        );
+
+        info!("Deregistering service '{}' from Consul", self.config.service_id);
+
+        let response = self
+            .client
+            .put(&url)
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        if response.status().is_success() {
+            info!("Successfully deregistered service from Consul");
+            Ok(())
+        } else {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            warn!(
+                "Failed to deregister service from Consul: {} - {}",
+                status, body
+            );
+            Err(ConsulError::DeregistrationError(format!(
+                "HTTP {}: {}",
+                status, body
+            )))
+        }
+    }
+
+    /// Discover healthy instances of a service
+    pub async fn discover_service(&self, service_name: &str) -> Result<Vec<ServiceInstance>, ConsulError> {
+        let url = format!(
+            "{}/v1/health/service/{}?passing=true",
+            self.config.consul_url(),
+            service_name
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ConsulError::DiscoveryError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct HealthServiceResponse {
+            service: ServiceInstance,
+        }
+
+        let services: Vec<HealthServiceResponse> = response
+            .json()
+            .await
+            .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+        let instances: Vec<ServiceInstance> = services
+            .into_iter()
+            .map(|s| s.service)
+            .collect();
+
+        // Update cache
+        {
+            let mut cache = self.service_cache.write().await;
+            cache.insert(service_name.to_string(), instances.clone());
+        }
+
+        Ok(instances)
+    }
+
+    /// Get a service instance URL (with simple round-robin from cache)
+    pub async fn get_service_url(&self, service_name: &str) -> Result<String, ConsulError> {
+        // Try cache first
+        {
+            let cache = self.service_cache.read().await;
+            if let Some(instances) = cache.get(service_name) {
+                if !instances.is_empty() {
+                    // Simple random selection for load balancing
+                    let idx = rand::random::<usize>() % instances.len();
+                    let instance = &instances[idx];
+                    return Ok(format!("http://{}:{}", instance.address, instance.port));
+                }
+            }
+        }
+
+        // Cache miss - discover service
+        let instances = self.discover_service(service_name).await?;
+        if instances.is_empty() {
+            return Err(ConsulError::NoInstancesAvailable(service_name.to_string()));
+        }
+
+        let idx = rand::random::<usize>() % instances.len();
+        let instance = &instances[idx];
+        Ok(format!("http://{}:{}", instance.address, instance.port))
+    }
+
+    /// Read a configuration value from Consul KV store
+    pub async fn get_config(&self, key: &str) -> Result<Option<String>, ConsulError> {
+        if !self.config.enable_config {
+            return Ok(None);
+        }
+
+        let full_key = format!("{}/{}", self.config.config_key_prefix, key);
+        let url = format!("{}/v1/kv/{}?raw=true", self.config.consul_url(), full_key);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ConsulError::ConfigError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
+        }
+
+        let value = response
+            .text()
+            .await
+            .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+        Ok(Some(value))
+    }
+
+    /// Set a configuration value in Consul KV store
+    pub async fn set_config(&self, key: &str, value: &str) -> Result<(), ConsulError> {
+        if !self.config.enable_config {
+            return Err(ConsulError::ConfigError(
+                "Configuration management is disabled".to_string(),
+            ));
+        }
+
+        let full_key = format!("{}/{}", self.config.config_key_prefix, key);
+        let url = format!("{}/v1/kv/{}", self.config.consul_url(), full_key);
+
+        let response = self
+            .client
+            .put(&url)
+            .body(value.to_string())
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            Err(ConsulError::ConfigError(format!(
+                "HTTP {}: {}",
+                status, body
+            )))
+        }
+    }
+
+    /// Get the service configuration
+    pub fn config(&self) -> &ConsulConfig {
+        &self.config
+    }
+}
+
+/// Errors that can occur when interacting with Consul
+#[derive(Debug, thiserror::Error)]
+pub enum ConsulError {
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+
+    #[error("Service registration failed: {0}")]
+    RegistrationError(String),
+
+    #[error("Service deregistration failed: {0}")]
+    DeregistrationError(String),
+
+    #[error("Service discovery failed: {0}")]
+    DiscoveryError(String),
+
+    #[error("No healthy instances available for service: {0}")]
+    NoInstancesAvailable(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config() -> ConsulConfig {
+        ConsulConfig {
+            host: "localhost".to_string(),
+            port: 8500,
+            service_name: "test-service".to_string(),
+            service_id: "test-service-1".to_string(),
+            service_tags: vec!["test".to_string()],
+            health_check_interval: 10,
+            register_service: true,
+            enable_config: true,
+            acl_token: None,
+            config_key_prefix: "config/test".to_string(),
+            health_check_host: "localhost".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_consul_service_creation() {
+        let config = test_config();
+        let service = ConsulService::new(config.clone());
+        assert_eq!(service.config().service_name, "test-service");
+    }
+
+    #[test]
+    fn test_consul_url() {
+        let config = test_config();
+        assert_eq!(config.consul_url(), "http://localhost:8500");
+    }
+}

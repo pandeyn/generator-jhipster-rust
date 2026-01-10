@@ -18,4 +18,9 @@ mod email_service;
 pub use email_service::EmailService;
 <%_ } _%>
 
+<%_ if (serviceDiscoveryConsul) { _%>
+mod consul_service;
+pub use consul_service::{ConsulService, ConsulError, ServiceInstance};
+<%_ } _%>
+
 // jhipster-needle-add-entity-service - JHipster will add entity services here

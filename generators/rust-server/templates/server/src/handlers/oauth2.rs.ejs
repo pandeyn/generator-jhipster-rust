@@ -17,7 +17,7 @@ use crate::AppState;
 /// When static files are served from the Rust backend, redirect to the backend URL.
 /// Otherwise, use the configured frontend URL (e.g., Angular dev server).
 fn get_frontend_redirect_url(state: &AppState) -> String {
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
     if state.config.serve_static_files {
         // When serving static files, redirect to the Rust server itself
         let protocol = if state.config.app_https { "https" } else { "http" };
@@ -31,6 +31,7 @@ fn get_frontend_redirect_url(state: &AppState) -> String {
         state.config.frontend_url.clone()
     }
 <%_ } else { _%>
+    // Static hosting not available, always use frontend URL
     state.config.frontend_url.clone()
 <%_ } _%>
 }
@@ -197,10 +198,10 @@ pub async fn authorize(State(state): State<AppState>) -> Response {
 
     // Build the authorization URL
     // Use localhost for redirect_uri since 0.0.0.0 is not a valid callback host
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
     let protocol = if state.config.app_https { "https" } else { "http" };
 <%_ } else { _%>
-    let protocol = "http"; // TODO: Add APP_HTTPS support for non-monolith apps
+    let protocol = "http"; // Default to HTTP when static hosting is not enabled
 <%_ } _%>
     let callback_host = if state.config.app_host == "0.0.0.0" {
         "localhost"
@@ -242,10 +243,10 @@ pub async fn callback(
 
     // Build redirect URI (must match what was sent in authorization request)
     // Use localhost for redirect_uri since 0.0.0.0 is not a valid callback host
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
     let protocol = if state.config.app_https { "https" } else { "http" };
 <%_ } else { _%>
-    let protocol = "http"; // TODO: Add APP_HTTPS support for non-monolith apps
+    let protocol = "http"; // Default to HTTP when static hosting is not enabled
 <%_ } _%>
     let callback_host = if state.config.app_host == "0.0.0.0" {
         "localhost"

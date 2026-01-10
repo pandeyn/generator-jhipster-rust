@@ -6,7 +6,7 @@ pub struct AppConfig {
     pub app_env: String,
     pub app_port: u16,
     pub app_host: String,
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
     /// Whether to use HTTPS for generated URLs (e.g., OAuth2 redirects)
     pub app_https: bool,
 <%_ } _%>
@@ -26,8 +26,8 @@ pub struct AppConfig {
     /// In production, this would be the production frontend URL
     pub frontend_url: String,
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
-    /// Directory to serve static files from (for monolithic deployment)
+<%_ if (enableStaticHosting) { _%>
+    /// Directory to serve static files from (for serving SPA UI)
     pub static_files_dir: Option<String>,
     /// Whether to enable static file serving
     pub serve_static_files: bool,
@@ -44,7 +44,7 @@ impl AppConfig {
                 .parse()
                 .expect("APP_PORT must be a valid port number"),
             app_host: env::var("APP_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: env::var("APP_HTTPS")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(false),
@@ -70,7 +70,7 @@ impl AppConfig {
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:9000".to_string()),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: env::var("STATIC_FILES_DIR").ok(),
             serve_static_files: env::var("SERVE_STATIC_FILES")
                 .map(|v| v.to_lowercase() == "true")
@@ -99,7 +99,7 @@ mod tests {
             app_env: "production".to_string(),
             app_port: 8080,
             app_host: "0.0.0.0".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
@@ -115,7 +115,7 @@ mod tests {
 <%_ if (authenticationTypeOauth2) { _%>
             frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: None,
             serve_static_files: false,
 <%_ } _%>
@@ -131,7 +131,7 @@ mod tests {
             app_env: "development".to_string(),
             app_port: 8080,
             app_host: "0.0.0.0".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
@@ -147,7 +147,7 @@ mod tests {
 <%_ if (authenticationTypeOauth2) { _%>
             frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: None,
             serve_static_files: false,
 <%_ } _%>
@@ -163,7 +163,7 @@ mod tests {
             app_env: "staging".to_string(),
             app_port: 8080,
             app_host: "0.0.0.0".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
@@ -179,7 +179,7 @@ mod tests {
 <%_ if (authenticationTypeOauth2) { _%>
             frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: None,
             serve_static_files: false,
 <%_ } _%>
@@ -195,7 +195,7 @@ mod tests {
             app_env: "development".to_string(),
             app_port: 8080,
             app_host: "localhost".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
@@ -211,7 +211,7 @@ mod tests {
 <%_ if (authenticationTypeOauth2) { _%>
             frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: None,
             serve_static_files: false,
 <%_ } _%>
@@ -228,7 +228,7 @@ mod tests {
             app_env: "development".to_string(),
             app_port: 3000,
             app_host: "127.0.0.1".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
@@ -244,7 +244,7 @@ mod tests {
 <%_ if (authenticationTypeOauth2) { _%>
             frontend_url: "http://localhost:9000".to_string(),
 <%_ } _%>
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: None,
             serve_static_files: false,
 <%_ } _%>

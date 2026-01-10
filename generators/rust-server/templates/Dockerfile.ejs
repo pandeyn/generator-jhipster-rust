@@ -1,7 +1,9 @@
 <%_ if (applicationTypeMonolith) { _%>
 # =============================================================================
-# Client Build Stage (for monolithic deployment)
+# Client Build Stage (for serving SPA UI from Rust backend)
 # =============================================================================
+# This stage builds the Angular/React/Vue client for production.
+# The built client files are copied to the runtime stage.
 FROM node:22-alpine AS client-builder
 
 WORKDIR /app/client
@@ -105,14 +107,23 @@ RUN mkdir -p /app/target/db
 <%_ } _%>
 
 <%_ if (applicationTypeMonolith) { _%>
-# Copy the built Angular client for monolithic deployment
+# Copy the built client for serving SPA UI from Rust backend
 COPY --from=client-builder /app/client/dist/<%= baseName %>/browser ./static/
+<%_ } _%>
+<%_ if (enableStaticHosting && !applicationTypeMonolith) { _%>
+# Static files directory (for gateway/microservice with microfrontend)
+# Copy or mount your built client files here when deploying
+RUN mkdir -p /app/static
 <%_ } _%>
 
 # Application configuration
 ENV APP_NAME=<%= rustCrateName %>
 ENV APP_ENV=production
+<%_ if (applicationTypeMicroservice) { _%>
+ENV APP_PORT=8081
+<%_ } else { _%>
 ENV APP_PORT=8080
+<%_ } _%>
 ENV APP_HOST=0.0.0.0
 <%_ if (devDatabaseTypePostgresql) { _%>
 ENV DATABASE_URL=postgres://postgres:postgres@db:5432/<%= rustCrateName %>
@@ -132,12 +143,23 @@ ENV JWT_SECRET=change-me-in-production-use-a-secure-random-string
 ENV JWT_EXPIRATION_HOURS=24
 <%_ } _%>
 
+<%_ if (enableStaticHosting) { _%>
 <%_ if (applicationTypeMonolith) { _%>
-# Static file serving configuration for monolithic deployment
+# Static file serving configuration (SPA UI served from Rust backend)
 ENV SERVE_STATIC_FILES=true
 ENV STATIC_FILES_DIR=./static
+<%_ } else { _%>
+# Static file serving is available but disabled by default for gateway/microservice
+# Enable with: -e SERVE_STATIC_FILES=true -e STATIC_FILES_DIR=/app/static
+# And mount or copy your built microfrontend files to /app/static
+ENV SERVE_STATIC_FILES=false
+<%_ } _%>
 <%_ } _%>
 
+<%_ if (applicationTypeMicroservice) { _%>
+EXPOSE 8081
+<%_ } else { _%>
 EXPOSE 8080
+<%_ } _%>
 
 CMD ["/app/<%= rustCrateName %>"]

@@ -1,5 +1,778 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with consul > should succeed 1`] = `
+{
+  ".env": {
+    "stateCleared": "modified",
+  },
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker/app.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/application.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
+  "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/services.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/swagger-editor.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
+  "docs/CONSUL.md": {
+    "stateCleared": "modified",
+  },
+  "docs/DOCKER.md": {
+    "stateCleared": "modified",
+  },
+  "docs/EMAIL_INTEGRATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/ENTITY_GENERATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/OPENAPI.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SECURITY.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SQLITE.md": {
+    "stateCleared": "modified",
+  },
+  "docs/STATIC_HOSTING.md": {
+    "stateCleared": "modified",
+  },
+  "docs/TESTING.md": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/up.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/up.sql": {
+    "stateCleared": "modified",
+  },
+  "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/app_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/consul_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/database.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/connection.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/schema.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/common.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/pagination.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/user_dto.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/app_error.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/account.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/health.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/management.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/static_files.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/lib.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/main.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/auth.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/authority.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/openapi.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/auth_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/consul_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/user_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/test_utils.rs": {
+    "stateCleared": "modified",
+  },
+  "template-file-docker": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with consul > should succeed 1`] = `
+{
+  ".env": {
+    "stateCleared": "modified",
+  },
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker/app.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/application.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
+  "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/services.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/swagger-editor.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
+  "docs/CONSUL.md": {
+    "stateCleared": "modified",
+  },
+  "docs/DOCKER.md": {
+    "stateCleared": "modified",
+  },
+  "docs/EMAIL_INTEGRATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/ENTITY_GENERATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/MICROSERVICES.md": {
+    "stateCleared": "modified",
+  },
+  "docs/OPENAPI.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SECURITY.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SQLITE.md": {
+    "stateCleared": "modified",
+  },
+  "docs/TESTING.md": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/up.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/up.sql": {
+    "stateCleared": "modified",
+  },
+  "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/app_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/consul_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/database.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/connection.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/schema.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/common.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/pagination.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/user_dto.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/app_error.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/account.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/health.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/management.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/lib.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/main.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/auth.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/authority.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/openapi.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/auth_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/consul_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/user_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/test_utils.rs": {
+    "stateCleared": "modified",
+  },
+  "template-file-docker": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with microfrontend > should succeed 1`] = `
+{
+  ".env": {
+    "stateCleared": "modified",
+  },
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker/app.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/application.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
+  "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/services.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/swagger-editor.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
+  "docs/CONSUL.md": {
+    "stateCleared": "modified",
+  },
+  "docs/DOCKER.md": {
+    "stateCleared": "modified",
+  },
+  "docs/EMAIL_INTEGRATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/ENTITY_GENERATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/MICROSERVICES.md": {
+    "stateCleared": "modified",
+  },
+  "docs/OPENAPI.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SECURITY.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SQLITE.md": {
+    "stateCleared": "modified",
+  },
+  "docs/STATIC_HOSTING.md": {
+    "stateCleared": "modified",
+  },
+  "docs/TESTING.md": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/up.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/up.sql": {
+    "stateCleared": "modified",
+  },
+  "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/app_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/consul_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/database.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/connection.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/schema.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/common.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/pagination.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/user_dto.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/app_error.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/account.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/health.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/management.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/static_files.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/lib.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/main.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/auth.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/authority.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/openapi.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/auth_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/consul_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/user_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/test_utils.rs": {
+    "stateCleared": "modified",
+  },
+  "template-file-docker": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator rust-server of rust JHipster blueprint > microservice without consul > should succeed 1`] = `
+{
+  ".env": {
+    "stateCleared": "modified",
+  },
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker/app.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/services.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/swagger-editor.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
+  "docs/DOCKER.md": {
+    "stateCleared": "modified",
+  },
+  "docs/EMAIL_INTEGRATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/ENTITY_GENERATION.md": {
+    "stateCleared": "modified",
+  },
+  "docs/MICROSERVICES.md": {
+    "stateCleared": "modified",
+  },
+  "docs/OPENAPI.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SECURITY.md": {
+    "stateCleared": "modified",
+  },
+  "docs/SQLITE.md": {
+    "stateCleared": "modified",
+  },
+  "docs/TESTING.md": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000000_diesel_initial_setup/up.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/down.sql": {
+    "stateCleared": "modified",
+  },
+  "migrations/00000000000001_create_users_authorities/up.sql": {
+    "stateCleared": "modified",
+  },
+  "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/Cargo.toml": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/app_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/database.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/connection.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/db/schema.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/common.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/pagination.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/dto/user_dto.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/app_error.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/errors/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/account.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/health.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/management.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/handlers/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/lib.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/main.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/auth.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/middleware/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/authority.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/models/user.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/openapi.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/auth_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/services/user_service.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/test_utils.rs": {
+    "stateCleared": "modified",
+  },
+  "template-file-docker": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
 exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succeed 1`] = `
 {
   ".env": {

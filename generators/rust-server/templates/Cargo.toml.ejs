@@ -30,7 +30,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_qs = "0.13"
 tower = "0.4"
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 <%_ } else { _%>
 tower-http = { version = "0.5", features = ["cors", "trace"] }
@@ -61,6 +61,14 @@ utoipa-scalar = { version = "0.2", features = ["axum"] }
 # Email support
 lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls", "builder", "smtp-transport"] }
 tera = "1.19"
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+# Consul service discovery
+hostname = "0.3"
+<%_ if (!authenticationTypeOauth2) { _%>
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+urlencoding = "2.1"
+<%_ } _%>
 <%_ } _%>
 
 # Tarpaulin configuration for code coverage

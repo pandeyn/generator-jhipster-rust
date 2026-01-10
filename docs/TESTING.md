@@ -570,7 +570,7 @@ cargo test test_name -- --nocapture
 npm run e2e:wait-backend  # waits 120 seconds by default
 
 # Check backend health
-curl http://localhost:8080/management/health
+curl http://localhost:8080/api/health
 ```
 
 ### OAuth2 Test Failures

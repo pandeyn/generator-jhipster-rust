@@ -23,4 +23,67 @@ describe('SubGenerator docker of rust JHipster blueprint', () => {
       expect(result.getStateSnapshot()).toMatchSnapshot();
     });
   });
+
+  describe('microservice with consul', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'microApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Consul docker files', () => {
+      result.assertFile(['docker/consul.yml', 'docker/central-server-config/application.yml']);
+    });
+
+    it('should include Consul service in app.yml', () => {
+      result.assertFileContent('docker/app.yml', 'CONSUL_HOST=consul');
+      result.assertFileContent('docker/app.yml', 'consul:');
+      result.assertFileContent('docker/app.yml', 'hashicorp/consul');
+    });
+  });
+
+  describe('monolith without consul', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'monolithApp',
+          applicationType: 'monolith',
+          skipClient: true,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Consul docker files', () => {
+      result.assertNoFile(['docker/consul.yml', 'docker/central-server-config/application.yml']);
+    });
+
+    it('should not include Consul in app.yml', () => {
+      result.assertNoFileContent('docker/app.yml', 'CONSUL_HOST');
+    });
+  });
 });

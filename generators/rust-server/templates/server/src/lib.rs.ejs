@@ -29,6 +29,9 @@ use config::AppConfig;
 use config::OAuth2Config;
 use security::OAuth2Validator;
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+use services::ConsulService;
+<%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
 use db::MongoPool;
 <%_ } else { _%>
@@ -36,6 +39,8 @@ use db::connection::DbPool;
 <%_ } _%>
 <%_ if (enableEmail) { _%>
 use services::EmailService;
+<%_ } _%>
+<%_ if (enableEmail || serviceDiscoveryConsul) { _%>
 use std::sync::Arc;
 <%_ } _%>
 
@@ -56,5 +61,10 @@ pub struct AppState {
     /// Email service for sending activation and password reset emails
     /// None if email is disabled (MAIL_ENABLED=false)
     pub email_service: Option<Arc<EmailService>>,
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+    /// Consul service for service registration and discovery
+    /// None if Consul is not configured or unavailable
+    pub consul_service: Option<Arc<ConsulService>>,
 <%_ } _%>
 }

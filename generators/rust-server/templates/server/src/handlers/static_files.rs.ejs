@@ -1,8 +1,8 @@
-//! Static file serving with SPA fallback for monolithic deployment
+//! Static file serving with SPA fallback
 //!
-//! This module provides handlers for serving the Angular UI static files
-//! from the Rust backend, with proper SPA (Single Page Application) fallback
-//! routing for Angular Router.
+//! This module provides handlers for serving SPA (Single Page Application) UI
+//! static files from the Rust backend. Enable with SERVE_STATIC_FILES=true
+//! and configure the directory with STATIC_FILES_DIR.
 
 use axum::{
     body::Body,

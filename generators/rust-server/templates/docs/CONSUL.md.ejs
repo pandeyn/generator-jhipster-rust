@@ -1,0 +1,279 @@
+# Consul Service Discovery
+
+This application uses [HashiCorp Consul](https://www.consul.io/) for service discovery and configuration management in microservices architecture.
+
+## Overview
+
+Consul provides:
+- **Service Registration**: Automatically registers this service with Consul on startup
+- **Service Discovery**: Find and connect to other microservices
+- **Health Checks**: Regular health checks ensure only healthy instances receive traffic
+- **Configuration Management**: Centralized configuration via Consul KV store
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONSUL_HOST` | Consul server hostname | `localhost` |
+| `CONSUL_PORT` | Consul server port | `8500` |
+| `CONSUL_SERVICE_NAME` | Name to register in Consul | `<%= baseName.toLowerCase() %>` |
+| `CONSUL_SERVICE_ID` | Unique instance ID | Auto-generated (hostname + random suffix) |
+| `CONSUL_SERVICE_TAGS` | Comma-separated tags | `version=X.X.X,env=development` |
+| `CONSUL_REGISTER_SERVICE` | Enable service registration | `true` |
+| `CONSUL_REGISTER_ADDRESS` | Address for service discovery (how other services find this one) | Auto-detected (hostname or `APP_HOST`) |
+| `CONSUL_HEALTH_CHECK_HOST` | Host for health check URL (how Consul reaches this service) | `localhost` |
+| `CONSUL_HEALTH_CHECK_INTERVAL` | Health check interval (seconds) | `10` |
+| `CONSUL_ENABLE_CONFIG` | Enable KV config loading | `true` |
+| `CONSUL_ACL_TOKEN` | ACL token for authentication | None |
+| `CONSUL_CONFIG_KEY_PREFIX` | KV prefix for config | `config/<%= baseName.toLowerCase() %>` |
+
+#### Understanding Registration Address vs Health Check Host
+
+The service registration uses two different addresses for different purposes:
+
+- **`CONSUL_REGISTER_ADDRESS`**: The address that gets registered with Consul for **service discovery**. Other services use this address to connect to your service. Defaults to the hostname when `APP_HOST` is `0.0.0.0`.
+
+- **`CONSUL_HEALTH_CHECK_HOST`**: The address Consul uses to perform **health checks**. Defaults to `localhost` which works when Consul runs on the same host as the service.
+
+**When to override these:**
+
+| Scenario | `CONSUL_REGISTER_ADDRESS` | `CONSUL_HEALTH_CHECK_HOST` |
+|----------|---------------------------|----------------------------|
+| Local development (Consul on same host) | Default (hostname) | Default (`localhost`) |
+| Docker Compose (same network) | Container hostname | Container hostname |
+| Kubernetes | Pod IP or service name | `localhost` (sidecar) or Pod IP |
+| Consul on remote host | Reachable IP/hostname | Reachable IP/hostname |
+
+### Example `.env` Configuration
+
+```env
+# Consul Service Discovery
+CONSUL_HOST=localhost
+CONSUL_PORT=8500
+CONSUL_SERVICE_NAME=<%= baseName.toLowerCase() %>
+CONSUL_REGISTER_SERVICE=true
+CONSUL_HEALTH_CHECK_INTERVAL=10
+
+# Optional: Override addresses (usually not needed for local development)
+# CONSUL_REGISTER_ADDRESS=my-service.local
+# CONSUL_HEALTH_CHECK_HOST=localhost
+```
+
+## Running Consul Locally
+
+### Using Docker Compose
+
+Start Consul with the provided Docker Compose file:
+
+```bash
+docker compose -f docker/consul.yml up -d
+```
+
+This starts:
+- **Consul Agent** in development mode with UI at http://localhost:8500
+- **Config Loader** that populates Consul KV with configuration from `docker/central-server-config/`
+
+### Standalone Docker
+
+```bash
+docker run -d --name consul \
+  -p 8500:8500 \
+  hashicorp/consul:1.15 \
+  agent -dev -ui -client 0.0.0.0
+```
+
+## Service Registration
+
+When the application starts, it automatically:
+
+1. Creates a unique service ID (hostname + random suffix)
+2. Registers with Consul using the service name and tags
+3. Configures a health check pointing to `/api/health`
+4. Deregisters on graceful shutdown (Ctrl+C)
+
+### Registration Payload Example
+
+```json
+{
+  "ID": "<%= baseName.toLowerCase() %>-host1-a1b2c3d4",
+  "Name": "<%= baseName.toLowerCase() %>",
+  "Tags": ["version=0.1.0", "env=development"],
+  "Address": "192.168.1.100",
+  "Port": 8080,
+  "Check": {
+    "HTTP": "http://localhost:8080/api/health",
+    "Interval": "10s",
+    "Timeout": "5s",
+    "DeregisterCriticalServiceAfter": "30s"
+  }
+}
+```
+
+> **Note**: The `Address` field (`192.168.1.100`) is the address other services use to connect (from `CONSUL_REGISTER_ADDRESS`), while the health check URL uses `localhost` (from `CONSUL_HEALTH_CHECK_HOST`) since Consul typically runs on the same host during local development.
+
+## Service Discovery
+
+### Discovering Other Services
+
+Use the `ConsulService` to find other microservices:
+
+```rust
+use crate::services::ConsulService;
+
+async fn call_other_service(consul: &ConsulService) -> Result<String, ConsulError> {
+    // Get URL of a healthy instance
+    let url = consul.get_service_url("other-service").await?;
+
+    // Make HTTP request to the discovered service
+    let response = reqwest::get(format!("{}/api/data", url))
+        .await?
+        .text()
+        .await?;
+
+    Ok(response)
+}
+```
+
+### Load Balancing
+
+The `get_service_url` method implements simple random load balancing across healthy instances. For more advanced load balancing:
+
+```rust
+// Get all instances for custom load balancing
+let instances = consul.discover_service("other-service").await?;
+
+// Implement your own selection logic
+for instance in instances {
+    println!("Instance: {}:{}", instance.address, instance.port);
+    println!("Tags: {:?}", instance.tags);
+}
+```
+
+## Configuration Management
+
+### Reading Configuration from Consul KV
+
+```rust
+// Read a specific configuration key
+if let Some(value) = consul.get_config("database/url").await? {
+    println!("Database URL: {}", value);
+}
+```
+
+### Writing Configuration
+
+```rust
+// Store configuration in Consul KV
+consul.set_config("feature_flags/new_feature", "true").await?;
+```
+
+### Central Server Configuration
+
+The `docker/central-server-config/application.yml` file is automatically loaded into Consul KV by the config loader. This provides centralized configuration for all microservices.
+
+## Health Checks
+
+Consul polls the `/api/health` endpoint to verify service health. The service is automatically removed from discovery if:
+
+- Health check fails for 30 seconds (configurable via `deregister_critical_service_after`)
+- The service stops responding
+
+## Production Considerations
+
+### High Availability
+
+In production, run a Consul cluster with 3-5 server nodes:
+
+```yaml
+# Kubernetes StatefulSet or multiple Docker containers
+consul:
+  replicas: 3
+  config:
+    bootstrap_expect: 3
+    retry_join: ["consul-0", "consul-1", "consul-2"]
+```
+
+### Security
+
+1. **Enable ACLs**: Configure ACL tokens for authentication
+2. **TLS**: Enable TLS for agent communication
+3. **Network Isolation**: Restrict Consul ports to internal network
+
+```env
+CONSUL_ACL_TOKEN=your-secret-acl-token
+```
+
+### Kubernetes Integration
+
+When running in Kubernetes, consider:
+
+- Using Consul Connect for service mesh
+- Configuring pod annotations for automatic service registration
+- Using Consul's built-in Kubernetes integration
+
+## Troubleshooting
+
+### Service Not Registering
+
+1. Check Consul is running: `curl http://localhost:8500/v1/status/leader`
+2. Verify network connectivity to Consul
+3. Check logs for registration errors
+4. Verify `CONSUL_REGISTER_SERVICE=true`
+
+### Service Not Discovered
+
+1. Verify the service is registered: `curl http://localhost:8500/v1/catalog/service/<%= baseName.toLowerCase() %>`
+2. Check health check status: `curl http://localhost:8500/v1/health/service/<%= baseName.toLowerCase() %>`
+3. Ensure health endpoint `/api/health` is accessible
+
+### Health Check Failing / Service Auto-Deregistering
+
+If you see errors like "Unknown service ID" when shutting down, the service was likely auto-deregistered due to failed health checks:
+
+1. **Check Consul can reach the health endpoint**:
+   ```bash
+   # From the Consul host, verify the health check URL is reachable
+   curl http://localhost:8080/api/health
+   ```
+
+2. **Verify `CONSUL_HEALTH_CHECK_HOST` is correct**:
+   - For local development: Use `localhost` (default)
+   - For Docker: Use the container's hostname or IP
+   - For Kubernetes: Use `localhost` with sidecar or Pod IP
+
+3. **Check Consul logs** for health check failures:
+   ```bash
+   docker logs consul 2>&1 | grep -i health
+   ```
+
+4. **Increase deregistration timeout** if health checks are intermittently slow:
+   The service auto-deregisters after 30 seconds of failed health checks. If your service takes longer to start, consider increasing `CONSUL_HEALTH_CHECK_INTERVAL`.
+
+### Configuration Not Loading
+
+1. Verify Consul KV has the data: `curl http://localhost:8500/v1/kv/config/<%= baseName.toLowerCase() %>?recurse`
+2. Check `CONSUL_ENABLE_CONFIG=true`
+3. Verify config key prefix matches
+
+## API Reference
+
+### ConsulService Methods
+
+| Method | Description |
+|--------|-------------|
+| `new(config)` | Create new Consul service instance |
+| `register_service(register_address, port)` | Register with Consul (health check uses `config.health_check_host`) |
+| `deregister_service()` | Remove from Consul |
+| `discover_service(name)` | Find service instances |
+| `get_service_url(name)` | Get URL of a healthy instance (with random load balancing) |
+| `get_config(key)` | Read from KV store |
+| `set_config(key, value)` | Write to KV store |
+| `config()` | Get reference to ConsulConfig |
+
+## Resources
+
+- [Consul Documentation](https://www.consul.io/docs)
+- [Consul API Reference](https://www.consul.io/api-docs)
+- [JHipster Microservices](https://www.jhipster.tech/microservices-architecture/)

@@ -6,6 +6,9 @@ mod oauth2_config;
 <%_ if (enableEmail) { _%>
 mod email_config;
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+mod consul_config;
+<%_ } _%>
 
 pub use app_config::*;
 pub use database::*;
@@ -14,4 +17,7 @@ pub use oauth2_config::*;
 <%_ } _%>
 <%_ if (enableEmail) { _%>
 pub use email_config::*;
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+pub use consul_config::*;
 <%_ } _%>

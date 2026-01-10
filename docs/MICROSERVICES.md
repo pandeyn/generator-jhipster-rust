@@ -123,14 +123,14 @@ The microservice exposes REST API endpoints without UI-related routes:
 
 ### Core Endpoints
 
-| Endpoint             | Method | Description        |
-| -------------------- | ------ | ------------------ |
-| `/api/authenticate`  | POST   | Login (JWT only)   |
-| `/api/account`       | GET    | Get current user   |
-| `/api/users`         | GET    | List users (admin) |
-| `/api/admin/users`   | CRUD   | User management    |
-| `/management/health` | GET    | Health check       |
-| `/management/info`   | GET    | Application info   |
+| Endpoint            | Method | Description        |
+| ------------------- | ------ | ------------------ |
+| `/api/authenticate` | POST   | Login (JWT only)   |
+| `/api/account`      | GET    | Get current user   |
+| `/api/users`        | GET    | List users (admin) |
+| `/api/admin/users`  | CRUD   | User management    |
+| `/api/health`       | GET    | Health check       |
+| `/management/info`  | GET    | Application info   |
 
 ### Entity Endpoints
 
@@ -234,7 +234,7 @@ The microservice provides health endpoints for container orchestration:
 ### Liveness Probe
 
 ```bash
-curl http://localhost:8081/management/health/liveness
+curl http://localhost:8081/api/health/liveness
 ```
 
 Response:
@@ -248,7 +248,7 @@ Response:
 ### Readiness Probe
 
 ```bash
-curl http://localhost:8081/management/health/readiness
+curl http://localhost:8081/api/health/readiness
 ```
 
 Response:
@@ -267,14 +267,14 @@ Response:
 ```yaml
 livenessProbe:
   httpGet:
-    path: /management/health/liveness
+    path: /api/health/liveness
     port: 8081
   initialDelaySeconds: 30
   periodSeconds: 10
 
 readinessProbe:
   httpGet:
-    path: /management/health/readiness
+    path: /api/health/readiness
     port: 8081
   initialDelaySeconds: 5
   periodSeconds: 5

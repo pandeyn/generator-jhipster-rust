@@ -289,12 +289,31 @@ export default class extends BaseApplicationGenerator {
       },
       rustApplicationTypeConfig({ application }) {
         // Set application type flag for monolithic vs microservice deployment
-        // Monolithic apps can serve static UI files from the Rust backend
         const appType = this.jhipsterConfig.applicationType || 'monolith';
         application.applicationType = appType;
         application.applicationTypeMonolith = appType === 'monolith';
         application.applicationTypeMicroservice = appType === 'microservice';
         application.applicationTypeGateway = appType === 'gateway';
+
+        // Determine if static hosting should be enabled
+        // - Monolith: always enabled (serves the SPA UI)
+        // - Gateway: always enabled (serves the main UI)
+        // - Microservice: only if it has a microfrontend (skipClient is false/undefined and clientFramework is set)
+        const skipClient = this.jhipsterConfig.skipClient;
+        const clientFramework = this.jhipsterConfig.clientFramework;
+        const hasMicrofrontend = !skipClient && clientFramework && clientFramework !== 'no';
+
+        application.enableStaticHosting = application.applicationTypeMonolith || application.applicationTypeGateway || hasMicrofrontend;
+      },
+      rustServiceDiscoveryConfig({ application }) {
+        // Set service discovery flags for microservices architecture
+        // Only applicable for gateway and microservice application types
+        const serviceDiscoveryType = this.jhipsterConfig.serviceDiscoveryType || 'no';
+        const isMicroservicesApp = application.applicationTypeMicroservice || application.applicationTypeGateway;
+
+        application.serviceDiscoveryType = serviceDiscoveryType;
+        application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
+        application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
       },
       async source({ source }) {
         // Helper to add entity to models/mod.rs

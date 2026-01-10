@@ -50,9 +50,14 @@ utoipa-scalar.workspace = true
 lettre.workspace = true
 tera.workspace = true
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+hostname.workspace = true
+<%_ if (!authenticationTypeOauth2) { _%>
+reqwest.workspace = true
+urlencoding.workspace = true
+<%_ } _%>
+<%_ } _%>
 
 [dev-dependencies]
 axum-test = "14"
-<%_ if (applicationTypeMonolith) { _%>
 tempfile = "3"
-<%_ } _%>

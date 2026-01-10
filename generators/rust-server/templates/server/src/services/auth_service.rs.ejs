@@ -198,7 +198,7 @@ mod tests {
             app_env: "test".to_string(),
             app_port: 8080,
             app_host: "127.0.0.1".to_string(),
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             app_https: false,
 <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
@@ -209,7 +209,7 @@ mod tests {
 <%_ } _%>
             jwt_secret: "test_secret_key_for_jwt_token_generation_12345".to_string(),
             jwt_expiration_hours: 24,
-<%_ if (applicationTypeMonolith) { _%>
+<%_ if (enableStaticHosting) { _%>
             static_files_dir: None,
             serve_static_files: false,
 <%_ } _%>

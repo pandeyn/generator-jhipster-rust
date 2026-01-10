@@ -17,6 +17,22 @@ export default asCommand({
       ],
       default: 'jwt',
     },
+    serviceDiscoveryType: {
+      cli: {
+        type: String,
+        description: 'Service discovery type for microservices architecture',
+      },
+      prompt: generator => ({
+        type: 'list',
+        message: `Which ${chalk.yellow('*service discovery*')} would you like to use?`,
+        when: ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType),
+      }),
+      choices: [
+        { value: 'consul', name: 'Consul (recommended for service discovery and configuration)' },
+        { value: 'no', name: 'No service discovery' },
+      ],
+      default: 'consul',
+    },
     devDatabaseType: {
       cli: {
         type: String,
