@@ -8,5 +8,8 @@ pub mod oauth2;
 <%_ if (enableStaticHosting) { _%>
 pub mod static_files;
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+pub mod kafka;
+<%_ } _%>
 
 // jhipster-needle-add-entity-handler - JHipster will add entity handlers here

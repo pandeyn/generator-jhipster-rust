@@ -1,0 +1,92 @@
+//! Kafka configuration for <%= baseName %>
+//!
+//! This module provides configuration for Apache Kafka message broker integration
+//! using the rdkafka library (librdkafka wrapper).
+
+use std::time::Duration;
+
+/// Kafka configuration loaded from environment variables
+#[derive(Debug, Clone)]
+pub struct KafkaConfig {
+    /// Comma-separated list of Kafka broker addresses (e.g., "localhost:9092")
+    pub bootstrap_servers: String,
+    /// Consumer group ID for this application
+    pub group_id: String,
+    /// Default topic for publishing messages
+    pub default_topic: String,
+    /// Whether Kafka is enabled
+    pub enabled: bool,
+    /// Session timeout for consumer group membership
+    pub session_timeout_ms: u32,
+    /// Enable auto-commit of consumer offsets
+    pub enable_auto_commit: bool,
+    /// Auto-commit interval in milliseconds
+    pub auto_commit_interval_ms: u32,
+    /// Offset reset policy: "earliest", "latest", or "none"
+    pub auto_offset_reset: String,
+    /// Maximum time to wait for message delivery acknowledgment
+    pub message_timeout_ms: u32,
+    /// Security protocol: "plaintext", "ssl", "sasl_plaintext", "sasl_ssl"
+    pub security_protocol: String,
+    /// SASL mechanism (if using SASL): "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"
+    pub sasl_mechanism: Option<String>,
+    /// SASL username (if using SASL)
+    pub sasl_username: Option<String>,
+    /// SASL password (if using SASL)
+    pub sasl_password: Option<String>,
+}
+
+impl KafkaConfig {
+    /// Load Kafka configuration from environment variables
+    pub fn from_env() -> Self {
+        Self {
+            bootstrap_servers: std::env::var("KAFKA_BOOTSTRAP_SERVERS")
+                .unwrap_or_else(|_| "localhost:9092".to_string()),
+            group_id: std::env::var("KAFKA_GROUP_ID")
+                .unwrap_or_else(|_| "<%= dasherizedBaseName %>-group".to_string()),
+            default_topic: std::env::var("KAFKA_DEFAULT_TOPIC")
+                .unwrap_or_else(|_| "<%= dasherizedBaseName %>-topic".to_string()),
+            enabled: std::env::var("KAFKA_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            session_timeout_ms: std::env::var("KAFKA_SESSION_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10000),
+            enable_auto_commit: std::env::var("KAFKA_ENABLE_AUTO_COMMIT")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            auto_commit_interval_ms: std::env::var("KAFKA_AUTO_COMMIT_INTERVAL_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5000),
+            auto_offset_reset: std::env::var("KAFKA_AUTO_OFFSET_RESET")
+                .unwrap_or_else(|_| "earliest".to_string()),
+            message_timeout_ms: std::env::var("KAFKA_MESSAGE_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5000),
+            security_protocol: std::env::var("KAFKA_SECURITY_PROTOCOL")
+                .unwrap_or_else(|_| "plaintext".to_string()),
+            sasl_mechanism: std::env::var("KAFKA_SASL_MECHANISM").ok(),
+            sasl_username: std::env::var("KAFKA_SASL_USERNAME").ok(),
+            sasl_password: std::env::var("KAFKA_SASL_PASSWORD").ok(),
+        }
+    }
+
+    /// Get message timeout as Duration
+    pub fn message_timeout(&self) -> Duration {
+        Duration::from_millis(self.message_timeout_ms as u64)
+    }
+
+    /// Get session timeout as Duration
+    pub fn session_timeout(&self) -> Duration {
+        Duration::from_millis(self.session_timeout_ms as u64)
+    }
+}
+
+impl Default for KafkaConfig {
+    fn default() -> Self {
+        Self::from_env()
+    }
+}

@@ -26,6 +26,10 @@ use <%= rustCrateName %>::security::OAuth2Validator;
 use <%= rustCrateName %>::config::ConsulConfig;
 use <%= rustCrateName %>::services::ConsulService;
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+use <%= rustCrateName %>::config::KafkaConfig;
+use <%= rustCrateName %>::services::{KafkaProducer, KafkaConsumer};
+<%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
 use <%= rustCrateName %>::db::create_pool;
 <%_ } else { _%>
@@ -35,7 +39,7 @@ use <%= rustCrateName %>::db::connection::establish_connection_pool;
 use <%= rustCrateName %>::config::EmailConfig;
 use <%= rustCrateName %>::services::EmailService;
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul) { _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka) { _%>
 use std::sync::Arc;
 <%_ } _%>
 use <%= rustCrateName %>::handlers;
@@ -157,6 +161,58 @@ async fn main() {
     };
 
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+    // Initialize Kafka producer and consumer
+    let kafka_config = KafkaConfig::from_env();
+    let (kafka_producer, kafka_consumer) = if kafka_config.enabled {
+        tracing::info!(
+            "Kafka enabled, connecting to brokers: {}",
+            kafka_config.bootstrap_servers
+        );
+
+        // Initialize producer
+        let producer = match KafkaProducer::new(kafka_config.clone()) {
+            Ok(p) => {
+                tracing::info!("Kafka producer initialized successfully");
+                Some(Arc::new(p))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize Kafka producer: {}. Publishing will be disabled.", e);
+                None
+            }
+        };
+
+        // Initialize consumer
+        let consumer = match KafkaConsumer::new(kafka_config.clone()) {
+            Ok(c) => {
+                // Subscribe to default topic
+                if let Err(e) = c.subscribe_default() {
+                    tracing::warn!("Failed to subscribe to default Kafka topic: {}", e);
+                }
+                let consumer = Arc::new(c);
+
+                // Start consuming messages in background
+                let consumer_clone = consumer.clone();
+                tokio::spawn(async move {
+                    consumer_clone.start_consuming().await;
+                });
+
+                tracing::info!("Kafka consumer initialized and started");
+                Some(consumer)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize Kafka consumer: {}. Consuming will be disabled.", e);
+                None
+            }
+        };
+
+        (producer, consumer)
+    } else {
+        tracing::info!("Kafka disabled (KAFKA_ENABLED=false)");
+        (None, None)
+    };
+
+<%_ } _%>
     // Build CORS layer
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -180,6 +236,10 @@ async fn main() {
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: consul_service.clone(),
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+        kafka_producer,
+        kafka_consumer,
 <%_ } _%>
     };
 
@@ -271,10 +331,16 @@ fn api_routes(state: AppState) -> Router<AppState> {
     // Public routes (no authentication required)
 <%_ if (authenticationTypeOauth2) { _%>
     let public_routes = Router::new()
+<%_ if (messageBrokerKafka) { _%>
+        .nest("/<%= dasherizedBaseName %>-kafka", handlers::kafka::routes())
+<%_ } _%>
         .nest("/health", handlers::health::routes());
 <%_ } else { _%>
     let public_routes = Router::new()
         .nest("/health", handlers::health::routes())
+<%_ if (messageBrokerKafka) { _%>
+        .nest("/<%= dasherizedBaseName %>-kafka", handlers::kafka::routes())
+<%_ } _%>
         // Registration routes (public for JWT authentication)
         .merge(handlers::account::public_routes())
         .nest("/authenticate", handlers::account::auth_routes());

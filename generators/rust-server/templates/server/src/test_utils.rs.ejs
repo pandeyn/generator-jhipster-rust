@@ -114,6 +114,10 @@ pub async fn create_test_state() -> AppState {
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+        kafka_producer: None,
+        kafka_consumer: None,
+<%_ } _%>
     }
 <%_ } else { _%>
     AppState {
@@ -124,6 +128,10 @@ pub async fn create_test_state() -> AppState {
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+        kafka_producer: None, // Kafka disabled for tests
+        kafka_consumer: None,
 <%_ } _%>
     }
 <%_ } _%>
@@ -569,6 +577,10 @@ pub fn create_test_state() -> AppState {
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+        kafka_producer: None,
+        kafka_consumer: None,
+<%_ } _%>
     }
 <%_ } else { _%>
     AppState {
@@ -579,6 +591,10 @@ pub fn create_test_state() -> AppState {
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+        kafka_producer: None, // Kafka disabled for tests
+        kafka_consumer: None,
 <%_ } _%>
     }
 <%_ } _%>

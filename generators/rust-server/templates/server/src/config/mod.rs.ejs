@@ -9,6 +9,9 @@ mod email_config;
 <%_ if (serviceDiscoveryConsul) { _%>
 mod consul_config;
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+mod kafka_config;
+<%_ } _%>
 
 pub use app_config::*;
 pub use database::*;
@@ -20,4 +23,7 @@ pub use email_config::*;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 pub use consul_config::*;
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+pub use kafka_config::*;
 <%_ } _%>

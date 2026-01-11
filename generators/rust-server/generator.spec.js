@@ -281,4 +281,134 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
       result.assertNoFile('docs/STATIC_HOSTING.md');
     });
   });
+
+  describe('monolith with kafka', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'kafkaApp',
+          applicationType: 'monolith',
+          skipClient: true,
+          messageBroker: 'kafka',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Kafka config files', () => {
+      result.assertFile([
+        'server/src/config/kafka_config.rs',
+        'server/src/services/kafka_producer.rs',
+        'server/src/services/kafka_consumer.rs',
+        'server/src/handlers/kafka.rs',
+      ]);
+    });
+
+    it('should generate Kafka documentation', () => {
+      result.assertFile('docs/KAFKA.md');
+    });
+
+    it('should include Kafka environment variables in .env', () => {
+      result.assertFileContent('.env', 'KAFKA_ENABLED=true');
+      result.assertFileContent('.env', 'KAFKA_BOOTSTRAP_SERVERS=localhost:29092');
+      result.assertFileContent('.env', 'KAFKA_GROUP_ID=kafka-app-group');
+      result.assertFileContent('.env', 'KAFKA_DEFAULT_TOPIC=kafka-app-topic');
+    });
+
+    it('should include Kafka imports in lib.rs', () => {
+      result.assertFileContent('server/src/lib.rs', 'use services::{KafkaProducer, KafkaConsumer};');
+      result.assertFileContent('server/src/lib.rs', 'pub kafka_producer: Option<Arc<KafkaProducer>>');
+      result.assertFileContent('server/src/lib.rs', 'pub kafka_consumer: Option<Arc<KafkaConsumer>>');
+    });
+
+    it('should include Kafka initialization in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'KafkaConfig::from_env()');
+      result.assertFileContent('server/src/main.rs', 'KafkaProducer::new(kafka_config.clone())');
+      result.assertFileContent('server/src/main.rs', 'KafkaConsumer::new(kafka_config.clone())');
+    });
+
+    it('should include Kafka handler module in handlers/mod.rs', () => {
+      result.assertFileContent('server/src/handlers/mod.rs', 'pub mod kafka;');
+    });
+
+    it('should include Kafka services in services/mod.rs', () => {
+      result.assertFileContent('server/src/services/mod.rs', 'mod kafka_producer;');
+      result.assertFileContent('server/src/services/mod.rs', 'mod kafka_consumer;');
+    });
+
+    it('should include rdkafka dependency in Cargo.toml', () => {
+      result.assertFileContent('Cargo.toml', 'rdkafka');
+      result.assertFileContent('Cargo.toml', 'tokio-stream');
+    });
+
+    it('should include Kafka routes in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'kafka-app-kafka');
+      result.assertFileContent('server/src/main.rs', 'handlers::kafka::routes()');
+    });
+
+    it('should include Kafka endpoints in OpenAPI documentation', () => {
+      result.assertFileContent('server/src/openapi.rs', 'handlers::kafka::publish_message');
+      result.assertFileContent('server/src/openapi.rs', 'handlers::kafka::consume_messages');
+      result.assertFileContent('server/src/openapi.rs', 'handlers::kafka::get_status');
+      result.assertFileContent('server/src/openapi.rs', 'handlers::kafka::PublishRequest');
+      result.assertFileContent('server/src/openapi.rs', 'handlers::kafka::PublishResponse');
+      result.assertFileContent('server/src/openapi.rs', 'handlers::kafka::KafkaStatus');
+      result.assertFileContent('server/src/openapi.rs', 'kafka-app-kafka');
+    });
+  });
+
+  describe('monolith without kafka', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noKafkaApp',
+          applicationType: 'monolith',
+          skipClient: true,
+          messageBroker: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Kafka files', () => {
+      result.assertNoFile([
+        'server/src/config/kafka_config.rs',
+        'server/src/services/kafka_producer.rs',
+        'server/src/services/kafka_consumer.rs',
+        'server/src/handlers/kafka.rs',
+        'docs/KAFKA.md',
+      ]);
+    });
+
+    it('should not include Kafka environment variables in .env', () => {
+      result.assertNoFileContent('.env', 'KAFKA_ENABLED');
+      result.assertNoFileContent('.env', 'KAFKA_BOOTSTRAP_SERVERS');
+    });
+
+    it('should not include rdkafka dependency in Cargo.toml', () => {
+      result.assertNoFileContent('Cargo.toml', 'rdkafka');
+    });
+
+    it('should not include Kafka endpoints in OpenAPI documentation', () => {
+      result.assertNoFileContent('server/src/openapi.rs', 'handlers::kafka');
+    });
+  });
 });

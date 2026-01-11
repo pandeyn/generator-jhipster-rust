@@ -50,6 +50,7 @@ The generated Rust server provides a complete REST API implementation with authe
 | **Email**                | SMTP email service           | ✅     | Lettre + Tera templates                    |
 |                          | Account activation           | ✅     | Email verification for registration        |
 |                          | Password reset               | ✅     | Forgot password flow with email            |
+| **Message Brokers**      | Apache Kafka                 | ✅     | High-throughput async messaging (rdkafka)  |
 | **Developer Experience** | Hot reload (cargo-watch)     | ✅     | Auto-rebuild on file changes               |
 |                          | Environment config (.env)    | ✅     | Flexible configuration                     |
 |                          | Health endpoints             | ✅     | /api/health, /management/info              |
@@ -89,6 +90,10 @@ As this is a [JHipster](https://www.jhipster.tech/) blueprint, we expect you hav
 ## Testing
 
 - [Testing Guide](docs/TESTING.md) - Unit tests, integration tests, and Cypress E2E testing
+
+## Message Brokers
+
+- [Apache Kafka Guide](docs/KAFKA.md) - High-throughput messaging with rdkafka, REST endpoints, and Docker setup
 
 ## Deployment
 
@@ -267,7 +272,7 @@ The following features from the base JHipster generator are planned for future v
 | Feature               | Notes                                                    |
 | --------------------- | -------------------------------------------------------- |
 | Cloud Configuration   | Spring Cloud Config equivalent for remote config loading |
-| Message Brokers       | Kafka/Pulsar integration via message binders             |
+| Pulsar Message Broker | Apache Pulsar integration (Kafka is already supported)   |
 | Distributed Tracing   | Zipkin/Jaeger integration for request tracing            |
 | Caching (Redis)       | Redis dependencies or caching layer                      |
 | Gateway Routing Logic | Dynamic route management or request forwarding           |

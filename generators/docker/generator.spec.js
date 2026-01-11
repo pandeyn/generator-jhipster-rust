@@ -86,4 +86,64 @@ describe('SubGenerator docker of rust JHipster blueprint', () => {
       result.assertNoFileContent('docker/app.yml', 'CONSUL_HOST');
     });
   });
+
+  describe('monolith with kafka', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'kafkaApp',
+          applicationType: 'monolith',
+          skipClient: true,
+          messageBroker: 'kafka',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Kafka docker files', () => {
+      result.assertFile('docker/kafka.yml');
+    });
+
+    it('should include Kafka service configuration', () => {
+      result.assertFileContent('docker/kafka.yml', 'confluentinc/cp-kafka');
+      result.assertFileContent('docker/kafka.yml', 'KAFKA_NODE_ID');
+      result.assertFileContent('docker/kafka.yml', 'kafka-ui');
+    });
+  });
+
+  describe('monolith without kafka', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noKafkaApp',
+          applicationType: 'monolith',
+          skipClient: true,
+          messageBroker: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Kafka docker files', () => {
+      result.assertNoFile('docker/kafka.yml');
+    });
+  });
 });

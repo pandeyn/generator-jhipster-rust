@@ -1,0 +1,242 @@
+//! Kafka REST API handlers for <%= baseName %>
+//!
+//! This module provides REST endpoints for interacting with Apache Kafka,
+//! including publishing messages and consuming via Server-Sent Events (SSE).
+
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{
+        sse::{Event, Sse},
+        IntoResponse, Response,
+    },
+    routing::{get, post},
+    Json, Router,
+};
+use futures::stream::Stream;
+use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
+<%_ if (enableSwaggerCodegen) { _%>
+use utoipa::ToSchema;
+<%_ } _%>
+
+use crate::AppState;
+
+/// Request body for publishing a message to Kafka
+<%_ if (enableSwaggerCodegen) { _%>
+#[derive(Debug, Deserialize, ToSchema)]
+<%_ } else { _%>
+#[derive(Debug, Deserialize)]
+<%_ } _%>
+pub struct PublishRequest {
+    /// The message payload to publish
+    pub message: String,
+    /// Optional key for the message (used for partitioning)
+    #[serde(default)]
+    pub key: Option<String>,
+    /// Optional topic to publish to (defaults to the configured default topic)
+    #[serde(default)]
+    pub topic: Option<String>,
+}
+
+/// Response after publishing a message
+<%_ if (enableSwaggerCodegen) { _%>
+#[derive(Debug, Serialize, ToSchema)]
+<%_ } else { _%>
+#[derive(Debug, Serialize)]
+<%_ } _%>
+pub struct PublishResponse {
+    /// Whether the message was published successfully
+    pub success: bool,
+    /// The topic the message was published to
+    pub topic: String,
+    /// Optional error message if the publish failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Kafka status information
+<%_ if (enableSwaggerCodegen) { _%>
+#[derive(Debug, Serialize, ToSchema)]
+<%_ } else { _%>
+#[derive(Debug, Serialize)]
+<%_ } _%>
+pub struct KafkaStatus {
+    /// Whether Kafka is enabled
+    pub enabled: bool,
+    /// The default topic name
+    pub default_topic: String,
+    /// The consumer group ID
+    pub group_id: String,
+}
+
+/// Create routes for Kafka endpoints
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/publish", post(publish_message))
+        .route("/consume", get(consume_messages))
+        .route("/status", get(get_status))
+}
+
+/// Publish a message to Kafka
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    post,
+    path = "/api/<%= dasherizedBaseName %>-kafka/publish",
+    request_body = PublishRequest,
+    responses(
+        (status = 200, description = "Message published successfully", body = PublishResponse),
+        (status = 500, description = "Failed to publish message", body = PublishResponse),
+        (status = 503, description = "Kafka producer not available")
+    ),
+    tag = "<%= dasherizedBaseName %>-kafka"
+)]
+<%_ } _%>
+pub async fn publish_message(
+    State(state): State<AppState>,
+    Json(request): Json<PublishRequest>,
+) -> Response {
+    let producer = match &state.kafka_producer {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(PublishResponse {
+                    success: false,
+                    topic: String::new(),
+                    error: Some("Kafka producer not available".to_string()),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let topic = request
+        .topic
+        .as_deref()
+        .unwrap_or(producer.default_topic());
+
+    let result = match &request.key {
+        Some(key) => producer.send_to_topic(topic, key, &request.message).await,
+        None => producer.send_to_topic_without_key(topic, &request.message).await,
+    };
+
+    match result {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(PublishResponse {
+                success: true,
+                topic: topic.to_string(),
+                error: None,
+            }),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, topic = topic, "Failed to publish message to Kafka");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(PublishResponse {
+                    success: false,
+                    topic: topic.to_string(),
+                    error: Some(e.to_string()),
+                }),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Consume messages from Kafka via Server-Sent Events (SSE)
+///
+/// This endpoint streams messages from Kafka to the client using SSE.
+/// The client will receive messages as they are consumed from the Kafka topic.
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/<%= dasherizedBaseName %>-kafka/consume",
+    responses(
+        (status = 200, description = "SSE stream of Kafka messages"),
+        (status = 503, description = "Kafka consumer not available")
+    ),
+    tag = "<%= dasherizedBaseName %>-kafka"
+)]
+<%_ } _%>
+pub async fn consume_messages(
+    State(state): State<AppState>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    let consumer = match &state.kafka_consumer {
+        Some(c) => c,
+        None => {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+
+    let receiver = consumer.get_receiver();
+    let stream = BroadcastStream::new(receiver);
+
+    let sse_stream = stream.filter_map(|result| {
+        match result {
+            Ok(message) => {
+                let data = serde_json::json!({
+                    "topic": message.topic,
+                    "partition": message.partition,
+                    "offset": message.offset,
+                    "key": message.key,
+                    "payload": message.payload,
+                    "timestamp": message.timestamp,
+                });
+                Some(Ok(Event::default().data(data.to_string())))
+            }
+            Err(_) => None, // Skip lagged messages
+        }
+    });
+
+    Ok(Sse::new(sse_stream))
+}
+
+/// Get Kafka status information
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    get,
+    path = "/api/<%= dasherizedBaseName %>-kafka/status",
+    responses(
+        (status = 200, description = "Kafka status information", body = KafkaStatus)
+    ),
+    tag = "<%= dasherizedBaseName %>-kafka"
+)]
+<%_ } _%>
+pub async fn get_status(State(state): State<AppState>) -> Json<KafkaStatus> {
+    let (enabled, default_topic, group_id) = match (&state.kafka_producer, &state.kafka_consumer) {
+        (Some(producer), Some(consumer)) => (
+            true,
+            producer.default_topic().to_string(),
+            consumer.group_id().to_string(),
+        ),
+        (Some(producer), None) => (
+            true,
+            producer.default_topic().to_string(),
+            String::new(),
+        ),
+        (None, Some(consumer)) => (
+            true,
+            consumer.default_topic().to_string(),
+            consumer.group_id().to_string(),
+        ),
+        (None, None) => (false, String::new(), String::new()),
+    };
+
+    Json(KafkaStatus {
+        enabled,
+        default_topic,
+        group_id,
+    })
+}
+
+<%_ if (enableSwaggerCodegen) { _%>
+// OpenAPI documentation helpers
+pub use publish_message as publish;
+pub use consume_messages as consume;
+pub use get_status as status;
+<%_ } _%>

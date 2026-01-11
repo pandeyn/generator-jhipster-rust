@@ -32,6 +32,9 @@ use security::OAuth2Validator;
 <%_ if (serviceDiscoveryConsul) { _%>
 use services::ConsulService;
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+use services::{KafkaProducer, KafkaConsumer};
+<%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
 use db::MongoPool;
 <%_ } else { _%>
@@ -40,7 +43,7 @@ use db::connection::DbPool;
 <%_ if (enableEmail) { _%>
 use services::EmailService;
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul) { _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka) { _%>
 use std::sync::Arc;
 <%_ } _%>
 
@@ -66,5 +69,13 @@ pub struct AppState {
     /// Consul service for service registration and discovery
     /// None if Consul is not configured or unavailable
     pub consul_service: Option<Arc<ConsulService>>,
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+    /// Kafka producer for publishing messages
+    /// None if Kafka is disabled or unavailable
+    pub kafka_producer: Option<Arc<KafkaProducer>>,
+    /// Kafka consumer for consuming messages
+    /// None if Kafka is disabled or unavailable
+    pub kafka_consumer: Option<Arc<KafkaConsumer>>,
 <%_ } _%>
 }

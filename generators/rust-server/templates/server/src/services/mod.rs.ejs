@@ -23,4 +23,11 @@ mod consul_service;
 pub use consul_service::{ConsulService, ConsulError, ServiceInstance};
 <%_ } _%>
 
+<%_ if (messageBrokerKafka) { _%>
+mod kafka_producer;
+mod kafka_consumer;
+pub use kafka_producer::{KafkaProducer, KafkaProducerError};
+pub use kafka_consumer::{KafkaConsumer, KafkaConsumerError, KafkaMessage};
+<%_ } _%>
+
 // jhipster-needle-add-entity-service - JHipster will add entity services here

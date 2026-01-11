@@ -1,0 +1,129 @@
+//! Kafka producer service for <%= baseName %>
+//!
+//! This module provides a Kafka producer for publishing messages to Kafka topics
+//! using the rdkafka library.
+
+use rdkafka::config::ClientConfig;
+use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::util::Timeout;
+use std::time::Duration;
+use thiserror::Error;
+
+use crate::config::KafkaConfig;
+
+/// Errors that can occur during Kafka producer operations
+#[derive(Error, Debug)]
+pub enum KafkaProducerError {
+    #[error("Failed to create Kafka producer: {0}")]
+    CreationError(String),
+    #[error("Failed to send message to Kafka: {0}")]
+    SendError(String),
+    #[error("Kafka producer is not enabled")]
+    NotEnabled,
+}
+
+/// Kafka producer service for publishing messages
+#[derive(Clone)]
+pub struct KafkaProducer {
+    producer: FutureProducer,
+    config: KafkaConfig,
+}
+
+impl KafkaProducer {
+    /// Create a new Kafka producer with the given configuration
+    pub fn new(config: KafkaConfig) -> Result<Self, KafkaProducerError> {
+        if !config.enabled {
+            return Err(KafkaProducerError::NotEnabled);
+        }
+
+        let mut client_config = ClientConfig::new();
+        client_config
+            .set("bootstrap.servers", &config.bootstrap_servers)
+            .set("message.timeout.ms", config.message_timeout_ms.to_string())
+            .set("security.protocol", &config.security_protocol);
+
+        // Add SASL configuration if provided
+        if let Some(ref mechanism) = config.sasl_mechanism {
+            client_config.set("sasl.mechanism", mechanism);
+        }
+        if let Some(ref username) = config.sasl_username {
+            client_config.set("sasl.username", username);
+        }
+        if let Some(ref password) = config.sasl_password {
+            client_config.set("sasl.password", password);
+        }
+
+        let producer: FutureProducer = client_config
+            .create()
+            .map_err(|e| KafkaProducerError::CreationError(e.to_string()))?;
+
+        Ok(Self { producer, config })
+    }
+
+    /// Send a message to the default topic
+    pub async fn send(&self, key: &str, payload: &str) -> Result<(), KafkaProducerError> {
+        self.send_to_topic(&self.config.default_topic, key, payload)
+            .await
+    }
+
+    /// Send a message to a specific topic
+    pub async fn send_to_topic(
+        &self,
+        topic: &str,
+        key: &str,
+        payload: &str,
+    ) -> Result<(), KafkaProducerError> {
+        let record = FutureRecord::to(topic).key(key).payload(payload);
+
+        let timeout = Timeout::After(Duration::from_millis(self.config.message_timeout_ms as u64));
+
+        self.producer
+            .send(record, timeout)
+            .await
+            .map_err(|(e, _)| KafkaProducerError::SendError(e.to_string()))?;
+
+        tracing::debug!(
+            topic = topic,
+            key = key,
+            "Message sent to Kafka successfully"
+        );
+
+        Ok(())
+    }
+
+    /// Send a message without a key to the default topic
+    pub async fn send_without_key(&self, payload: &str) -> Result<(), KafkaProducerError> {
+        self.send_to_topic_without_key(&self.config.default_topic, payload)
+            .await
+    }
+
+    /// Send a message without a key to a specific topic
+    pub async fn send_to_topic_without_key(
+        &self,
+        topic: &str,
+        payload: &str,
+    ) -> Result<(), KafkaProducerError> {
+        let record: FutureRecord<'_, str, str> = FutureRecord::to(topic).payload(payload);
+
+        let timeout = Timeout::After(Duration::from_millis(self.config.message_timeout_ms as u64));
+
+        self.producer
+            .send(record, timeout)
+            .await
+            .map_err(|(e, _)| KafkaProducerError::SendError(e.to_string()))?;
+
+        tracing::debug!(topic = topic, "Message sent to Kafka successfully");
+
+        Ok(())
+    }
+
+    /// Get the default topic name
+    pub fn default_topic(&self) -> &str {
+        &self.config.default_topic
+    }
+
+    /// Check if the producer is enabled
+    pub fn is_enabled(&self) -> bool {
+        self.config.enabled
+    }
+}

@@ -29,6 +29,11 @@ export default class extends BaseApplicationGenerator {
         const isMicroservicesApp = appType === 'microservice' || appType === 'gateway';
         application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
         application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
+
+        // Set message broker flags for docker templates
+        const messageBroker = this.jhipsterConfig.messageBroker || 'no';
+        application.messageBrokerKafka = messageBroker === 'kafka';
+        application.messageBrokerAny = messageBroker !== 'no';
       },
     });
   }
@@ -70,6 +75,12 @@ export default class extends BaseApplicationGenerator {
                 condition: ctx => ctx.serviceDiscoveryConsul,
                 path: 'docker/',
                 templates: ['consul.yml', 'central-server-config/application.yml'],
+              },
+              // Kafka message broker files
+              {
+                condition: ctx => ctx.messageBrokerKafka,
+                path: 'docker/',
+                templates: ['kafka.yml'],
               },
             ],
             files: [{ templates: ['template-file-docker'] }],

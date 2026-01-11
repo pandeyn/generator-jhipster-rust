@@ -123,6 +123,17 @@ export const serverFiles = {
       path: SERVER_RUST_DIR,
       templates: ['src/config/consul_config.rs', 'src/services/consul_service.rs'],
     },
+    {
+      // Kafka message broker files
+      condition: generator => generator.messageBrokerKafka,
+      path: SERVER_RUST_DIR,
+      templates: [
+        'src/config/kafka_config.rs',
+        'src/services/kafka_producer.rs',
+        'src/services/kafka_consumer.rs',
+        'src/handlers/kafka.rs',
+      ],
+    },
   ],
   migrations: [
     {
@@ -192,6 +203,11 @@ export const serverFiles = {
       // Consul service discovery documentation
       condition: generator => generator.serviceDiscoveryConsul,
       templates: ['docs/CONSUL.md'],
+    },
+    {
+      // Kafka message broker documentation
+      condition: generator => generator.messageBrokerKafka,
+      templates: ['docs/KAFKA.md'],
     },
   ],
 };

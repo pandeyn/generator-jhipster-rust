@@ -70,6 +70,14 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 urlencoding = "2.1"
 <%_ } _%>
 <%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+# Kafka message broker (rdkafka - librdkafka wrapper)
+rdkafka = { version = "0.36", features = ["cmake-build", "tokio"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+<%_ if (!devDatabaseTypeMongodb) { _%>
+futures = "0.3"
+<%_ } _%>
+<%_ } _%>
 
 # Tarpaulin configuration for code coverage
 # Run with: cargo tarpaulin --out Html --output-dir coverage

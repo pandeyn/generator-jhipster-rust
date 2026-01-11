@@ -315,6 +315,13 @@ export default class extends BaseApplicationGenerator {
         application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
         application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
       },
+      rustMessageBrokerConfig({ application }) {
+        // Set message broker flags for Kafka integration
+        const messageBroker = this.jhipsterConfig.messageBroker || 'no';
+        application.messageBroker = messageBroker;
+        application.messageBrokerKafka = messageBroker === 'kafka';
+        application.messageBrokerAny = messageBroker !== 'no';
+      },
       async source({ source }) {
         // Helper to add entity to models/mod.rs
         source.addEntityToRustModels = ({ entityFileName }) => {

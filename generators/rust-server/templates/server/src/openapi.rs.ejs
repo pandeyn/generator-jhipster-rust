@@ -52,6 +52,12 @@ use crate::handlers;
         handlers::user::update_user_from_body,
         handlers::user::delete_user,
         handlers::user::get_authorities,
+<%_ if (messageBrokerKafka) { _%>
+        // Kafka endpoints
+        handlers::kafka::publish_message,
+        handlers::kafka::consume_messages,
+        handlers::kafka::get_status,
+<%_ } _%>
         // jhipster-needle-add-openapi-path - JHipster will add OpenAPI paths here
     ),
     components(
@@ -79,6 +85,12 @@ use crate::handlers;
             HealthStatus,
             HealthComponent,
             HealthResponse,
+<%_ if (messageBrokerKafka) { _%>
+            // Kafka schemas
+            handlers::kafka::PublishRequest,
+            handlers::kafka::PublishResponse,
+            handlers::kafka::KafkaStatus,
+<%_ } _%>
             // jhipster-needle-add-openapi-schema - JHipster will add OpenAPI schemas here
         )
     ),
@@ -94,6 +106,9 @@ use crate::handlers;
         (name = "oauth2", description = "OAuth2/OIDC authentication endpoints"),
 <%_ } _%>
         (name = "user-management", description = "User administration endpoints"),
+<%_ if (messageBrokerKafka) { _%>
+        (name = "<%= dasherizedBaseName %>-kafka", description = "Kafka message broker endpoints"),
+<%_ } _%>
         // jhipster-needle-add-openapi-tag - JHipster will add OpenAPI tags here
     )
 )]

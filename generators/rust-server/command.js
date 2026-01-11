@@ -72,5 +72,20 @@ export default asCommand({
       }),
       default: false,
     },
+    messageBroker: {
+      cli: {
+        type: String,
+        description: 'Message broker for asynchronous messaging',
+      },
+      prompt: {
+        type: 'list',
+        message: `Would you like to use a ${chalk.yellow('*message broker*')} for asynchronous messaging?`,
+      },
+      choices: [
+        { value: 'no', name: 'No message broker' },
+        { value: 'kafka', name: 'Apache Kafka (high-throughput distributed messaging)' },
+      ],
+      default: 'no',
+    },
   },
 });
