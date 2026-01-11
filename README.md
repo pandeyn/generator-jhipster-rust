@@ -15,45 +15,46 @@ The generated Rust server provides a complete REST API implementation with authe
 
 ## Implemented Features
 
-| Category                 | Feature                      | Status | Notes                                      |
-| ------------------------ | ---------------------------- | ------ | ------------------------------------------ |
-| **Backend Framework**    | Axum web framework           | ✅     | Async HTTP server with Tower middleware    |
-|                          | Tokio async runtime          | ✅     | High-performance async I/O                 |
-|                          | Structured logging (tracing) | ✅     | Request tracing and structured logs        |
-| **Databases**            | SQLite                       | ✅     | Default option, no external server needed  |
-|                          | PostgreSQL                   | ✅     | Full support with Diesel ORM               |
-|                          | MySQL                        | ✅     | Full support with Diesel ORM               |
-|                          | MongoDB                      | ✅     | Native driver with ObjectId, embedded docs |
-| **Authentication**       | JWT (JSON Web Tokens)        | ✅     | Stateless auth with configurable expiry    |
-|                          | OAuth2/OIDC (Keycloak)       | ✅     | Full OIDC flow with JWKS validation        |
-|                          | Role-based access control    | ✅     | ROLE_USER, ROLE_ADMIN authorities          |
-| **User Management**      | User CRUD operations         | ✅     | Create, read, update, delete users         |
-|                          | Password hashing (Argon2)    | ✅     | Secure password storage                    |
-|                          | Authority management         | ✅     | Assign/remove user roles                   |
-| **Entity Generation**    | Basic CRUD endpoints         | ✅     | GET, POST, PUT, DELETE for entities        |
-|                          | Field types & validations    | ✅     | String, Integer, Boolean, Date, Blob, etc. |
-|                          | Pagination & sorting         | ✅     | Page-based results with sort params        |
-|                          | Relationships                | ✅     | ManyToOne, OneToMany, OneToOne, ManyToMany |
-| **API Documentation**    | Swagger UI                   | ✅     | Interactive API explorer at /swagger-ui    |
-|                          | Scalar UI                    | ✅     | Modern API docs at /scalar                 |
-|                          | OpenAPI 3.0 spec             | ✅     | JSON spec at /api-docs/openapi.json        |
-| **Frontend**             | Angular                      | ✅     | Full JHipster Angular client               |
-|                          | React                        | ✅     | Full JHipster React client                 |
-|                          | Vue                          | ✅     | Full JHipster Vue client                   |
-| **Deployment**           | Docker support               | ✅     | Multi-stage Dockerfile                     |
-|                          | Docker Compose               | ✅     | Full stack with DB containers              |
-|                          | Monolithic mode              | ✅     | Serve SPA from Rust backend                |
-|                          | Microservice mode            | ✅     | API-only service for microservices arch    |
-|                          | Consul Service Discovery     | ✅     | Service registration, discovery, KV config |
-| **Testing**              | Rust unit tests              | ✅     | Service and handler tests                  |
-|                          | Cypress E2E tests            | ✅     | End-to-end UI testing                      |
-| **Email**                | SMTP email service           | ✅     | Lettre + Tera templates                    |
-|                          | Account activation           | ✅     | Email verification for registration        |
-|                          | Password reset               | ✅     | Forgot password flow with email            |
-| **Message Brokers**      | Apache Kafka                 | ✅     | High-throughput async messaging (rdkafka)  |
-| **Developer Experience** | Hot reload (cargo-watch)     | ✅     | Auto-rebuild on file changes               |
-|                          | Environment config (.env)    | ✅     | Flexible configuration                     |
-|                          | Health endpoints             | ✅     | /api/health, /management/info              |
+| Category                 | Feature                      | Status | Notes                                        |
+| ------------------------ | ---------------------------- | ------ | -------------------------------------------- |
+| **Backend Framework**    | Axum web framework           | ✅     | Async HTTP server with Tower middleware      |
+|                          | Tokio async runtime          | ✅     | High-performance async I/O                   |
+|                          | Structured logging (tracing) | ✅     | Request tracing and structured logs          |
+| **Databases**            | SQLite                       | ✅     | Default option, no external server needed    |
+|                          | PostgreSQL                   | ✅     | Full support with Diesel ORM                 |
+|                          | MySQL                        | ✅     | Full support with Diesel ORM                 |
+|                          | MongoDB                      | ✅     | Native driver with ObjectId, embedded docs   |
+| **Authentication**       | JWT (JSON Web Tokens)        | ✅     | Stateless auth with configurable expiry      |
+|                          | OAuth2/OIDC (Keycloak)       | ✅     | Full OIDC flow with JWKS validation          |
+|                          | Role-based access control    | ✅     | ROLE_USER, ROLE_ADMIN authorities            |
+| **User Management**      | User CRUD operations         | ✅     | Create, read, update, delete users           |
+|                          | Password hashing (Argon2)    | ✅     | Secure password storage                      |
+|                          | Authority management         | ✅     | Assign/remove user roles                     |
+| **Entity Generation**    | Basic CRUD endpoints         | ✅     | GET, POST, PUT, DELETE for entities          |
+|                          | Field types & validations    | ✅     | String, Integer, Boolean, Date, Blob, etc.   |
+|                          | Pagination & sorting         | ✅     | Page-based results with sort params          |
+|                          | Relationships                | ✅     | ManyToOne, OneToMany, OneToOne, ManyToMany   |
+| **API Documentation**    | Swagger UI                   | ✅     | Interactive API explorer at /swagger-ui      |
+|                          | Scalar UI                    | ✅     | Modern API docs at /scalar                   |
+|                          | OpenAPI 3.0 spec             | ✅     | JSON spec at /api-docs/openapi.json          |
+| **Frontend**             | Angular                      | ✅     | Full JHipster Angular client                 |
+|                          | React                        | ✅     | Full JHipster React client                   |
+|                          | Vue                          | ✅     | Full JHipster Vue client                     |
+| **Deployment**           | Docker support               | ✅     | Multi-stage Dockerfile                       |
+|                          | Docker Compose               | ✅     | Full stack with DB containers                |
+|                          | Monolithic mode              | ✅     | Serve SPA from Rust backend                  |
+|                          | Microservice mode            | ✅     | API-only service for microservices arch      |
+|                          | Consul Service Discovery     | ✅     | Service registration, discovery, KV config   |
+| **Testing**              | Rust unit tests              | ✅     | Service and handler tests                    |
+|                          | Cypress E2E tests            | ✅     | End-to-end UI testing                        |
+| **Email**                | SMTP email service           | ✅     | Lettre + Tera templates                      |
+|                          | Account activation           | ✅     | Email verification for registration          |
+|                          | Password reset               | ✅     | Forgot password flow with email              |
+| **Message Brokers**      | Apache Kafka                 | ✅     | High-throughput async messaging (rdkafka)    |
+| **Monitoring**           | Prometheus metrics           | ✅     | HTTP request metrics with Grafana dashboards |
+| **Developer Experience** | Hot reload (cargo-watch)     | ✅     | Auto-rebuild on file changes                 |
+|                          | Environment config (.env)    | ✅     | Flexible configuration                       |
+|                          | Health endpoints             | ✅     | /api/health, /management/info                |
 
 # Prerequisites
 
@@ -94,6 +95,10 @@ As this is a [JHipster](https://www.jhipster.tech/) blueprint, we expect you hav
 ## Message Brokers
 
 - [Apache Kafka Guide](docs/KAFKA.md) - High-throughput messaging with rdkafka, REST endpoints, and Docker setup
+
+## Monitoring
+
+- [Prometheus Monitoring](docs/PROMETHEUS.md) - Metrics collection with Prometheus and Grafana dashboards
 
 ## Deployment
 
@@ -282,7 +287,6 @@ The following features from the base JHipster generator are planned for future v
 | Feature              | Notes                                              |
 | -------------------- | -------------------------------------------------- |
 | WebSocket Support    | tokio-tungstenite or STOMP messaging               |
-| Prometheus Metrics   | metrics collection or Grafana dashboards           |
 | Additional Databases | Cassandra, Neo4j, Couchbase, MSSQL, Oracle support |
 | Elasticsearch        | full-text search integration                       |
 | Helm Charts          | Helm chart generation for Kubernetes               |

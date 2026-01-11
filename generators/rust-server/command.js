@@ -87,5 +87,20 @@ export default asCommand({
       ],
       default: 'no',
     },
+    monitoring: {
+      cli: {
+        type: String,
+        description: 'Monitoring solution for metrics collection',
+      },
+      prompt: {
+        type: 'list',
+        message: `Would you like to enable ${chalk.yellow('*monitoring*')} for your application?`,
+      },
+      choices: [
+        { value: 'no', name: 'No monitoring' },
+        { value: 'prometheus', name: 'Prometheus (metrics collection with Grafana dashboards)' },
+      ],
+      default: 'no',
+    },
   },
 });

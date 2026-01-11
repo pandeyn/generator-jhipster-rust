@@ -1,0 +1,33 @@
+//! Prometheus metrics configuration for <%= baseName %>
+//!
+//! This module provides configuration for Prometheus metrics collection and export.
+//! Metrics are exposed at the `/management/prometheus` endpoint.
+
+pub use axum_prometheus::PrometheusMetricLayer;
+pub use axum_prometheus::Handle as MetricsHandle;
+
+/// Configuration for Prometheus metrics
+#[derive(Debug, Clone)]
+pub struct MetricsConfig {
+    /// Whether metrics collection is enabled
+    pub enabled: bool,
+    /// The path where metrics are exposed (default: /management/prometheus)
+    pub metrics_path: String,
+}
+
+impl MetricsConfig {
+    /// Load metrics configuration from environment variables
+    ///
+    /// Environment variables:
+    /// - `METRICS_ENABLED`: Enable/disable metrics (default: true)
+    /// - `METRICS_PATH`: Path for metrics endpoint (default: /management/prometheus)
+    pub fn from_env() -> Self {
+        Self {
+            enabled: std::env::var("METRICS_ENABLED")
+                .map(|v| v.to_lowercase() == "true" || v == "1")
+                .unwrap_or(true),
+            metrics_path: std::env::var("METRICS_PATH")
+                .unwrap_or_else(|_| "/management/prometheus".to_string()),
+        }
+    }
+}

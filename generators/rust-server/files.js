@@ -134,6 +134,12 @@ export const serverFiles = {
         'src/handlers/kafka.rs',
       ],
     },
+    {
+      // Prometheus metrics files
+      condition: generator => generator.monitoringPrometheus,
+      path: SERVER_RUST_DIR,
+      templates: ['src/config/metrics_config.rs'],
+    },
   ],
   migrations: [
     {
@@ -208,6 +214,11 @@ export const serverFiles = {
       // Kafka message broker documentation
       condition: generator => generator.messageBrokerKafka,
       templates: ['docs/KAFKA.md'],
+    },
+    {
+      // Prometheus monitoring documentation
+      condition: generator => generator.monitoringPrometheus,
+      templates: ['docs/PROMETHEUS.md'],
     },
   ],
 };

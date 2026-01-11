@@ -322,6 +322,13 @@ export default class extends BaseApplicationGenerator {
         application.messageBrokerKafka = messageBroker === 'kafka';
         application.messageBrokerAny = messageBroker !== 'no';
       },
+      rustMonitoringConfig({ application }) {
+        // Set monitoring flags for Prometheus metrics integration
+        const monitoring = this.jhipsterConfig.monitoring || 'no';
+        application.monitoring = monitoring;
+        application.monitoringPrometheus = monitoring === 'prometheus';
+        application.monitoringAny = monitoring !== 'no';
+      },
       async source({ source }) {
         // Helper to add entity to models/mod.rs
         source.addEntityToRustModels = ({ entityFileName }) => {

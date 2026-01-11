@@ -64,6 +64,11 @@ tokio-stream.workspace = true
 futures.workspace = true
 <%_ } _%>
 <%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+axum-prometheus.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+<%_ } _%>
 
 [dev-dependencies]
 axum-test = "14"

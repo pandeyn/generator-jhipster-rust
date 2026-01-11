@@ -78,6 +78,12 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"
 <%_ } _%>
 <%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+# Prometheus metrics
+axum-prometheus = "0.7"
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.16", default-features = false, features = ["http-listener"] }
+<%_ } _%>
 
 # Tarpaulin configuration for code coverage
 # Run with: cargo tarpaulin --out Html --output-dir coverage

@@ -1,0 +1,39 @@
+# Alerting rules for <%= baseName %>
+# For more information, see: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+
+groups:
+  - name: <%= baseName.toLowerCase() %>_alerts
+    rules:
+      # Alert when the application is down
+      - alert: ApplicationDown
+        expr: up{job="<%= baseName.toLowerCase() %>"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "<%= baseName %> application is down"
+          description: "The <%= baseName %> application has been down for more than 1 minute."
+
+      # Alert on high request latency (p95 > 1s)
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, sum(rate(axum_http_requests_duration_seconds_bucket{job="<%= baseName.toLowerCase() %>"}[5m])) by (le, method, path)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency detected"
+          description: "95th percentile request latency is above 1 second for {{ $labels.method }} {{ $labels.path }}"
+
+      # Alert on high error rate (> 5% of requests returning 5xx)
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(axum_http_requests_total{job="<%= baseName.toLowerCase() %>", status=~"5.."}[5m]))
+          /
+          sum(rate(axum_http_requests_total{job="<%= baseName.toLowerCase() %>"}[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "More than 5% of requests are returning 5xx errors"

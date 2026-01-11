@@ -34,6 +34,12 @@ export default class extends BaseApplicationGenerator {
         const messageBroker = this.jhipsterConfig.messageBroker || 'no';
         application.messageBrokerKafka = messageBroker === 'kafka';
         application.messageBrokerAny = messageBroker !== 'no';
+
+        // Set monitoring flags for docker templates
+        const monitoring = this.jhipsterConfig.monitoring || 'no';
+        application.monitoring = monitoring;
+        application.monitoringPrometheus = monitoring === 'prometheus';
+        application.monitoringAny = monitoring !== 'no';
       },
     });
   }
@@ -81,6 +87,19 @@ export default class extends BaseApplicationGenerator {
                 condition: ctx => ctx.messageBrokerKafka,
                 path: 'docker/',
                 templates: ['kafka.yml'],
+              },
+              // Prometheus monitoring files
+              {
+                condition: ctx => ctx.monitoringPrometheus,
+                path: 'docker/',
+                templates: [
+                  'monitoring.yml',
+                  'prometheus-conf/prometheus.yml',
+                  'prometheus-conf/alert_rules.yml',
+                  'grafana/provisioning/datasources/datasource.yml',
+                  'grafana/provisioning/dashboards/dashboards.yml',
+                  'grafana/provisioning/dashboards/application-dashboard.json',
+                ],
               },
             ],
             files: [{ templates: ['template-file-docker'] }],

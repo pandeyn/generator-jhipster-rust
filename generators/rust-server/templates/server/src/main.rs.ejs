@@ -13,6 +13,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
 <%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+use <%= rustCrateName %>::config::{MetricsConfig, PrometheusMetricLayer};
+<%_ } _%>
 
 use <%= rustCrateName %>::config::AppConfig;
 <%_ if (enableSwaggerCodegen) { _%>
@@ -213,6 +216,19 @@ async fn main() {
     };
 
 <%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+    // Initialize Prometheus metrics
+    let metrics_config = MetricsConfig::from_env();
+    let metrics_handle = if metrics_config.enabled {
+        tracing::info!("Prometheus metrics enabled at {}", metrics_config.metrics_path);
+        let (prometheus_layer, handle) = PrometheusMetricLayer::pair();
+        Some((prometheus_layer, handle))
+    } else {
+        tracing::info!("Prometheus metrics disabled (METRICS_ENABLED=false)");
+        None
+    };
+
+<%_ } _%>
     // Build CORS layer
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -244,10 +260,13 @@ async fn main() {
     };
 
     // Build application routes
-<%_ if (enableStaticHosting) { _%>
+<%_ if (enableStaticHosting || monitoringPrometheus) { _%>
     let mut app = Router::new()
 <%_ } else { _%>
     let app = Router::new()
+        .route("/", get(|| async { "Welcome to <%= baseName %>!" }))
+<%_ } _%>
+<%_ if (!enableStaticHosting && monitoringPrometheus) { _%>
         .route("/", get(|| async { "Welcome to <%= baseName %>!" }))
 <%_ } _%>
         .nest("/api", api_routes(state.clone()))
@@ -266,6 +285,18 @@ async fn main() {
 <%_ } _%>
         .layer(TraceLayer::new_for_http())
         .layer(cors);
+
+<%_ if (monitoringPrometheus) { _%>
+    // Add Prometheus metrics layer and endpoint
+    if let Some((prometheus_layer, metrics_handle)) = metrics_handle {
+        // Add the metrics endpoint at /management/prometheus
+        app = app.route("/management/prometheus", get(move || async move {
+            metrics_handle.render()
+        }));
+        // Add the layer to collect metrics from all routes
+        app = app.layer(prometheus_layer);
+    }
+<%_ } _%>
 
 <%_ if (enableStaticHosting) { _%>
     // Add static file serving if configured
