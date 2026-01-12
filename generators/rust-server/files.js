@@ -163,7 +163,14 @@ export const serverFiles = {
   docs: [
     {
       // Common documentation files for all projects
-      templates: ['docs/DOCKER.md', 'docs/EMAIL_INTEGRATION.md', 'docs/ENTITY_GENERATION.md', 'docs/SECURITY.md', 'docs/TESTING.md'],
+      templates: [
+        'docs/CI_CD.md',
+        'docs/DOCKER.md',
+        'docs/EMAIL_INTEGRATION.md',
+        'docs/ENTITY_GENERATION.md',
+        'docs/SECURITY.md',
+        'docs/TESTING.md',
+      ],
     },
     {
       // OpenAPI documentation (when Swagger enabled)

@@ -8,7 +8,4 @@ export default asCommand({
   configs: {
     ...jhipsterCommand.configs,
   },
-  arguments: {
-    ...jhipsterCommand.arguments,
-  },
 });

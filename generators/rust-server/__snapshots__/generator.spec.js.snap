@@ -50,6 +50,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
   "docker/zipkin.yml": {
     "stateCleared": "modified",
   },
+  "docs/CI_CD.md": {
+    "stateCleared": "modified",
+  },
   "docs/CONSUL.md": {
     "stateCleared": "modified",
   },
@@ -250,6 +253,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "docker/zipkin.yml": {
     "stateCleared": "modified",
   },
+  "docs/CI_CD.md": {
+    "stateCleared": "modified",
+  },
   "docs/CONSUL.md": {
     "stateCleared": "modified",
   },
@@ -447,6 +453,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "docker/zipkin.yml": {
     "stateCleared": "modified",
   },
+  "docs/CI_CD.md": {
+    "stateCleared": "modified",
+  },
   "docs/CONSUL.md": {
     "stateCleared": "modified",
   },
@@ -638,6 +647,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "docker/zipkin.yml": {
     "stateCleared": "modified",
   },
+  "docs/CI_CD.md": {
+    "stateCleared": "modified",
+  },
   "docs/DOCKER.md": {
     "stateCleared": "modified",
   },
@@ -809,6 +821,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith with kaf
     "stateCleared": "modified",
   },
   "docker/swagger-editor.yml": {
+    "stateCleared": "modified",
+  },
+  "docs/CI_CD.md": {
     "stateCleared": "modified",
   },
   "docs/DOCKER.md": {
@@ -999,6 +1014,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "docker/swagger-editor.yml": {
     "stateCleared": "modified",
   },
+  "docs/CI_CD.md": {
+    "stateCleared": "modified",
+  },
   "docs/DOCKER.md": {
     "stateCleared": "modified",
   },
@@ -1170,6 +1188,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succ
     "stateCleared": "modified",
   },
   "docker/swagger-editor.yml": {
+    "stateCleared": "modified",
+  },
+  "docs/CI_CD.md": {
     "stateCleared": "modified",
   },
   "docs/DOCKER.md": {

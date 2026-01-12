@@ -60,7 +60,19 @@ export default class extends CiCdGenerator {
   get [CiCdGenerator.PREPARING]() {
     return this.asPreparingTaskGroup({
       ...super.preparing,
-      async preparingTemplateTask() {},
+      async preparingTemplateTask({ application }) {
+        // Ensure database type flags are set for Rust CI/CD templates
+        const devDbType = application.devDatabaseType || 'sqlite';
+        application.devDatabaseTypeSqlite = devDbType === 'sqlite';
+        application.devDatabaseTypePostgresql = devDbType === 'postgresql';
+        application.devDatabaseTypeMysql = devDbType === 'mysql';
+        application.devDatabaseTypeMongodb = devDbType === 'mongodb';
+
+        // Set docker image default if not provided
+        if (!application.dockerImage) {
+          application.dockerImage = application.baseName;
+        }
+      },
     });
   }
 
@@ -115,14 +127,35 @@ export default class extends CiCdGenerator {
 
   get [CiCdGenerator.WRITING]() {
     return this.asWritingTaskGroup({
-      ...super.writing,
-      async writingTemplateTask({ application }) {
-        await this.writeFiles({
-          sections: {
-            files: [{ templates: ['template-file-ci-cd'] }],
-          },
-          context: application,
-        });
+      async writingRustCiCdTemplates({ application }) {
+        // Generate GitHub Actions workflow (ciCdGithub is set by parent generator based on ciCd array)
+        if (application.ciCdGithub) {
+          await this.writeFiles({
+            sections: {
+              githubActions: [
+                {
+                  path: '.github/workflows/',
+                  templates: ['main.yml'],
+                },
+              ],
+            },
+            context: application,
+          });
+        }
+
+        // Generate GitLab CI configuration (ciCdGitlab is set by parent generator based on ciCd array)
+        if (application.ciCdGitlab) {
+          await this.writeFiles({
+            sections: {
+              gitlabCi: [
+                {
+                  templates: ['.gitlab-ci.yml'],
+                },
+              ],
+            },
+            context: application,
+          });
+        }
       },
     });
   }

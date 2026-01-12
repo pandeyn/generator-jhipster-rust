@@ -972,13 +972,6 @@ mod tests {
         let debug_str = format!("{:?}", request);
         assert!(debug_str.contains("oldpass"));
     }
-<%_ } else { _%>
-    #[test]
-    fn test_oauth2_account_endpoint() {
-        // For OAuth2, the account endpoint returns user info from the token
-        // No local authentication is performed
-        assert!(true);
-    }
 <%_ } _%>
 }
 

@@ -59,6 +59,9 @@ exports[`SubGenerator server of rust JHipster blueprint > run > should succeed 1
   "docker/swagger-editor.yml": {
     "stateCleared": "modified",
   },
+  "docs/CI_CD.md": {
+    "stateCleared": "modified",
+  },
   "docs/DOCKER.md": {
     "stateCleared": "modified",
   },

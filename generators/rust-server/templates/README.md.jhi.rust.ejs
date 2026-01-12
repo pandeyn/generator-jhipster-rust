@@ -5,13 +5,33 @@ This application was generated using JHipster <%= jhipsterVersion %> with the Ru
 ## Technology Stack
 
 - **Web Framework**: [Axum](https://github.com/tokio-rs/axum)
+<%_ if (devDatabaseTypeMongodb) { _%>
+- **Database**: MongoDB with [mongodb](https://docs.rs/mongodb) driver
+<%_ } else { _%>
 - **ORM**: [Diesel](https://diesel.rs/)
 <%_ if (devDatabaseTypePostgresql) { _%>
 - **Database**: PostgreSQL
+<%_ } else if (devDatabaseTypeMysql) { _%>
+- **Database**: MySQL
 <%_ } else { _%>
 - **Database**: SQLite
 <%_ } _%>
+<%_ } _%>
 - **Runtime**: [Tokio](https://tokio.rs/)
+<%_ if (authenticationTypeOauth2) { _%>
+- **Authentication**: OAuth2/OIDC with Keycloak
+<%_ } else { _%>
+- **Authentication**: JWT
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+- **Service Discovery**: Consul
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+- **Message Broker**: Apache Kafka
+<%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+- **Monitoring**: Prometheus metrics
+<%_ } _%>
 
 ## Development
 
@@ -97,6 +117,41 @@ docker run -p 8080:8080 <%= baseName %>
 ```bash
 cargo test
 ```
+<%_ if (devDatabaseTypePostgresql || devDatabaseTypeMysql) { _%>
+
+For database tests, use single-threaded execution to avoid migration conflicts:
+
+```bash
+cargo test -- --test-threads=1
+```
+<%_ } _%>
+
+## CI/CD
+
+Generate CI/CD configuration for your project:
+
+```bash
+jhipster-rust ci-cd
+```
+
+This supports:
+
+- **GitHub Actions** - `.github/workflows/main.yml`
+- **GitLab CI** - `.gitlab-ci.yml`
+
+### Running CI Locally
+
+You can run GitHub Actions locally using [act](https://github.com/nektos/act):
+
+```bash
+# Install act (macOS)
+brew install act
+
+# Run the workflow
+act push --container-architecture linux/amd64
+```
+
+See [CI/CD Documentation](docs/CI_CD.md) for more details.
 
 ## Project Structure
 
@@ -122,3 +177,43 @@ cargo test
         ├── errors/         # Error types
         └── dto/            # Data transfer objects
 ```
+
+## Documentation
+
+Detailed documentation is available in the `docs/` directory:
+
+- [CI/CD Integration](docs/CI_CD.md) - GitHub Actions, GitLab CI, running locally with act
+- [Docker Integration](docs/DOCKER.md) - Container configuration and deployment
+- [Testing Guide](docs/TESTING.md) - Unit tests, integration tests, and test utilities
+- [Security Guide](docs/SECURITY.md) - Authentication, authorization, and security best practices
+- [Entity Generation](docs/ENTITY_GENERATION.md) - Adding new entities to your application
+<%_ if (enableSwaggerCodegen) { _%>
+- [OpenAPI/Swagger](docs/OPENAPI.md) - API documentation and Swagger UI
+<%_ } _%>
+<%_ if (devDatabaseTypePostgresql) { _%>
+- [PostgreSQL Setup](docs/POSTGRES.md) - Database configuration and management
+<%_ } else if (devDatabaseTypeMysql) { _%>
+- [MySQL Setup](docs/MYSQL.md) - Database configuration and management
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+- [MongoDB Setup](docs/MONGODB.md) - Database configuration and management
+<%_ } else { _%>
+- [SQLite Setup](docs/SQLITE.md) - Database configuration and management
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+- [Keycloak Integration](docs/KEYCLOAK.md) - OAuth2/OIDC setup with Keycloak
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+- [Consul Integration](docs/CONSUL.md) - Service discovery and configuration
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+- [Kafka Integration](docs/KAFKA.md) - Message broker setup and usage
+<%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+- [Prometheus Metrics](docs/PROMETHEUS.md) - Monitoring and metrics collection
+<%_ } _%>
+<%_ if (applicationTypeMicroservice) { _%>
+- [Microservices Guide](docs/MICROSERVICES.md) - Microservice architecture and patterns
+<%_ } _%>
+<%_ if (enableStaticHosting) { _%>
+- [Static File Hosting](docs/STATIC_HOSTING.md) - Serving frontend assets
+<%_ } _%>

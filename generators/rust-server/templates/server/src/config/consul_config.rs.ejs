@@ -70,7 +70,7 @@ impl ConsulConfig {
                 .unwrap_or(true),
             acl_token: env::var("CONSUL_ACL_TOKEN").ok(),
             config_key_prefix: env::var("CONSUL_CONFIG_KEY_PREFIX")
-                .unwrap_or_else(|_| format!("config/<%= baseName.toLowerCase() %>")),
+                .unwrap_or_else(|_| "config/<%= baseName.toLowerCase() %>".to_string()),
             // Use localhost by default for health checks - this works when Consul runs on the same host
             // Override with CONSUL_HEALTH_CHECK_HOST when Consul runs remotely or in a different container
             health_check_host: env::var("CONSUL_HEALTH_CHECK_HOST")

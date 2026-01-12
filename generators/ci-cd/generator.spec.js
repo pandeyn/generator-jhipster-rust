@@ -14,6 +14,10 @@ describe('SubGenerator ci-cd of rust JHipster blueprint', () => {
         .withOptions({
           ignoreNeedlesError: true,
         })
+        .withPrompts({
+          ciCd: [],
+          ciCdIntegrations: [],
+        })
         .withJHipsterGenerators()
         .withConfiguredBlueprint()
         .withBlueprintConfig();
