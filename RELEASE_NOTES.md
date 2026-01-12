@@ -1,3 +1,101 @@
+# Release Notes - v0.8.0
+
+## Overview
+
+JHipster Rust Blueprint v0.8.0 introduces comprehensive CI/CD support for automated building, testing, and deployment of generated Rust projects.
+
+## What's New in v0.8.0
+
+### CI/CD Integration
+
+- **GitHub Actions**: Generate `.github/workflows/main.yml` with complete CI pipeline
+- **GitLab CI**: Generate `.gitlab-ci.yml` with equivalent pipeline stages
+- **Local Testing with Act**: Run GitHub Actions locally using [act](https://github.com/nektos/act) for faster iteration
+
+### CI Pipeline Features
+
+The generated CI pipelines include:
+
+| Stage         | Description                                     |
+| ------------- | ----------------------------------------------- |
+| **Build**     | `cargo build --release` with dependency caching |
+| **Lint**      | `cargo clippy -- -D warnings`                   |
+| **Test**      | `cargo test` with database services             |
+| **Docker**    | Optional Docker image build and publish         |
+| **SonarQube** | Optional code quality analysis                  |
+
+### Database-Specific CI Support
+
+- **PostgreSQL**: Service container with proper health checks, single-threaded tests to avoid migration conflicts
+- **MySQL**: Service container with MySQL 8.0, single-threaded test execution
+- **MongoDB**: Service container with MongoDB 7
+- **SQLite**: No external services needed
+
+### Kafka Support in CI
+
+- **CMake Installation**: Automatic installation of cmake for building `rdkafka` native library
+- **Build Dependencies**: Proper handling of librdkafka compilation in CI environment
+
+### Bug Fixes
+
+- **Clippy Warnings**: Fixed "useless format!" lint in `consul_config.rs`
+- **Clippy Warnings**: Removed placeholder `assert!(true)` test in OAuth2 account handler
+- **Test Parallelism**: Fixed PostgreSQL/MySQL duplicate key errors by using `--test-threads=1`
+
+### Documentation
+
+- **CI_CD.md**: New comprehensive documentation included in generated projects
+- **README Updates**: Added CI/CD section and updated features table
+- **Troubleshooting**: Common CI issues and solutions documented
+
+## Usage
+
+Generate CI/CD configuration for your project:
+
+```bash
+jhipster-rust ci-cd
+```
+
+This will prompt you to select:
+
+- GitHub Actions and/or GitLab CI
+- Docker image publishing (optional)
+- SonarQube analysis (optional)
+
+### Running CI Locally with Act
+
+```bash
+# Install act (macOS)
+brew install act
+
+# Run the workflow (Apple Silicon)
+act push --container-architecture linux/amd64
+
+# Run the workflow (Intel/Linux)
+act push
+```
+
+## Upgrade Notes
+
+### Existing Projects
+
+To add CI/CD to an existing project:
+
+1. Navigate to your project directory
+2. Run `jhipster-rust ci-cd`
+3. Select your preferred CI platform(s)
+4. Commit the generated configuration files
+
+### Consul Projects
+
+If you have an existing project with Consul service discovery, regenerate to get the Clippy fix for `consul_config.rs`.
+
+### OAuth2 Projects
+
+If you have an existing OAuth2 project, regenerate to remove the placeholder test in `account.rs` that triggers Clippy warnings.
+
+---
+
 # Release Notes - v0.7.8
 
 ## Overview
