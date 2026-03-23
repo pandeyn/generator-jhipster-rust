@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <%= baseName.toLowerCase() %>-config
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+data:
+  RUST_LOG: "info"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8080"
+<%_ if (devDatabaseTypePostgresql) { _%>
+  DATABASE_URL: "postgres://postgres:postgres@<%= baseName.toLowerCase() %>-postgresql:5432/<%= baseName.toLowerCase() %>"
+<%_ } else if (devDatabaseTypeMysql) { _%>
+  DATABASE_URL: "mysql://root:root@<%= baseName.toLowerCase() %>-mysql:3306/<%= baseName.toLowerCase() %>"
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+  MONGODB_URI: "mongodb://<%= baseName.toLowerCase() %>-mongodb:27017"
+  MONGODB_DATABASE: "<%= baseName.toLowerCase() %>"
+<%_ } else { _%>
+  DATABASE_URL: "sqlite:///app/data/<%= baseName.toLowerCase() %>.db"
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+  CONSUL_HOST: "<%= baseName.toLowerCase() %>-consul"
+  CONSUL_PORT: "8500"
+  CONSUL_SERVICE_NAME: "<%= baseName.toLowerCase() %>"
+  CONSUL_REGISTER_SERVICE: "true"
+  CONSUL_REGISTER_HOST: "<%= baseName.toLowerCase() %>"
+  CONSUL_HEALTH_CHECK_INTERVAL: "10"
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+  KAFKA_BOOTSTRAP_SERVERS: "<%= baseName.toLowerCase() %>-kafka:9092"
+<%_ } _%>

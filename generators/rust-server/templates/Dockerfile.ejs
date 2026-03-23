@@ -9,8 +9,8 @@ FROM node:22-alpine AS client-builder
 WORKDIR /app/client
 
 # Copy package files and install dependencies
-COPY client/package*.json ./
-RUN npm ci --legacy-peer-deps
+COPY client/package.json ./
+RUN npm install --legacy-peer-deps
 
 # Copy client source and build for production
 COPY client/ ./
@@ -108,7 +108,7 @@ RUN mkdir -p /app/target/db
 
 <%_ if (applicationTypeMonolith) { _%>
 # Copy the built client for serving SPA UI from Rust backend
-COPY --from=client-builder /app/client/dist/<%= baseName %>/browser ./static/
+COPY --from=client-builder /app/server/dist/static/ ./static/
 <%_ } _%>
 <%_ if (enableStaticHosting && !applicationTypeMonolith) { _%>
 # Static files directory (for gateway/microservice with microfrontend)

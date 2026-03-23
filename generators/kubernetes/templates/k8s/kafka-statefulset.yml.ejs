@@ -1,0 +1,183 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: <%= baseName.toLowerCase() %>-zookeeper
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-zookeeper
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-zookeeper
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  serviceName: <%= baseName.toLowerCase() %>-zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-zookeeper
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-zookeeper
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-zookeeper
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.5.0
+          ports:
+            - name: client
+              containerPort: 2181
+              protocol: TCP
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: zookeeper-data
+              mountPath: /var/lib/zookeeper/data
+  volumeClaimTemplates:
+    - metadata:
+        name: zookeeper-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-zookeeper
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-zookeeper
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-zookeeper
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-zookeeper
+  ports:
+    - name: client
+      port: 2181
+      targetPort: client
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: <%= baseName.toLowerCase() %>-kafka
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-kafka
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-kafka
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  serviceName: <%= baseName.toLowerCase() %>-kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-kafka
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-kafka
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-kafka
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.5.0
+          ports:
+            - name: kafka
+              containerPort: 9092
+              protocol: TCP
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "<%= baseName.toLowerCase() %>-zookeeper:2181"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://<%= baseName.toLowerCase() %>-kafka:9092"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+          livenessProbe:
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-kafka
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-kafka
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-kafka
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-kafka
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+      protocol: TCP

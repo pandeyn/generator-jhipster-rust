@@ -1,0 +1,8 @@
+<%_ if (kubernetesNamespace !== 'default') { _%>
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: <%= kubernetesNamespace %>
+  labels:
+    app.kubernetes.io/managed-by: jhipster-rust
+<%_ } _%>

@@ -17,11 +17,6 @@
  * limitations under the License.
  */
 
-const defaultCommands = {
-  'generate-sample': {
-    desc: 'Generate a test sample',
-    blueprint: '@jhipster/jhipster-dev',
-  },
-};
+const defaultCommands = {};
 
 export default defaultCommands;

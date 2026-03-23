@@ -24,7 +24,7 @@ services:
 <%_ } else if (isMysql) { _%>
       - DATABASE_URL=mysql://root:root@db:3306/<%= baseName.toLowerCase() %>
 <%_ } else { _%>
-      - DATABASE_URL=sqlite:./data/<%= baseName.toLowerCase() %>.db
+      - DATABASE_URL=sqlite://./data/<%= baseName.toLowerCase() %>.db
 <%_ } _%>
       - APP_HOST=0.0.0.0
       - APP_PORT=8080

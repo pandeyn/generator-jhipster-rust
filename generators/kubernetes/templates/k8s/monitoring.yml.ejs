@@ -1,0 +1,179 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <%= baseName.toLowerCase() %>-prometheus-config
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-prometheus
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: '<%= baseName.toLowerCase() %>'
+        metrics_path: '/api/metrics'
+        static_configs:
+          - targets: ['<%= baseName.toLowerCase() %>:8080']
+            labels:
+              application: '<%= baseName.toLowerCase() %>'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <%= baseName.toLowerCase() %>-prometheus
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-prometheus
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-prometheus
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-prometheus
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-prometheus
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-prometheus
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.48.0
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=15d
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+            - name: prometheus-data
+              mountPath: /prometheus
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: <%= baseName.toLowerCase() %>-prometheus-config
+        - name: prometheus-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-prometheus
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-prometheus
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-prometheus
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <%= baseName.toLowerCase() %>-grafana
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-grafana
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-grafana
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-grafana
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-grafana
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-grafana
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-grafana
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-grafana
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-grafana
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP

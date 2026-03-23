@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <%= baseName.toLowerCase() %>
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  replicas: <%= kubernetesReplicas %>
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+<%_ if (monitoringPrometheus) { _%>
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/api/metrics"
+<%_ } _%>
+    spec:
+      containers:
+        - name: <%= baseName.toLowerCase() %>
+          image: <%= dockerImageName %>:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: <%= baseName.toLowerCase() %>-config
+            - secretRef:
+                name: <%= baseName.toLowerCase() %>-secret
+          livenessProbe:
+            httpGet:
+              path: /api/health/liveness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+<%_ if (devDatabaseTypeSqlite) { _%>
+          volumeMounts:
+            - name: sqlite-data
+              mountPath: /app/data
+      volumes:
+        - name: sqlite-data
+          persistentVolumeClaim:
+            claimName: <%= baseName.toLowerCase() %>-sqlite-pvc
+<%_ } _%>
+---
+<%_ if (devDatabaseTypeSqlite) { _%>
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: <%= baseName.toLowerCase() %>-sqlite-pvc
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+<%_ } _%>

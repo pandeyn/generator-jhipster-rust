@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: <%= baseName.toLowerCase() %>
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+  annotations:
+<%_ if (ingressNginx) { _%>
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+<%_ } else if (ingressTraefik) { _%>
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+<%_ } _%>
+spec:
+  rules:
+    - host: <%= baseName.toLowerCase() %>.<%= ingressDomain %>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: <%= baseName.toLowerCase() %>
+                port:
+                  number: 8080
+  # Uncomment and configure for TLS
+  # tls:
+  #   - hosts:
+  #       - <%= baseName.toLowerCase() %>.<%= ingressDomain %>
+  #     secretName: <%= baseName.toLowerCase() %>-tls

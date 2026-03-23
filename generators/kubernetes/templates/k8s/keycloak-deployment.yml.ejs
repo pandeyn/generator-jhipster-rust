@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <%= baseName.toLowerCase() %>-keycloak
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-keycloak
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-keycloak
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-keycloak
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-keycloak
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-keycloak
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:23.0
+          args:
+            - start-dev
+            - --import-realm
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: "admin"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: "admin"
+            - name: KC_HTTP_RELATIVE_PATH
+              value: "/"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import
+      volumes:
+        - name: realm-config
+          configMap:
+            name: <%= baseName.toLowerCase() %>-keycloak-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-keycloak
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-keycloak
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-keycloak
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-keycloak
+  ports:
+    - name: http
+      port: 9080
+      targetPort: http
+      protocol: TCP
+---
+# Note: The Keycloak realm configuration should be added as a ConfigMap.
+# You can create it from the docker/realm-config/jhipster-realm.json file:
+#   kubectl create configmap <%= baseName.toLowerCase() %>-keycloak-realm \
+#     --from-file=jhipster-realm.json=docker/realm-config/jhipster-realm.json \
+#     -n <%= kubernetesNamespace %>
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <%= baseName.toLowerCase() %>-keycloak-realm
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-keycloak
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+data: {}
+  # Populate with realm JSON from docker/realm-config/jhipster-realm.json
+  # jhipster-realm.json: |
+  #   { ... }

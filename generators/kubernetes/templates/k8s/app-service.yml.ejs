@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: <%= kubernetesServiceType %>
+  selector:
+    app: <%= baseName.toLowerCase() %>
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+<%_ if (kubernetesServiceType === 'NodePort') { _%>
+      nodePort: 30080
+<%_ } _%>

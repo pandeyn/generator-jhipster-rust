@@ -52,6 +52,10 @@ The generated Rust server provides a complete REST API implementation with authe
 | **Message Brokers**      | Apache Kafka                 | High-throughput async messaging (rdkafka)    |
 | **Monitoring**           | Prometheus metrics           | HTTP request metrics with Grafana dashboards |
 | **Resilience**           | Circuit Breaker              | Prevents cascading failures in microservices |
+| **Kubernetes**           | K8s manifest generation      | Deployment, Service, ConfigMap, Secret       |
+|                          | Database StatefulSets        | PostgreSQL, MySQL, MongoDB on K8s            |
+|                          | Ingress support              | NGINX and Traefik controllers                |
+|                          | Infrastructure manifests     | Keycloak, Consul, Kafka, Prometheus on K8s   |
 | **CI/CD**                | GitHub Actions               | Build, test, lint, Docker publish            |
 |                          | GitLab CI                    | Build, test, lint, Docker publish            |
 |                          | Local CI with act            | Run GitHub Actions locally in Docker         |
@@ -126,6 +130,7 @@ This supports:
 ## Deployment
 
 - [Docker Guide](docs/DOCKER.md) - Container setup, Docker Compose, and deployment options
+- [Kubernetes Deployment](docs/KUBERNETES.md) - K8s manifests, StatefulSets, Ingress, and production deployment
 - [Static UI Hosting](docs/STATIC_HOSTING.md) - Serve SPA from Rust backend in monolithic mode
 - [Microservices Architecture](docs/MICROSERVICES.md) - Deploy as part of a microservices architecture
 - [Consul Service Discovery](docs/CONSUL.md) - Service registration, discovery, and configuration management
@@ -291,7 +296,6 @@ The following features from the base JHipster generator are planned for future v
 | Feature                   | Notes                                              |
 | ------------------------- | -------------------------------------------------- |
 | Inter-service HTTP Client | Feign-like client with automatic token propagation |
-| Kubernetes Manifests      | No K8s deployment, service, ingress generation     |
 
 ### Medium Priority (Enterprise Features)
 
@@ -305,16 +309,18 @@ The following features from the base JHipster generator are planned for future v
 
 ### Lower Priority (Nice to Have)
 
-| Feature              | Notes                                              |
-| -------------------- | -------------------------------------------------- |
-| WebSocket Support    | tokio-tungstenite or STOMP messaging               |
-| Additional Databases | Cassandra, Neo4j, Couchbase, MSSQL, Oracle support |
-| Elasticsearch        | full-text search integration                       |
-| Helm Charts          | Helm chart generation for Kubernetes               |
-| Rate Limiting        | throttle/rate limit middleware                     |
-| API Versioning       | Routes don't use /v1, /v2 prefixes                 |
-| GraphQL              | async-graphql support                              |
-| Embedded Assets      | rust-embed for single-binary static files          |
+| Feature                | Notes                                                    |
+| ---------------------- | -------------------------------------------------------- |
+| WebSocket Support      | tokio-tungstenite or STOMP messaging                     |
+| Additional Databases   | Cassandra, Neo4j, Couchbase, MSSQL, Oracle support       |
+| Elasticsearch          | full-text search integration                             |
+| Helm Charts            | Helm chart generation for Kubernetes                     |
+| Kustomize Support      | Kustomize overlays for dev/staging/prod K8s envs         |
+| K8s Database Operators | CloudNativePG, Percona operators instead of StatefulSets |
+| Rate Limiting          | throttle/rate limit middleware                           |
+| API Versioning         | Routes don't use /v1, /v2 prefixes                       |
+| GraphQL                | async-graphql support                                    |
+| Embedded Assets        | rust-embed for single-binary static files                |
 
 [npm-image]: https://img.shields.io/npm/v/generator-jhipster-rust.svg
 [npm-url]: https://npmjs.org/package/generator-jhipster-rust

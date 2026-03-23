@@ -1,0 +1,286 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul and kafka > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kafka-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with mongodb > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/mongodb-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with mysql > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/mysql-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with nginx ingress > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-ingress.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with oauth2 > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/keycloak-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with postgresql > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/postgresql-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with prometheus monitoring > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/monitoring.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith without ingress > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > run with defaults > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/namespace.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;

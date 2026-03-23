@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: <%= baseName.toLowerCase() %>-mongodb
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-mongodb
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-mongodb
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  serviceName: <%= baseName.toLowerCase() %>-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-mongodb
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-mongodb
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-mongodb
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          ports:
+            - name: mongodb
+              containerPort: 27017
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-mongodb
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-mongodb
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-mongodb
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+      protocol: TCP

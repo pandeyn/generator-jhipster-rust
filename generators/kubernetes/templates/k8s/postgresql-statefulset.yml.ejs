@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: <%= baseName.toLowerCase() %>-postgresql
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-postgresql
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-postgresql
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  serviceName: <%= baseName.toLowerCase() %>-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <%= baseName.toLowerCase() %>-postgresql
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-postgresql
+        app.kubernetes.io/name: <%= baseName.toLowerCase() %>-postgresql
+        app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:16-alpine
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: <%= baseName.toLowerCase() %>-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "<%= baseName.toLowerCase() %>"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: postgresql-data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+  volumeClaimTemplates:
+    - metadata:
+        name: postgresql-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= baseName.toLowerCase() %>-postgresql
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-postgresql
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-postgresql
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  type: ClusterIP
+  selector:
+    app: <%= baseName.toLowerCase() %>-postgresql
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
