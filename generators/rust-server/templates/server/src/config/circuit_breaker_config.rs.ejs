@@ -1,0 +1,159 @@
+//! Circuit Breaker configuration for <%= baseName %>
+//!
+//! This module provides configuration for the circuit breaker pattern,
+//! which prevents cascading failures by stopping calls to failing services.
+
+use std::time::Duration;
+
+/// Circuit Breaker configuration loaded from environment variables
+#[derive(Debug, Clone)]
+pub struct CircuitBreakerConfig {
+    /// Whether circuit breaker is enabled
+    pub enabled: bool,
+    /// Failure rate threshold (0.0 to 1.0) - opens circuit when exceeded
+    pub failure_rate_threshold: f64,
+    /// Number of calls in the sliding window for failure rate calculation
+    pub sliding_window_size: usize,
+    /// Duration in seconds the circuit stays open before transitioning to half-open
+    pub wait_duration_in_open_secs: u64,
+    /// Number of permitted calls in half-open state to test recovery
+    pub permitted_calls_in_half_open: usize,
+    /// Request timeout in milliseconds
+    pub request_timeout_ms: u64,
+}
+
+impl CircuitBreakerConfig {
+    /// Load circuit breaker configuration from environment variables
+    pub fn from_env() -> Self {
+        Self {
+            enabled: std::env::var("CIRCUIT_BREAKER_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            failure_rate_threshold: std::env::var("CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0.5),
+            sliding_window_size: std::env::var("CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(100),
+            wait_duration_in_open_secs: std::env::var("CIRCUIT_BREAKER_WAIT_DURATION_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
+            permitted_calls_in_half_open: std::env::var("CIRCUIT_BREAKER_PERMITTED_CALLS_HALF_OPEN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+            request_timeout_ms: std::env::var("CIRCUIT_BREAKER_REQUEST_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30000),
+        }
+    }
+
+    /// Get the wait duration as a Duration type
+    pub fn wait_duration(&self) -> Duration {
+        Duration::from_secs(self.wait_duration_in_open_secs)
+    }
+
+    /// Get the request timeout as a Duration type
+    pub fn request_timeout(&self) -> Duration {
+        Duration::from_millis(self.request_timeout_ms)
+    }
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self::from_env()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = CircuitBreakerConfig::default();
+        assert!(config.enabled);
+        assert!((config.failure_rate_threshold - 0.5).abs() < f64::EPSILON);
+        assert_eq!(config.sliding_window_size, 100);
+        assert_eq!(config.wait_duration_in_open_secs, 60);
+        assert_eq!(config.permitted_calls_in_half_open, 10);
+        assert_eq!(config.request_timeout_ms, 30000);
+    }
+
+    #[test]
+    fn test_wait_duration() {
+        let config = CircuitBreakerConfig::default();
+        assert_eq!(config.wait_duration(), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_request_timeout() {
+        let config = CircuitBreakerConfig::default();
+        assert_eq!(config.request_timeout(), Duration::from_millis(30000));
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let config = CircuitBreakerConfig {
+            enabled: false,
+            failure_rate_threshold: 0.3,
+            sliding_window_size: 50,
+            wait_duration_in_open_secs: 30,
+            permitted_calls_in_half_open: 5,
+            request_timeout_ms: 10000,
+        };
+        assert!(!config.enabled);
+        assert!((config.failure_rate_threshold - 0.3).abs() < f64::EPSILON);
+        assert_eq!(config.sliding_window_size, 50);
+        assert_eq!(config.wait_duration_in_open_secs, 30);
+        assert_eq!(config.permitted_calls_in_half_open, 5);
+        assert_eq!(config.request_timeout_ms, 10000);
+    }
+
+    #[test]
+    fn test_custom_wait_duration() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 100,
+            wait_duration_in_open_secs: 120,
+            permitted_calls_in_half_open: 10,
+            request_timeout_ms: 30000,
+        };
+        assert_eq!(config.wait_duration(), Duration::from_secs(120));
+    }
+
+    #[test]
+    fn test_custom_request_timeout() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 100,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 10,
+            request_timeout_ms: 5000,
+        };
+        assert_eq!(config.request_timeout(), Duration::from_millis(5000));
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = CircuitBreakerConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.enabled, cloned.enabled);
+        assert!((config.failure_rate_threshold - cloned.failure_rate_threshold).abs() < f64::EPSILON);
+        assert_eq!(config.sliding_window_size, cloned.sliding_window_size);
+    }
+
+    #[test]
+    fn test_config_debug() {
+        let config = CircuitBreakerConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("CircuitBreakerConfig"));
+        assert!(debug_str.contains("enabled"));
+    }
+}

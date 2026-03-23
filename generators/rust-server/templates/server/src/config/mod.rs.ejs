@@ -15,6 +15,9 @@ mod kafka_config;
 <%_ if (monitoringPrometheus) { _%>
 mod metrics_config;
 <%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+mod circuit_breaker_config;
+<%_ } _%>
 
 pub use app_config::*;
 pub use database::*;
@@ -32,4 +35,7 @@ pub use kafka_config::*;
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
 pub use metrics_config::*;
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+pub use circuit_breaker_config::*;
 <%_ } _%>

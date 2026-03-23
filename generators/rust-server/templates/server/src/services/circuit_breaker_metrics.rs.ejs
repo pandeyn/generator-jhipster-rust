@@ -1,0 +1,118 @@
+//! Circuit Breaker Prometheus metrics for <%= baseName %>
+//!
+//! This module provides Prometheus metrics for circuit breaker monitoring.
+//! Metrics are exposed at `/management/prometheus` along with other application metrics.
+
+use metrics::{counter, gauge, describe_counter, describe_gauge};
+
+/// Metric names for circuit breaker
+pub const CIRCUIT_BREAKER_STATE: &str = "circuit_breaker_state";
+pub const CIRCUIT_BREAKER_CALLS_TOTAL: &str = "circuit_breaker_calls_total";
+pub const CIRCUIT_BREAKER_FAILURES_TOTAL: &str = "circuit_breaker_failures_total";
+pub const CIRCUIT_BREAKER_SUCCESSES_TOTAL: &str = "circuit_breaker_successes_total";
+pub const CIRCUIT_BREAKER_REJECTED_TOTAL: &str = "circuit_breaker_rejected_total";
+pub const CIRCUIT_BREAKER_FAILURE_RATE: &str = "circuit_breaker_failure_rate";
+
+/// Initialize circuit breaker metric descriptions
+///
+/// Call this once during application startup to register metric descriptions.
+pub fn init_metrics() {
+    describe_gauge!(
+        CIRCUIT_BREAKER_STATE,
+        "Circuit breaker state (0=closed, 1=half_open, 2=open)"
+    );
+    describe_counter!(
+        CIRCUIT_BREAKER_CALLS_TOTAL,
+        "Total number of calls through the circuit breaker"
+    );
+    describe_counter!(
+        CIRCUIT_BREAKER_FAILURES_TOTAL,
+        "Total number of failed calls"
+    );
+    describe_counter!(
+        CIRCUIT_BREAKER_SUCCESSES_TOTAL,
+        "Total number of successful calls"
+    );
+    describe_counter!(
+        CIRCUIT_BREAKER_REJECTED_TOTAL,
+        "Total number of rejected calls (circuit open)"
+    );
+    describe_gauge!(
+        CIRCUIT_BREAKER_FAILURE_RATE,
+        "Current failure rate (0.0 to 1.0)"
+    );
+}
+
+/// Circuit breaker state as numeric value for Prometheus
+#[derive(Debug, Clone, Copy)]
+pub enum MetricState {
+    Closed = 0,
+    HalfOpen = 1,
+    Open = 2,
+}
+
+impl From<super::CircuitState> for MetricState {
+    fn from(state: super::CircuitState) -> Self {
+        match state {
+            super::CircuitState::Closed => MetricState::Closed,
+            super::CircuitState::HalfOpen => MetricState::HalfOpen,
+            super::CircuitState::Open => MetricState::Open,
+        }
+    }
+}
+
+/// Record a circuit breaker state change
+pub fn record_state(service_name: &str, state: super::CircuitState) {
+    let metric_state: MetricState = state.into();
+    gauge!(CIRCUIT_BREAKER_STATE, "service" => service_name.to_string())
+        .set(metric_state as i64 as f64);
+}
+
+/// Record a successful call
+pub fn record_success(service_name: &str) {
+    counter!(CIRCUIT_BREAKER_CALLS_TOTAL, "service" => service_name.to_string(), "outcome" => "success")
+        .increment(1);
+    counter!(CIRCUIT_BREAKER_SUCCESSES_TOTAL, "service" => service_name.to_string())
+        .increment(1);
+}
+
+/// Record a failed call
+pub fn record_failure(service_name: &str) {
+    counter!(CIRCUIT_BREAKER_CALLS_TOTAL, "service" => service_name.to_string(), "outcome" => "failure")
+        .increment(1);
+    counter!(CIRCUIT_BREAKER_FAILURES_TOTAL, "service" => service_name.to_string())
+        .increment(1);
+}
+
+/// Record a rejected call (circuit open)
+pub fn record_rejected(service_name: &str) {
+    counter!(CIRCUIT_BREAKER_CALLS_TOTAL, "service" => service_name.to_string(), "outcome" => "rejected")
+        .increment(1);
+    counter!(CIRCUIT_BREAKER_REJECTED_TOTAL, "service" => service_name.to_string())
+        .increment(1);
+}
+
+/// Update the failure rate gauge
+pub fn record_failure_rate(service_name: &str, rate: f64) {
+    gauge!(CIRCUIT_BREAKER_FAILURE_RATE, "service" => service_name.to_string())
+        .set(rate);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metric_state_conversion() {
+        assert_eq!(MetricState::from(super::super::CircuitState::Closed) as i64, 0);
+        assert_eq!(MetricState::from(super::super::CircuitState::HalfOpen) as i64, 1);
+        assert_eq!(MetricState::from(super::super::CircuitState::Open) as i64, 2);
+    }
+
+    #[test]
+    fn test_init_metrics_does_not_panic() {
+        // Just verify that init_metrics can be called without panicking
+        // In a test environment, the metrics recorder may not be set up
+        init_metrics();
+    }
+}

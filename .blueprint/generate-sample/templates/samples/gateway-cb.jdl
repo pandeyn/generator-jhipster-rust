@@ -1,0 +1,63 @@
+/*
+ * Gateway with Circuit Breaker E2E Test Sample
+ *
+ * This sample generates a gateway with:
+ * - Circuit breaker pattern enabled (default for gateways)
+ * - Consul service discovery
+ * - PostgreSQL database
+ * - JWT authentication
+ * - Static file hosting for Angular frontend
+ *
+ * Used for end-to-end testing of circuit breaker functionality in gateway context.
+ */
+application {
+  config {
+    applicationType gateway
+    baseName cbGateway
+    packageName com.mycompany.cbgateway
+    authenticationType jwt
+    databaseType sql
+    prodDatabaseType postgresql
+    devDatabaseType postgresql
+    cacheProvider no
+    buildTool maven
+    clientFramework angular
+    serviceDiscoveryType consul
+    testFrameworks [cypress]
+  }
+  entities Order, Customer
+}
+
+entity Customer {
+  firstName String required minlength(2) maxlength(50)
+  lastName String required minlength(2) maxlength(50)
+  email String required pattern(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
+  phone String maxlength(20)
+  active Boolean
+  createdDate Instant
+}
+
+entity Order {
+  orderNumber String required
+  orderDate Instant required
+  totalAmount BigDecimal required min(0)
+  status OrderStatus required
+  notes TextBlob
+}
+
+enum OrderStatus {
+  PENDING,
+  CONFIRMED,
+  SHIPPED,
+  DELIVERED,
+  CANCELLED
+}
+
+relationship ManyToOne {
+  Order{customer(email)} to Customer
+}
+
+paginate Customer, Order with pagination
+
+service Customer with serviceClass
+service Order with serviceClass

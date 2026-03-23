@@ -4,6 +4,9 @@
 //! - Service registration with health checks
 //! - Service discovery to find other microservices
 //! - Configuration loading from Consul KV store
+<%_ if (circuitBreakerEnabled) { _%>
+//! - Circuit breaker protection for resilient Consul communication
+<%_ } _%>
 
 use crate::config::ConsulConfig;
 use reqwest::Client;
@@ -12,6 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
+<%_ if (circuitBreakerEnabled) { _%>
+use crate::services::{CircuitBreakerService, CircuitBreakerError};
+<%_ } _%>
 
 /// Service registration payload for Consul
 #[derive(Debug, Serialize)]
@@ -58,11 +64,24 @@ pub struct ConsulService {
     client: Client,
     /// Cache of discovered services (service_name -> instances)
     service_cache: Arc<RwLock<HashMap<String, Vec<ServiceInstance>>>>,
+<%_ if (circuitBreakerEnabled) { _%>
+    /// Optional circuit breaker for resilient Consul communication
+    circuit_breaker: Option<Arc<CircuitBreakerService>>,
+<%_ } _%>
 }
 
+<%_ if (circuitBreakerEnabled) { _%>
+/// Circuit breaker service name for Consul operations
+const CONSUL_CIRCUIT_BREAKER_NAME: &str = "consul";
+
+<%_ } _%>
 impl ConsulService {
     /// Create a new Consul service instance
+<%_ if (circuitBreakerEnabled) { _%>
+    pub fn new(config: ConsulConfig, circuit_breaker: Option<Arc<CircuitBreakerService>>) -> Self {
+<%_ } else { _%>
     pub fn new(config: ConsulConfig) -> Self {
+<%_ } _%>
         let mut headers = reqwest::header::HeaderMap::new();
 
         // Add ACL token header if configured
@@ -84,9 +103,61 @@ impl ConsulService {
             config,
             client,
             service_cache: Arc::new(RwLock::new(HashMap::new())),
+<%_ if (circuitBreakerEnabled) { _%>
+            circuit_breaker,
+<%_ } _%>
         }
     }
 
+<%_ if (circuitBreakerEnabled) { _%>
+    /// Execute an HTTP request with optional circuit breaker protection
+    async fn execute_with_circuit_breaker<F, Fut, T>(
+        &self,
+        operation: &str,
+        f: F,
+    ) -> Result<T, ConsulError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T, ConsulError>>,
+    {
+        match &self.circuit_breaker {
+            Some(cb) if cb.is_enabled() => {
+                cb.execute(CONSUL_CIRCUIT_BREAKER_NAME, f)
+                    .await
+                    .map_err(|e| match e {
+                        CircuitBreakerError::CircuitOpen(svc) => {
+                            warn!("Circuit breaker open for Consul {} operation", operation);
+                            ConsulError::CircuitBreakerOpen(format!(
+                                "Circuit breaker open for service '{}' during {} operation",
+                                svc, operation
+                            ))
+                        }
+                        CircuitBreakerError::HalfOpenRejected(svc) => {
+                            ConsulError::CircuitBreakerOpen(format!(
+                                "Circuit breaker in half-open state, request rejected for service '{}' during {} operation",
+                                svc, operation
+                            ))
+                        }
+                        CircuitBreakerError::Timeout => {
+                            ConsulError::ConnectionError(format!(
+                                "Request timed out during {} operation",
+                                operation
+                            ))
+                        }
+                        CircuitBreakerError::RequestFailed(msg) => {
+                            ConsulError::ConnectionError(msg)
+                        }
+                        CircuitBreakerError::NotEnabled => {
+                            // This shouldn't happen since we check is_enabled(), but handle it
+                            panic!("Circuit breaker not enabled but was called")
+                        }
+                    })
+            }
+            _ => f().await,
+        }
+    }
+
+<%_ } _%>
     /// Register this service instance with Consul
     ///
     /// # Arguments
@@ -135,6 +206,39 @@ impl ConsulService {
             self.config.consul_url()
         );
 
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+        let service_name = self.config.service_name.clone();
+        let service_id = self.config.service_id.clone();
+
+        self.execute_with_circuit_breaker("register", || async {
+            let response = client
+                .put(&url)
+                .json(&registration)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            if response.status().is_success() {
+                info!(
+                    "Successfully registered service '{}' (ID: {}) with Consul",
+                    service_name, service_id
+                );
+                Ok(())
+            } else {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                error!(
+                    "Failed to register service with Consul: {} - {}",
+                    status, body
+                );
+                Err(ConsulError::RegistrationError(format!(
+                    "HTTP {}: {}",
+                    status, body
+                )))
+            }
+        }).await
+<%_ } else { _%>
         let response = self
             .client
             .put(&url)
@@ -161,6 +265,7 @@ impl ConsulService {
                 status, body
             )))
         }
+<%_ } _%>
     }
 
     /// Deregister this service instance from Consul
@@ -179,6 +284,33 @@ impl ConsulService {
 
         info!("Deregistering service '{}' from Consul", self.config.service_id);
 
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+
+        self.execute_with_circuit_breaker("deregister", || async {
+            let response = client
+                .put(&url)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            if response.status().is_success() {
+                info!("Successfully deregistered service from Consul");
+                Ok(())
+            } else {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                warn!(
+                    "Failed to deregister service from Consul: {} - {}",
+                    status, body
+                );
+                Err(ConsulError::DeregistrationError(format!(
+                    "HTTP {}: {}",
+                    status, body
+                )))
+            }
+        }).await
+<%_ } else { _%>
         let response = self
             .client
             .put(&url)
@@ -201,6 +333,7 @@ impl ConsulService {
                 status, body
             )))
         }
+<%_ } _%>
     }
 
     /// Discover healthy instances of a service
@@ -211,6 +344,52 @@ impl ConsulService {
             service_name
         );
 
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+        let svc_name = service_name.to_string();
+        let cache = self.service_cache.clone();
+
+        self.execute_with_circuit_breaker("discover", || async {
+            let response = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(ConsulError::DiscoveryError(format!(
+                    "HTTP {}: {}",
+                    status, body
+                )));
+            }
+
+            #[derive(Deserialize)]
+            #[serde(rename_all = "PascalCase")]
+            struct HealthServiceResponse {
+                service: ServiceInstance,
+            }
+
+            let services: Vec<HealthServiceResponse> = response
+                .json()
+                .await
+                .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+            let instances: Vec<ServiceInstance> = services
+                .into_iter()
+                .map(|s| s.service)
+                .collect();
+
+            // Update cache
+            {
+                let mut cache_guard = cache.write().await;
+                cache_guard.insert(svc_name, instances.clone());
+            }
+
+            Ok(instances)
+        }).await
+<%_ } else { _%>
         let response = self
             .client
             .get(&url)
@@ -250,6 +429,7 @@ impl ConsulService {
         }
 
         Ok(instances)
+<%_ } _%>
     }
 
     /// Get a service instance URL (with simple round-robin from cache)
@@ -287,6 +467,37 @@ impl ConsulService {
         let full_key = format!("{}/{}", self.config.config_key_prefix, key);
         let url = format!("{}/v1/kv/{}?raw=true", self.config.consul_url(), full_key);
 
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+
+        self.execute_with_circuit_breaker("get_config", || async {
+            let response = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            if response.status() == reqwest::StatusCode::NOT_FOUND {
+                return Ok(None);
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(ConsulError::ConfigError(format!(
+                    "HTTP {}: {}",
+                    status, body
+                )));
+            }
+
+            let value = response
+                .text()
+                .await
+                .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+            Ok(Some(value))
+        }).await
+<%_ } else { _%>
         let response = self
             .client
             .get(&url)
@@ -313,6 +524,7 @@ impl ConsulService {
             .map_err(|e| ConsulError::ParseError(e.to_string()))?;
 
         Ok(Some(value))
+<%_ } _%>
     }
 
     /// Set a configuration value in Consul KV store
@@ -326,6 +538,30 @@ impl ConsulService {
         let full_key = format!("{}/{}", self.config.config_key_prefix, key);
         let url = format!("{}/v1/kv/{}", self.config.consul_url(), full_key);
 
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+        let val = value.to_string();
+
+        self.execute_with_circuit_breaker("set_config", || async {
+            let response = client
+                .put(&url)
+                .body(val)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            if response.status().is_success() {
+                Ok(())
+            } else {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                Err(ConsulError::ConfigError(format!(
+                    "HTTP {}: {}",
+                    status, body
+                )))
+            }
+        }).await
+<%_ } else { _%>
         let response = self
             .client
             .put(&url)
@@ -344,6 +580,7 @@ impl ConsulService {
                 status, body
             )))
         }
+<%_ } _%>
     }
 
     /// Get the service configuration
@@ -375,6 +612,11 @@ pub enum ConsulError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+<%_ if (circuitBreakerEnabled) { _%>
+    #[error("Circuit breaker open: {0}")]
+    CircuitBreakerOpen(String),
+<%_ } _%>
 }
 
 #[cfg(test)]
@@ -400,7 +642,11 @@ mod tests {
     #[test]
     fn test_consul_service_creation() {
         let config = test_config();
+<%_ if (circuitBreakerEnabled) { _%>
+        let service = ConsulService::new(config.clone(), None);
+<%_ } else { _%>
         let service = ConsulService::new(config.clone());
+<%_ } _%>
         assert_eq!(service.config().service_name, "test-service");
     }
 

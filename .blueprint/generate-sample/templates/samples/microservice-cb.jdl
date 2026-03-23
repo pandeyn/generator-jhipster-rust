@@ -1,0 +1,52 @@
+/*
+ * Microservice with Circuit Breaker E2E Test Sample
+ *
+ * This sample generates a microservice with:
+ * - Circuit breaker pattern enabled (default for microservices)
+ * - Consul service discovery
+ * - PostgreSQL database
+ * - JWT authentication
+ *
+ * Used for end-to-end testing of circuit breaker functionality.
+ */
+application {
+  config {
+    applicationType microservice
+    baseName cbMicroservice
+    packageName com.mycompany.cbmicroservice
+    authenticationType jwt
+    databaseType sql
+    prodDatabaseType postgresql
+    devDatabaseType postgresql
+    cacheProvider no
+    buildTool maven
+    skipClient true
+    serviceDiscoveryType consul
+    testFrameworks []
+  }
+  entities Product, Category
+}
+
+entity Product {
+  name String required minlength(3) maxlength(100)
+  description TextBlob
+  price BigDecimal required min(0)
+  stock Integer required min(0)
+  active Boolean
+  createdDate Instant
+}
+
+entity Category {
+  name String required minlength(2) maxlength(50)
+  description String maxlength(500)
+}
+
+relationship ManyToOne {
+  Product{category(name)} to Category
+}
+
+paginate Product with pagination
+paginate Category with pagination
+
+service Product with serviceClass
+service Category with serviceClass

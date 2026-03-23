@@ -146,7 +146,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
 
     it('should include Consul initialization in main.rs', () => {
       result.assertFileContent('server/src/main.rs', 'ConsulConfig::from_env()');
-      result.assertFileContent('server/src/main.rs', 'ConsulService::new(consul_config.clone())');
+      // Circuit breaker is enabled by default for microservices, so Consul uses it
+      result.assertFileContent('server/src/main.rs', 'ConsulService::new(consul_config.clone(), circuit_breaker.clone())');
       result.assertFileContent('server/src/main.rs', 'register_service');
     });
 
@@ -409,6 +410,409 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
 
     it('should not include Kafka endpoints in OpenAPI documentation', () => {
       result.assertNoFileContent('server/src/openapi.rs', 'handlers::kafka');
+    });
+  });
+
+  // ==================== Circuit Breaker Integration Tests ====================
+
+  describe('microservice with circuit breaker (default enabled)', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'cbMicroApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate circuit breaker config files', () => {
+      result.assertFile([
+        'server/src/config/circuit_breaker_config.rs',
+        'server/src/services/circuit_breaker_service.rs',
+        'server/src/services/resilient_http_client.rs',
+      ]);
+    });
+
+    it('should generate circuit breaker documentation', () => {
+      result.assertFile('docs/CIRCUIT_BREAKER.md');
+    });
+
+    it('should include circuit breaker environment variables in .env', () => {
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_ENABLED=true');
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD=0.5');
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE=100');
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_WAIT_DURATION_SECS=60');
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_PERMITTED_CALLS_HALF_OPEN=10');
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_REQUEST_TIMEOUT_MS=30000');
+    });
+
+    it('should include circuit breaker imports in lib.rs', () => {
+      result.assertFileContent('server/src/lib.rs', 'use services::CircuitBreakerService;');
+      result.assertFileContent('server/src/lib.rs', 'pub circuit_breaker: Option<Arc<CircuitBreakerService>>');
+    });
+
+    it('should include circuit breaker initialization in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'CircuitBreakerConfig::from_env()');
+      result.assertFileContent('server/src/main.rs', 'CircuitBreakerService::new(circuit_breaker_config)');
+    });
+
+    it('should initialize circuit breaker before Consul', () => {
+      // Circuit breaker should be initialized before Consul so Consul can use it
+      const mainRs = result.getSnapshot()['server/src/main.rs']?.contents;
+      if (mainRs) {
+        const cbIndex = mainRs.indexOf('CircuitBreakerConfig::from_env()');
+        const consulIndex = mainRs.indexOf('ConsulConfig::from_env()');
+        expect(cbIndex).toBeLessThan(consulIndex);
+      }
+    });
+
+    it('should pass circuit breaker to Consul service', () => {
+      result.assertFileContent('server/src/main.rs', 'ConsulService::new(consul_config.clone(), circuit_breaker.clone())');
+    });
+
+    it('should include circuit breaker config export in config/mod.rs', () => {
+      result.assertFileContent('server/src/config/mod.rs', 'mod circuit_breaker_config;');
+      result.assertFileContent('server/src/config/mod.rs', 'pub use circuit_breaker_config::*;');
+    });
+
+    it('should include circuit breaker service export in services/mod.rs', () => {
+      result.assertFileContent('server/src/services/mod.rs', 'mod circuit_breaker_service;');
+      result.assertFileContent(
+        'server/src/services/mod.rs',
+        'pub use circuit_breaker_service::{CircuitBreakerService, CircuitBreakerError, CircuitBreakerStatus, CircuitState}',
+      );
+      result.assertFileContent('server/src/services/mod.rs', 'mod resilient_http_client;');
+      result.assertFileContent('server/src/services/mod.rs', 'pub use resilient_http_client::{ResilientHttpClient, ResilientHttpError}');
+    });
+  });
+
+  describe('gateway with circuit breaker (default enabled)', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'cbGatewayApp',
+          applicationType: 'gateway',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate circuit breaker config files', () => {
+      result.assertFile([
+        'server/src/config/circuit_breaker_config.rs',
+        'server/src/services/circuit_breaker_service.rs',
+        'server/src/services/resilient_http_client.rs',
+      ]);
+    });
+
+    it('should generate circuit breaker documentation', () => {
+      result.assertFile('docs/CIRCUIT_BREAKER.md');
+    });
+
+    it('should include circuit breaker environment variables in .env', () => {
+      result.assertFileContent('.env', 'CIRCUIT_BREAKER_ENABLED=true');
+    });
+
+    it('should integrate circuit breaker with Consul', () => {
+      result.assertFileContent('server/src/main.rs', 'ConsulService::new(consul_config.clone(), circuit_breaker.clone())');
+    });
+  });
+
+  describe('microservice with circuit breaker explicitly disabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noCbMicroApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          circuitBreaker: false,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate circuit breaker files', () => {
+      result.assertNoFile([
+        'server/src/config/circuit_breaker_config.rs',
+        'server/src/services/circuit_breaker_service.rs',
+        'server/src/services/resilient_http_client.rs',
+        'docs/CIRCUIT_BREAKER.md',
+      ]);
+    });
+
+    it('should not include circuit breaker environment variables in .env', () => {
+      result.assertNoFileContent('.env', 'CIRCUIT_BREAKER_ENABLED');
+    });
+
+    it('should not include circuit breaker imports in lib.rs', () => {
+      result.assertNoFileContent('server/src/lib.rs', 'CircuitBreakerService');
+    });
+
+    it('should use Consul without circuit breaker', () => {
+      // When circuit breaker is disabled, Consul should be initialized without it
+      result.assertFileContent('server/src/main.rs', 'ConsulService::new(consul_config.clone())');
+      result.assertNoFileContent('server/src/main.rs', 'circuit_breaker.clone()');
+    });
+  });
+
+  describe('monolith without circuit breaker (not enabled for monoliths)', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'monolithApp',
+          applicationType: 'monolith',
+          skipClient: true,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate circuit breaker files for monolith', () => {
+      result.assertNoFile([
+        'server/src/config/circuit_breaker_config.rs',
+        'server/src/services/circuit_breaker_service.rs',
+        'server/src/services/resilient_http_client.rs',
+        'docs/CIRCUIT_BREAKER.md',
+      ]);
+    });
+
+    it('should not include circuit breaker environment variables in .env', () => {
+      result.assertNoFileContent('.env', 'CIRCUIT_BREAKER_ENABLED');
+    });
+  });
+
+  describe('microservice with circuit breaker and Consul integration', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'cbConsulApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should have Consul service accept circuit breaker parameter', () => {
+      result.assertFileContent('server/src/services/consul_service.rs', 'circuit_breaker: Option<Arc<CircuitBreakerService>>');
+    });
+
+    it('should use execute_with_circuit_breaker helper in Consul service', () => {
+      result.assertFileContent('server/src/services/consul_service.rs', 'async fn execute_with_circuit_breaker');
+    });
+
+    it('should have CircuitBreakerOpen error variant in Consul service', () => {
+      result.assertFileContent('server/src/services/consul_service.rs', 'CircuitBreakerOpen');
+    });
+
+    it('should document circuit breaker integration with Consul', () => {
+      result.assertFileContent('docs/CIRCUIT_BREAKER.md', 'Integration with Service Discovery');
+      result.assertFileContent('docs/CIRCUIT_BREAKER.md', 'Consul');
+    });
+  });
+
+  describe('microservice with circuit breaker but without Consul', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'cbNoConsulApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate circuit breaker files', () => {
+      result.assertFile([
+        'server/src/config/circuit_breaker_config.rs',
+        'server/src/services/circuit_breaker_service.rs',
+        'server/src/services/resilient_http_client.rs',
+        'docs/CIRCUIT_BREAKER.md',
+      ]);
+    });
+
+    it('should not generate Consul files', () => {
+      result.assertNoFile(['server/src/config/consul_config.rs', 'server/src/services/consul_service.rs']);
+    });
+
+    it('should include circuit breaker initialization in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'CircuitBreakerConfig::from_env()');
+      result.assertFileContent('server/src/main.rs', 'CircuitBreakerService::new(circuit_breaker_config)');
+    });
+
+    it('should not reference Consul in main.rs', () => {
+      result.assertNoFileContent('server/src/main.rs', 'ConsulService');
+    });
+  });
+
+  // ==================== Circuit Breaker with Prometheus Metrics Tests ====================
+
+  describe('microservice with circuit breaker and prometheus', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'cbPrometheusApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          monitoring: 'prometheus',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate circuit breaker metrics file', () => {
+      result.assertFile('server/src/services/circuit_breaker_metrics.rs');
+    });
+
+    it('should export circuit breaker metrics module in services/mod.rs', () => {
+      result.assertFileContent('server/src/services/mod.rs', 'pub mod circuit_breaker_metrics;');
+    });
+
+    it('should import circuit breaker metrics in circuit_breaker_service.rs', () => {
+      result.assertFileContent('server/src/services/circuit_breaker_service.rs', 'use super::circuit_breaker_metrics as cb_metrics;');
+    });
+
+    it('should record metrics in circuit_breaker_service.rs', () => {
+      result.assertFileContent('server/src/services/circuit_breaker_service.rs', 'cb_metrics::record_success');
+      result.assertFileContent('server/src/services/circuit_breaker_service.rs', 'cb_metrics::record_failure');
+      result.assertFileContent('server/src/services/circuit_breaker_service.rs', 'cb_metrics::record_state');
+      result.assertFileContent('server/src/services/circuit_breaker_service.rs', 'cb_metrics::record_rejected');
+    });
+
+    it('should initialize circuit breaker metrics in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'circuit_breaker_metrics::init_metrics()');
+    });
+
+    it('should document circuit breaker Prometheus metrics', () => {
+      result.assertFileContent('docs/CIRCUIT_BREAKER.md', 'circuit_breaker_state');
+      result.assertFileContent('docs/CIRCUIT_BREAKER.md', 'circuit_breaker_calls_total');
+      result.assertFileContent('docs/CIRCUIT_BREAKER.md', 'circuit_breaker_failure_rate');
+    });
+
+    it('should reference circuit breaker metrics in Prometheus documentation', () => {
+      result.assertFileContent('docs/PROMETHEUS.md', 'Circuit Breaker Metrics');
+      result.assertFileContent('docs/PROMETHEUS.md', 'circuit_breaker_state');
+    });
+  });
+
+  describe('microservice with circuit breaker but without prometheus', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'cbNoPrometheusApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'no',
+          monitoring: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate circuit breaker files', () => {
+      result.assertFile([
+        'server/src/config/circuit_breaker_config.rs',
+        'server/src/services/circuit_breaker_service.rs',
+        'server/src/services/resilient_http_client.rs',
+      ]);
+    });
+
+    it('should NOT generate circuit breaker metrics file', () => {
+      result.assertNoFile('server/src/services/circuit_breaker_metrics.rs');
+    });
+
+    it('should NOT export circuit breaker metrics module in services/mod.rs', () => {
+      result.assertNoFileContent('server/src/services/mod.rs', 'circuit_breaker_metrics');
+    });
+
+    it('should NOT import circuit breaker metrics in circuit_breaker_service.rs', () => {
+      result.assertNoFileContent('server/src/services/circuit_breaker_service.rs', 'cb_metrics');
+    });
+
+    it('should NOT initialize circuit breaker metrics in main.rs', () => {
+      result.assertNoFileContent('server/src/main.rs', 'circuit_breaker_metrics::init_metrics');
     });
   });
 });

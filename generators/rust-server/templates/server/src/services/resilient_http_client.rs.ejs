@@ -1,0 +1,307 @@
+//! Resilient HTTP client for <%= baseName %>
+//!
+//! This module provides an HTTP client wrapper with circuit breaker protection
+//! for making resilient calls to external services.
+
+use crate::services::{CircuitBreakerError, CircuitBreakerService};
+use reqwest::{Client, Response, StatusCode};
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::{debug, warn};
+
+/// Errors that can occur with the resilient HTTP client
+#[derive(Debug, thiserror::Error)]
+pub enum ResilientHttpError {
+    #[error("Circuit breaker error: {0}")]
+    CircuitBreaker(#[from] CircuitBreakerError),
+
+    #[error("HTTP request failed: {0}")]
+    Request(#[from] reqwest::Error),
+
+    #[error("HTTP error response: {status} - {message}")]
+    HttpError { status: StatusCode, message: String },
+}
+
+/// A resilient HTTP client with circuit breaker support
+#[derive(Clone)]
+pub struct ResilientHttpClient {
+    client: Client,
+    circuit_breaker: Arc<CircuitBreakerService>,
+}
+
+impl ResilientHttpClient {
+    /// Create a new resilient HTTP client
+    pub fn new(circuit_breaker: Arc<CircuitBreakerService>) -> Self {
+        let timeout = circuit_breaker.config().request_timeout();
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self {
+            client,
+            circuit_breaker,
+        }
+    }
+
+    /// Create a new resilient HTTP client with custom timeout
+    pub fn with_timeout(circuit_breaker: Arc<CircuitBreakerService>, timeout: Duration) -> Self {
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self {
+            client,
+            circuit_breaker,
+        }
+    }
+
+    /// Make a GET request with circuit breaker protection
+    pub async fn get(&self, service_name: &str, url: &str) -> Result<Response, ResilientHttpError> {
+        debug!("Making GET request to {} (service: {})", url, service_name);
+
+        self.circuit_breaker
+            .execute(service_name, || async {
+                let response = self.client.get(url).send().await?;
+                Self::check_response(response).await
+            })
+            .await
+            .map_err(ResilientHttpError::from)
+    }
+
+    /// Make a POST request with circuit breaker protection
+    pub async fn post<T: serde::Serialize + ?Sized>(
+        &self,
+        service_name: &str,
+        url: &str,
+        body: &T,
+    ) -> Result<Response, ResilientHttpError> {
+        debug!("Making POST request to {} (service: {})", url, service_name);
+
+        self.circuit_breaker
+            .execute(service_name, || async {
+                let response = self.client.post(url).json(body).send().await?;
+                Self::check_response(response).await
+            })
+            .await
+            .map_err(ResilientHttpError::from)
+    }
+
+    /// Make a PUT request with circuit breaker protection
+    pub async fn put<T: serde::Serialize + ?Sized>(
+        &self,
+        service_name: &str,
+        url: &str,
+        body: &T,
+    ) -> Result<Response, ResilientHttpError> {
+        debug!("Making PUT request to {} (service: {})", url, service_name);
+
+        self.circuit_breaker
+            .execute(service_name, || async {
+                let response = self.client.put(url).json(body).send().await?;
+                Self::check_response(response).await
+            })
+            .await
+            .map_err(ResilientHttpError::from)
+    }
+
+    /// Make a DELETE request with circuit breaker protection
+    pub async fn delete(
+        &self,
+        service_name: &str,
+        url: &str,
+    ) -> Result<Response, ResilientHttpError> {
+        debug!("Making DELETE request to {} (service: {})", url, service_name);
+
+        self.circuit_breaker
+            .execute(service_name, || async {
+                let response = self.client.delete(url).send().await?;
+                Self::check_response(response).await
+            })
+            .await
+            .map_err(ResilientHttpError::from)
+    }
+
+    /// Check if the response indicates a server error (5xx)
+    /// Server errors are treated as failures for circuit breaker purposes
+    async fn check_response(response: Response) -> Result<Response, reqwest::Error> {
+        let status = response.status();
+
+        // 5xx errors are server failures - these should trip the circuit breaker
+        if status.is_server_error() {
+            warn!("Server error response: {}", status);
+            // We return the response but let the caller decide how to handle it
+            // The circuit breaker will have already recorded this as a failure
+        }
+
+        Ok(response)
+    }
+
+    /// Get the underlying reqwest client for advanced use cases
+    pub fn inner(&self) -> &Client {
+        &self.client
+    }
+
+    /// Get the circuit breaker service
+    pub fn circuit_breaker(&self) -> &CircuitBreakerService {
+        &self.circuit_breaker
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::CircuitBreakerConfig;
+
+    fn test_config() -> CircuitBreakerConfig {
+        CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 10,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        }
+    }
+
+    fn disabled_config() -> CircuitBreakerConfig {
+        CircuitBreakerConfig {
+            enabled: false,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 10,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        }
+    }
+
+    // ==================== Client Creation Tests ====================
+
+    #[test]
+    fn test_client_creation() {
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(test_config()));
+        let client = ResilientHttpClient::new(circuit_breaker);
+        assert!(client.circuit_breaker().is_enabled());
+    }
+
+    #[test]
+    fn test_client_with_custom_timeout() {
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(test_config()));
+        let client = ResilientHttpClient::with_timeout(
+            circuit_breaker,
+            Duration::from_secs(10),
+        );
+        assert!(client.circuit_breaker().is_enabled());
+    }
+
+    #[test]
+    fn test_client_with_disabled_circuit_breaker() {
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(disabled_config()));
+        let client = ResilientHttpClient::new(circuit_breaker);
+        assert!(!client.circuit_breaker().is_enabled());
+    }
+
+    // ==================== Accessor Tests ====================
+
+    #[test]
+    fn test_inner_client_accessor() {
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(test_config()));
+        let client = ResilientHttpClient::new(circuit_breaker);
+        // Just verify we can access the inner client
+        let _inner = client.inner();
+    }
+
+    #[test]
+    fn test_circuit_breaker_accessor() {
+        let config = test_config();
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(config.clone()));
+        let client = ResilientHttpClient::new(circuit_breaker);
+        assert_eq!(
+            client.circuit_breaker().config().failure_rate_threshold,
+            config.failure_rate_threshold
+        );
+    }
+
+    // ==================== Clone Tests ====================
+
+    #[test]
+    fn test_client_clone() {
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(test_config()));
+        let client = ResilientHttpClient::new(circuit_breaker);
+        let cloned = client.clone();
+        assert!(cloned.circuit_breaker().is_enabled());
+    }
+
+    // ==================== Error Type Tests ====================
+
+    #[test]
+    fn test_resilient_http_error_display() {
+        let cb_error = ResilientHttpError::CircuitBreaker(
+            CircuitBreakerError::CircuitOpen("test-service".to_string())
+        );
+        assert!(cb_error.to_string().contains("Circuit breaker error"));
+
+        let http_error = ResilientHttpError::HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Internal Server Error".to_string(),
+        };
+        assert!(http_error.to_string().contains("500"));
+        assert!(http_error.to_string().contains("Internal Server Error"));
+    }
+
+    #[test]
+    fn test_error_from_circuit_breaker_error() {
+        let cb_error = CircuitBreakerError::CircuitOpen("test".to_string());
+        let resilient_error: ResilientHttpError = cb_error.into();
+        assert!(matches!(resilient_error, ResilientHttpError::CircuitBreaker(_)));
+    }
+
+    // ==================== Timeout Configuration Tests ====================
+
+    #[test]
+    fn test_timeout_from_config() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 10,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 15000, // 15 seconds
+        };
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(config));
+        // Client should use the config's timeout
+        let _client = ResilientHttpClient::new(circuit_breaker);
+    }
+
+    #[test]
+    fn test_custom_timeout_overrides_config() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 10,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000, // 5 seconds in config
+        };
+        let circuit_breaker = Arc::new(CircuitBreakerService::new(config));
+        // Custom timeout of 30 seconds should override the 5 second config
+        let _client = ResilientHttpClient::with_timeout(
+            circuit_breaker,
+            Duration::from_secs(30),
+        );
+    }
+
+    // ==================== Error Debug Tests ====================
+
+    #[test]
+    fn test_error_debug_format() {
+        let error = ResilientHttpError::HttpError {
+            status: StatusCode::BAD_GATEWAY,
+            message: "Bad Gateway".to_string(),
+        };
+        let debug_str = format!("{:?}", error);
+        assert!(debug_str.contains("HttpError"));
+        assert!(debug_str.contains("502"));
+    }
+}

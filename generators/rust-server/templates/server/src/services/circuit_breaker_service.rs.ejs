@@ -1,0 +1,756 @@
+//! Circuit Breaker service for <%= baseName %>
+//!
+//! This module provides a circuit breaker implementation for resilient HTTP calls
+//! to external services. It prevents cascading failures by temporarily stopping
+//! calls to failing services.
+
+use crate::config::CircuitBreakerConfig;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
+<%_ if (monitoringPrometheus) { _%>
+use super::circuit_breaker_metrics as cb_metrics;
+<%_ } _%>
+
+/// Circuit breaker states
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CircuitState {
+    /// Normal operation - requests are allowed
+    Closed,
+    /// Circuit is open - requests are rejected
+    Open,
+    /// Testing recovery - limited requests allowed
+    HalfOpen,
+}
+
+impl std::fmt::Display for CircuitState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CircuitState::Closed => write!(f, "CLOSED"),
+            CircuitState::Open => write!(f, "OPEN"),
+            CircuitState::HalfOpen => write!(f, "HALF_OPEN"),
+        }
+    }
+}
+
+/// Metrics for a single circuit breaker
+#[derive(Debug)]
+struct CircuitMetrics {
+    /// Total number of calls
+    total_calls: AtomicU64,
+    /// Number of failed calls
+    failed_calls: AtomicU64,
+    /// Number of successful calls
+    successful_calls: AtomicU64,
+    /// Calls in current sliding window
+    window_calls: AtomicU64,
+    /// Failures in current sliding window
+    window_failures: AtomicU64,
+}
+
+impl CircuitMetrics {
+    fn new() -> Self {
+        Self {
+            total_calls: AtomicU64::new(0),
+            failed_calls: AtomicU64::new(0),
+            successful_calls: AtomicU64::new(0),
+            window_calls: AtomicU64::new(0),
+            window_failures: AtomicU64::new(0),
+        }
+    }
+
+    fn record_success(&self) {
+        self.total_calls.fetch_add(1, Ordering::Relaxed);
+        self.successful_calls.fetch_add(1, Ordering::Relaxed);
+        self.window_calls.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_failure(&self) {
+        self.total_calls.fetch_add(1, Ordering::Relaxed);
+        self.failed_calls.fetch_add(1, Ordering::Relaxed);
+        self.window_calls.fetch_add(1, Ordering::Relaxed);
+        self.window_failures.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn failure_rate(&self) -> f64 {
+        let calls = self.window_calls.load(Ordering::Relaxed);
+        if calls == 0 {
+            return 0.0;
+        }
+        let failures = self.window_failures.load(Ordering::Relaxed);
+        failures as f64 / calls as f64
+    }
+
+    fn reset_window(&self) {
+        self.window_calls.store(0, Ordering::Relaxed);
+        self.window_failures.store(0, Ordering::Relaxed);
+    }
+}
+
+/// State of an individual circuit breaker
+struct CircuitBreakerState {
+    state: CircuitState,
+    last_state_change: Instant,
+    metrics: CircuitMetrics,
+    half_open_calls: u64,
+}
+
+impl CircuitBreakerState {
+    fn new() -> Self {
+        Self {
+            state: CircuitState::Closed,
+            last_state_change: Instant::now(),
+            metrics: CircuitMetrics::new(),
+            half_open_calls: 0,
+        }
+    }
+}
+
+/// Errors that can occur with the circuit breaker
+#[derive(Debug, thiserror::Error)]
+pub enum CircuitBreakerError {
+    #[error("Circuit breaker is open for service: {0}")]
+    CircuitOpen(String),
+
+    #[error("Request rejected in half-open state for service: {0}")]
+    HalfOpenRejected(String),
+
+    #[error("Request failed: {0}")]
+    RequestFailed(String),
+
+    #[error("Request timed out")]
+    Timeout,
+
+    #[error("Circuit breaker not enabled")]
+    NotEnabled,
+}
+
+/// Circuit Breaker service for managing circuit breakers across multiple services
+#[derive(Clone)]
+pub struct CircuitBreakerService {
+    config: CircuitBreakerConfig,
+    /// Circuit breakers by service name
+    breakers: Arc<RwLock<HashMap<String, CircuitBreakerState>>>,
+}
+
+impl CircuitBreakerService {
+    /// Create a new circuit breaker service
+    pub fn new(config: CircuitBreakerConfig) -> Self {
+        Self {
+            config,
+            breakers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Check if circuit breaker is enabled
+    pub fn is_enabled(&self) -> bool {
+        self.config.enabled
+    }
+
+    /// Get the configuration
+    pub fn config(&self) -> &CircuitBreakerConfig {
+        &self.config
+    }
+
+    /// Check if a request is allowed for the given service
+    pub async fn is_request_allowed(&self, service_name: &str) -> Result<(), CircuitBreakerError> {
+        if !self.config.enabled {
+            return Ok(());
+        }
+
+        let mut breakers = self.breakers.write().await;
+        let breaker = breakers
+            .entry(service_name.to_string())
+            .or_insert_with(CircuitBreakerState::new);
+
+        match breaker.state {
+            CircuitState::Closed => Ok(()),
+            CircuitState::Open => {
+                // Check if we should transition to half-open
+                if breaker.last_state_change.elapsed() >= self.config.wait_duration() {
+                    info!(
+                        "Circuit breaker for '{}' transitioning from OPEN to HALF_OPEN",
+                        service_name
+                    );
+                    breaker.state = CircuitState::HalfOpen;
+                    breaker.last_state_change = Instant::now();
+                    breaker.half_open_calls = 0;
+                    breaker.metrics.reset_window();
+<%_ if (monitoringPrometheus) { _%>
+                    cb_metrics::record_state(service_name, CircuitState::HalfOpen);
+<%_ } _%>
+                    Ok(())
+                } else {
+                    debug!(
+                        "Circuit breaker for '{}' is OPEN, rejecting request",
+                        service_name
+                    );
+<%_ if (monitoringPrometheus) { _%>
+                    cb_metrics::record_rejected(service_name);
+<%_ } _%>
+                    Err(CircuitBreakerError::CircuitOpen(service_name.to_string()))
+                }
+            }
+            CircuitState::HalfOpen => {
+                if breaker.half_open_calls < self.config.permitted_calls_in_half_open as u64 {
+                    breaker.half_open_calls += 1;
+                    Ok(())
+                } else {
+                    debug!(
+                        "Circuit breaker for '{}' in HALF_OPEN state, max calls reached",
+                        service_name
+                    );
+<%_ if (monitoringPrometheus) { _%>
+                    cb_metrics::record_rejected(service_name);
+<%_ } _%>
+                    Err(CircuitBreakerError::HalfOpenRejected(service_name.to_string()))
+                }
+            }
+        }
+    }
+
+    /// Record a successful request
+    pub async fn record_success(&self, service_name: &str) {
+        if !self.config.enabled {
+            return;
+        }
+
+        let mut breakers = self.breakers.write().await;
+        if let Some(breaker) = breakers.get_mut(service_name) {
+            breaker.metrics.record_success();
+<%_ if (monitoringPrometheus) { _%>
+            cb_metrics::record_success(service_name);
+            cb_metrics::record_failure_rate(service_name, breaker.metrics.failure_rate());
+<%_ } _%>
+
+            // If in half-open state and we have enough successes, close the circuit
+            if breaker.state == CircuitState::HalfOpen {
+                let success_rate = 1.0 - breaker.metrics.failure_rate();
+                if success_rate >= (1.0 - self.config.failure_rate_threshold) {
+                    info!(
+                        "Circuit breaker for '{}' transitioning from HALF_OPEN to CLOSED (success rate: {:.2}%)",
+                        service_name,
+                        success_rate * 100.0
+                    );
+                    breaker.state = CircuitState::Closed;
+                    breaker.last_state_change = Instant::now();
+                    breaker.metrics.reset_window();
+<%_ if (monitoringPrometheus) { _%>
+                    cb_metrics::record_state(service_name, CircuitState::Closed);
+                    cb_metrics::record_failure_rate(service_name, 0.0);
+<%_ } _%>
+                }
+            }
+        }
+    }
+
+    /// Record a failed request
+    pub async fn record_failure(&self, service_name: &str) {
+        if !self.config.enabled {
+            return;
+        }
+
+        let mut breakers = self.breakers.write().await;
+        let breaker = breakers
+            .entry(service_name.to_string())
+            .or_insert_with(CircuitBreakerState::new);
+
+        breaker.metrics.record_failure();
+<%_ if (monitoringPrometheus) { _%>
+        cb_metrics::record_failure(service_name);
+        cb_metrics::record_failure_rate(service_name, breaker.metrics.failure_rate());
+<%_ } _%>
+
+        match breaker.state {
+            CircuitState::Closed => {
+                // Check if we should open the circuit
+                let window_calls = breaker.metrics.window_calls.load(Ordering::Relaxed);
+                if window_calls >= self.config.sliding_window_size as u64 {
+                    let failure_rate = breaker.metrics.failure_rate();
+                    if failure_rate >= self.config.failure_rate_threshold {
+                        warn!(
+                            "Circuit breaker for '{}' transitioning from CLOSED to OPEN (failure rate: {:.2}%)",
+                            service_name,
+                            failure_rate * 100.0
+                        );
+                        breaker.state = CircuitState::Open;
+                        breaker.last_state_change = Instant::now();
+<%_ if (monitoringPrometheus) { _%>
+                        cb_metrics::record_state(service_name, CircuitState::Open);
+<%_ } _%>
+                    }
+                }
+            }
+            CircuitState::HalfOpen => {
+                // Any failure in half-open state opens the circuit again
+                warn!(
+                    "Circuit breaker for '{}' transitioning from HALF_OPEN to OPEN (failure during recovery)",
+                    service_name
+                );
+                breaker.state = CircuitState::Open;
+                breaker.last_state_change = Instant::now();
+                breaker.metrics.reset_window();
+<%_ if (monitoringPrometheus) { _%>
+                cb_metrics::record_state(service_name, CircuitState::Open);
+<%_ } _%>
+            }
+            CircuitState::Open => {
+                // Already open, nothing to do
+            }
+        }
+    }
+
+    /// Get the current state of a circuit breaker
+    pub async fn get_state(&self, service_name: &str) -> CircuitState {
+        let breakers = self.breakers.read().await;
+        breakers
+            .get(service_name)
+            .map(|b| b.state)
+            .unwrap_or(CircuitState::Closed)
+    }
+
+    /// Get status information for all circuit breakers
+    pub async fn get_all_status(&self) -> HashMap<String, CircuitBreakerStatus> {
+        let breakers = self.breakers.read().await;
+        breakers
+            .iter()
+            .map(|(name, breaker)| {
+                (
+                    name.clone(),
+                    CircuitBreakerStatus {
+                        state: breaker.state,
+                        total_calls: breaker.metrics.total_calls.load(Ordering::Relaxed),
+                        failed_calls: breaker.metrics.failed_calls.load(Ordering::Relaxed),
+                        successful_calls: breaker.metrics.successful_calls.load(Ordering::Relaxed),
+                        failure_rate: breaker.metrics.failure_rate(),
+                        last_state_change: breaker.last_state_change.elapsed().as_secs(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// Execute a function with circuit breaker protection
+    pub async fn execute<F, Fut, T, E>(
+        &self,
+        service_name: &str,
+        f: F,
+    ) -> Result<T, CircuitBreakerError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T, E>>,
+        E: std::fmt::Display,
+    {
+        // Check if request is allowed
+        self.is_request_allowed(service_name).await?;
+
+        // Execute with timeout
+        let timeout = self.config.request_timeout();
+        let result = tokio::time::timeout(timeout, f()).await;
+
+        match result {
+            Ok(Ok(value)) => {
+                self.record_success(service_name).await;
+                Ok(value)
+            }
+            Ok(Err(e)) => {
+                self.record_failure(service_name).await;
+                Err(CircuitBreakerError::RequestFailed(e.to_string()))
+            }
+            Err(_) => {
+                self.record_failure(service_name).await;
+                Err(CircuitBreakerError::Timeout)
+            }
+        }
+    }
+}
+
+/// Status information for a circuit breaker
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CircuitBreakerStatus {
+    pub state: CircuitState,
+    pub total_calls: u64,
+    pub failed_calls: u64,
+    pub successful_calls: u64,
+    pub failure_rate: f64,
+    /// Seconds since last state change
+    pub last_state_change: u64,
+}
+
+impl serde::Serialize for CircuitState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config() -> CircuitBreakerConfig {
+        CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 10,
+            wait_duration_in_open_secs: 1,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        }
+    }
+
+    fn disabled_config() -> CircuitBreakerConfig {
+        CircuitBreakerConfig {
+            enabled: false,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 10,
+            wait_duration_in_open_secs: 1,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        }
+    }
+
+    // ==================== Basic State Tests ====================
+
+    #[tokio::test]
+    async fn test_circuit_starts_closed() {
+        let service = CircuitBreakerService::new(test_config());
+        let state = service.get_state("test-service").await;
+        assert_eq!(state, CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_request_allowed_when_closed() {
+        let service = CircuitBreakerService::new(test_config());
+        let result = service.is_request_allowed("test-service").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_circuit_opens_on_failures() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 4,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Record failures to trigger opening
+        for _ in 0..4 {
+            service.record_failure("test-service").await;
+        }
+
+        let state = service.get_state("test-service").await;
+        assert_eq!(state, CircuitState::Open);
+    }
+
+    #[tokio::test]
+    async fn test_request_rejected_when_open() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 2,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Open the circuit
+        for _ in 0..2 {
+            service.record_failure("test-service").await;
+        }
+
+        let result = service.is_request_allowed("test-service").await;
+        assert!(matches!(result, Err(CircuitBreakerError::CircuitOpen(_))));
+    }
+
+    // ==================== Execute Tests ====================
+
+    #[tokio::test]
+    async fn test_execute_success() {
+        let service = CircuitBreakerService::new(test_config());
+
+        let result = service
+            .execute("test-service", || async { Ok::<_, String>("success") })
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "success");
+    }
+
+    #[tokio::test]
+    async fn test_execute_failure() {
+        let service = CircuitBreakerService::new(test_config());
+
+        let result = service
+            .execute("test-service", || async {
+                Err::<String, _>("error")
+            })
+            .await;
+
+        assert!(matches!(result, Err(CircuitBreakerError::RequestFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn test_execute_rejected_when_open() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 2,
+            wait_duration_in_open_secs: 60,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Open the circuit
+        for _ in 0..2 {
+            service.record_failure("test-service").await;
+        }
+
+        // Attempt to execute should fail
+        let result = service
+            .execute("test-service", || async { Ok::<_, String>("should not run") })
+            .await;
+
+        assert!(matches!(result, Err(CircuitBreakerError::CircuitOpen(_))));
+    }
+
+    // ==================== Disabled Circuit Breaker Tests ====================
+
+    #[tokio::test]
+    async fn test_disabled_circuit_breaker_allows_all_requests() {
+        let service = CircuitBreakerService::new(disabled_config());
+
+        // Record many failures
+        for _ in 0..100 {
+            service.record_failure("test-service").await;
+        }
+
+        // Should still allow requests when disabled
+        let result = service.is_request_allowed("test-service").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_is_enabled_returns_correct_value() {
+        let enabled_service = CircuitBreakerService::new(test_config());
+        let disabled_service = CircuitBreakerService::new(disabled_config());
+
+        assert!(enabled_service.is_enabled());
+        assert!(!disabled_service.is_enabled());
+    }
+
+    // ==================== State Transition Tests ====================
+
+    #[tokio::test]
+    async fn test_circuit_transitions_to_half_open_after_wait() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 2,
+            wait_duration_in_open_secs: 0, // Immediate transition for testing
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Open the circuit
+        for _ in 0..2 {
+            service.record_failure("test-service").await;
+        }
+        assert_eq!(service.get_state("test-service").await, CircuitState::Open);
+
+        // Request should trigger transition to half-open (since wait_duration is 0)
+        let result = service.is_request_allowed("test-service").await;
+        assert!(result.is_ok());
+        assert_eq!(service.get_state("test-service").await, CircuitState::HalfOpen);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_closes_after_successes_in_half_open() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 2,
+            wait_duration_in_open_secs: 0,
+            permitted_calls_in_half_open: 2,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Open the circuit
+        for _ in 0..2 {
+            service.record_failure("test-service").await;
+        }
+
+        // Transition to half-open
+        service.is_request_allowed("test-service").await.ok();
+        assert_eq!(service.get_state("test-service").await, CircuitState::HalfOpen);
+
+        // Record successes to close the circuit
+        service.record_success("test-service").await;
+        service.record_success("test-service").await;
+
+        assert_eq!(service.get_state("test-service").await, CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_reopens_on_failure_in_half_open() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 2,
+            wait_duration_in_open_secs: 0,
+            permitted_calls_in_half_open: 3,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Open the circuit
+        for _ in 0..2 {
+            service.record_failure("test-service").await;
+        }
+
+        // Transition to half-open
+        service.is_request_allowed("test-service").await.ok();
+        assert_eq!(service.get_state("test-service").await, CircuitState::HalfOpen);
+
+        // Failure in half-open should re-open the circuit
+        service.record_failure("test-service").await;
+        assert_eq!(service.get_state("test-service").await, CircuitState::Open);
+    }
+
+    // ==================== Half-Open Limit Tests ====================
+
+    #[tokio::test]
+    async fn test_half_open_limits_concurrent_requests() {
+        let config = CircuitBreakerConfig {
+            enabled: true,
+            failure_rate_threshold: 0.5,
+            sliding_window_size: 2,
+            wait_duration_in_open_secs: 0,
+            permitted_calls_in_half_open: 2,
+            request_timeout_ms: 5000,
+        };
+        let service = CircuitBreakerService::new(config);
+
+        // Open the circuit
+        for _ in 0..2 {
+            service.record_failure("test-service").await;
+        }
+
+        // First request transitions to half-open
+        assert!(service.is_request_allowed("test-service").await.is_ok());
+        // Second request allowed (within limit)
+        assert!(service.is_request_allowed("test-service").await.is_ok());
+        // Third request should be rejected (exceeds limit)
+        let result = service.is_request_allowed("test-service").await;
+        assert!(matches!(result, Err(CircuitBreakerError::HalfOpenRejected(_))));
+    }
+
+    // ==================== Multiple Services Tests ====================
+
+    #[tokio::test]
+    async fn test_independent_circuits_per_service() {
+        let service = CircuitBreakerService::new(test_config());
+
+        // Record failures only for service-a
+        for _ in 0..10 {
+            service.record_failure("service-a").await;
+        }
+
+        // service-a should be open
+        assert_eq!(service.get_state("service-a").await, CircuitState::Open);
+        // service-b should still be closed
+        assert_eq!(service.get_state("service-b").await, CircuitState::Closed);
+    }
+
+    // ==================== Status Tests ====================
+
+    #[tokio::test]
+    async fn test_get_all_status() {
+        let service = CircuitBreakerService::new(test_config());
+
+        // Record some activity
+        service.record_success("service-a").await;
+        service.record_failure("service-b").await;
+
+        let status = service.get_all_status().await;
+        assert!(status.contains_key("service-a"));
+        assert!(status.contains_key("service-b"));
+
+        let status_a = status.get("service-a").unwrap();
+        assert_eq!(status_a.state, CircuitState::Closed);
+        assert_eq!(status_a.successful_calls, 1);
+        assert_eq!(status_a.failed_calls, 0);
+
+        let status_b = status.get("service-b").unwrap();
+        assert_eq!(status_b.failed_calls, 1);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_state_display() {
+        assert_eq!(format!("{}", CircuitState::Closed), "CLOSED");
+        assert_eq!(format!("{}", CircuitState::Open), "OPEN");
+        assert_eq!(format!("{}", CircuitState::HalfOpen), "HALF_OPEN");
+    }
+
+    // ==================== Config Access Tests ====================
+
+    #[tokio::test]
+    async fn test_config_accessor() {
+        let config = test_config();
+        let service = CircuitBreakerService::new(config.clone());
+        assert_eq!(service.config().failure_rate_threshold, config.failure_rate_threshold);
+        assert_eq!(service.config().sliding_window_size, config.sliding_window_size);
+    }
+
+    // ==================== Error Type Tests ====================
+
+    #[test]
+    fn test_error_display() {
+        let open_error = CircuitBreakerError::CircuitOpen("test".to_string());
+        assert!(open_error.to_string().contains("Circuit breaker is open"));
+
+        let half_open_error = CircuitBreakerError::HalfOpenRejected("test".to_string());
+        assert!(half_open_error.to_string().contains("half-open"));
+
+        let failed_error = CircuitBreakerError::RequestFailed("connection refused".to_string());
+        assert!(failed_error.to_string().contains("connection refused"));
+
+        let timeout_error = CircuitBreakerError::Timeout;
+        assert!(timeout_error.to_string().contains("timed out"));
+
+        let not_enabled_error = CircuitBreakerError::NotEnabled;
+        assert!(not_enabled_error.to_string().contains("not enabled"));
+    }
+
+    // ==================== Serialization Tests ====================
+
+    #[tokio::test]
+    async fn test_circuit_state_serialization() {
+        let status = CircuitBreakerStatus {
+            state: CircuitState::Closed,
+            total_calls: 100,
+            failed_calls: 5,
+            successful_calls: 95,
+            failure_rate: 0.05,
+            last_state_change: 60,
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"state\":\"CLOSED\""));
+        assert!(json.contains("\"total_calls\":100"));
+        assert!(json.contains("\"failure_rate\":0.05"));
+    }
+}

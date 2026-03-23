@@ -3,9 +3,8 @@
 > JHipster blueprint for generating Rust backends with Axum
 
 [![NPM version][npm-image]][npm-url]
-
-<!-- [![Generator][github-generator-image]][github-generator-url]
-[![Samples][github-samples-image]][github-samples-url] -->
+[![Generator][github-generator-image]][github-generator-url]
+[![Samples][github-samples-image]][github-samples-url]
 
 # Introduction
 
@@ -52,6 +51,7 @@ The generated Rust server provides a complete REST API implementation with authe
 |                          | Password reset               | Forgot password flow with email              |
 | **Message Brokers**      | Apache Kafka                 | High-throughput async messaging (rdkafka)    |
 | **Monitoring**           | Prometheus metrics           | HTTP request metrics with Grafana dashboards |
+| **Resilience**           | Circuit Breaker              | Prevents cascading failures in microservices |
 | **CI/CD**                | GitHub Actions               | Build, test, lint, Docker publish            |
 |                          | GitLab CI                    | Build, test, lint, Docker publish            |
 |                          | Local CI with act            | Run GitHub Actions locally in Docker         |
@@ -102,6 +102,10 @@ As this is a [JHipster](https://www.jhipster.tech/) blueprint, we expect you hav
 ## Monitoring
 
 - [Prometheus Monitoring](docs/PROMETHEUS.md) - Metrics collection with Prometheus and Grafana dashboards
+
+## Resilience
+
+- [Circuit Breaker Pattern](docs/CIRCUIT_BREAKER.md) - Preventing cascading failures with circuit breaker pattern for resilient HTTP calls
 
 ## CI/CD
 
@@ -287,7 +291,6 @@ The following features from the base JHipster generator are planned for future v
 | Feature                   | Notes                                              |
 | ------------------------- | -------------------------------------------------- |
 | Inter-service HTTP Client | Feign-like client with automatic token propagation |
-| Circuit Breaker           | Resilience4j equivalent                            |
 | Kubernetes Manifests      | No K8s deployment, service, ingress generation     |
 
 ### Medium Priority (Enterprise Features)

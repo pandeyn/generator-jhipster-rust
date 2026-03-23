@@ -23,6 +23,23 @@ All HTTP metrics include the following labels:
 - `method`: HTTP method (GET, POST, PUT, DELETE, etc.)
 - `path`: Request path (normalized)
 - `status`: HTTP status code
+<%_ if (circuitBreakerEnabled) { _%>
+
+### Circuit Breaker Metrics
+
+When circuit breaker is enabled, additional metrics are exposed:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `circuit_breaker_state` | Gauge | Circuit state (0=closed, 1=half_open, 2=open) |
+| `circuit_breaker_calls_total` | Counter | Total calls by service and outcome |
+| `circuit_breaker_failures_total` | Counter | Total failed calls by service |
+| `circuit_breaker_successes_total` | Counter | Total successful calls by service |
+| `circuit_breaker_rejected_total` | Counter | Total rejected calls (circuit open) |
+| `circuit_breaker_failure_rate` | Gauge | Current failure rate (0.0 to 1.0) |
+
+See [Circuit Breaker Documentation](CIRCUIT_BREAKER.md#prometheus-metrics) for detailed usage and alert rules.
+<%_ } _%>
 
 ## Configuration
 

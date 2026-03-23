@@ -140,6 +140,22 @@ export const serverFiles = {
       path: SERVER_RUST_DIR,
       templates: ['src/config/metrics_config.rs'],
     },
+    {
+      // Circuit breaker files
+      condition: generator => generator.circuitBreakerEnabled,
+      path: SERVER_RUST_DIR,
+      templates: [
+        'src/config/circuit_breaker_config.rs',
+        'src/services/circuit_breaker_service.rs',
+        'src/services/resilient_http_client.rs',
+      ],
+    },
+    {
+      // Circuit breaker Prometheus metrics (when both circuit breaker and Prometheus are enabled)
+      condition: generator => generator.circuitBreakerEnabled && generator.monitoringPrometheus,
+      path: SERVER_RUST_DIR,
+      templates: ['src/services/circuit_breaker_metrics.rs'],
+    },
   ],
   migrations: [
     {
@@ -226,6 +242,11 @@ export const serverFiles = {
       // Prometheus monitoring documentation
       condition: generator => generator.monitoringPrometheus,
       templates: ['docs/PROMETHEUS.md'],
+    },
+    {
+      // Circuit breaker documentation
+      condition: generator => generator.circuitBreakerEnabled,
+      templates: ['docs/CIRCUIT_BREAKER.md'],
     },
   ],
 };

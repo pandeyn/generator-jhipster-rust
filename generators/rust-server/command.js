@@ -102,5 +102,18 @@ export default asCommand({
       ],
       default: 'no',
     },
+    circuitBreaker: {
+      cli: {
+        type: Boolean,
+        description: 'Enable circuit breaker pattern for resilient HTTP calls',
+      },
+      prompt: generator => ({
+        type: 'confirm',
+        message: `Would you like to enable the ${chalk.yellow('*circuit breaker*')} pattern for resilient HTTP calls?`,
+        when: ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType),
+        default: true,
+      }),
+      default: true,
+    },
   },
 });

@@ -43,7 +43,10 @@ use db::connection::DbPool;
 <%_ if (enableEmail) { _%>
 use services::EmailService;
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka) { _%>
+<%_ if (circuitBreakerEnabled) { _%>
+use services::CircuitBreakerService;
+<%_ } _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled) { _%>
 use std::sync::Arc;
 <%_ } _%>
 
@@ -77,5 +80,10 @@ pub struct AppState {
     /// Kafka consumer for consuming messages
     /// None if Kafka is disabled or unavailable
     pub kafka_consumer: Option<Arc<KafkaConsumer>>,
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+    /// Circuit breaker service for resilient HTTP calls
+    /// None if circuit breaker is disabled
+    pub circuit_breaker: Option<Arc<CircuitBreakerService>>,
 <%_ } _%>
 }

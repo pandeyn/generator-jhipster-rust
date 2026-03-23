@@ -30,4 +30,14 @@ pub use kafka_producer::{KafkaProducer, KafkaProducerError};
 pub use kafka_consumer::{KafkaConsumer, KafkaConsumerError, KafkaMessage};
 <%_ } _%>
 
+<%_ if (circuitBreakerEnabled) { _%>
+mod circuit_breaker_service;
+mod resilient_http_client;
+<%_ if (monitoringPrometheus) { _%>
+pub mod circuit_breaker_metrics;
+<%_ } _%>
+pub use circuit_breaker_service::{CircuitBreakerService, CircuitBreakerError, CircuitBreakerStatus, CircuitState};
+pub use resilient_http_client::{ResilientHttpClient, ResilientHttpError};
+<%_ } _%>
+
 // jhipster-needle-add-entity-service - JHipster will add entity services here

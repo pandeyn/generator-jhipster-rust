@@ -329,6 +329,20 @@ export default class extends BaseApplicationGenerator {
         application.monitoringPrometheus = monitoring === 'prometheus';
         application.monitoringAny = monitoring !== 'no';
       },
+      rustCircuitBreakerConfig({ application }) {
+        // Set circuit breaker flags for resilience in microservices
+        // Circuit breaker is applicable for gateway and microservice application types
+        const isMicroservicesApp = application.applicationTypeMicroservice || application.applicationTypeGateway;
+        const circuitBreaker = this.jhipsterConfig.circuitBreaker;
+
+        // Enable by default for microservices/gateways, unless explicitly disabled
+        if (isMicroservicesApp) {
+          application.circuitBreakerEnabled = circuitBreaker !== false;
+        } else {
+          // For monoliths, only enable if explicitly requested
+          application.circuitBreakerEnabled = circuitBreaker === true;
+        }
+      },
       async source({ source }) {
         // Helper to add entity to models/mod.rs
         source.addEntityToRustModels = ({ entityFileName }) => {

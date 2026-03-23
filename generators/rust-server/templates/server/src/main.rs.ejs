@@ -42,7 +42,14 @@ use <%= rustCrateName %>::db::connection::establish_connection_pool;
 use <%= rustCrateName %>::config::EmailConfig;
 use <%= rustCrateName %>::services::EmailService;
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka) { _%>
+<%_ if (circuitBreakerEnabled) { _%>
+use <%= rustCrateName %>::config::CircuitBreakerConfig;
+use <%= rustCrateName %>::services::CircuitBreakerService;
+<%_ if (monitoringPrometheus) { _%>
+use <%= rustCrateName %>::services::circuit_breaker_metrics;
+<%_ } _%>
+<%_ } _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled) { _%>
 use std::sync::Arc;
 <%_ } _%>
 use <%= rustCrateName %>::handlers;
@@ -115,6 +122,28 @@ async fn main() {
     };
 
 <%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+    // Initialize circuit breaker service (before Consul, as Consul can use it)
+    let circuit_breaker_config = CircuitBreakerConfig::from_env();
+    let circuit_breaker = if circuit_breaker_config.enabled {
+        tracing::info!(
+            "Circuit breaker enabled (failure threshold: {:.0}%, window size: {}, wait duration: {}s)",
+            circuit_breaker_config.failure_rate_threshold * 100.0,
+            circuit_breaker_config.sliding_window_size,
+            circuit_breaker_config.wait_duration_in_open_secs
+        );
+<%_ if (monitoringPrometheus) { _%>
+        // Initialize circuit breaker Prometheus metrics
+        circuit_breaker_metrics::init_metrics();
+        tracing::info!("Circuit breaker Prometheus metrics initialized");
+<%_ } _%>
+        Some(Arc::new(CircuitBreakerService::new(circuit_breaker_config)))
+    } else {
+        tracing::info!("Circuit breaker disabled (CIRCUIT_BREAKER_ENABLED=false)");
+        None
+    };
+
+<%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
     // Initialize Consul service for service discovery
     let consul_config = ConsulConfig::from_env();
@@ -127,7 +156,11 @@ async fn main() {
             "Health check will use: http://{}:{}/api/health",
             consul_config.health_check_host, config.app_port
         );
+<%_ if (circuitBreakerEnabled) { _%>
+        let service = ConsulService::new(consul_config.clone(), circuit_breaker.clone());
+<%_ } else { _%>
         let service = ConsulService::new(consul_config.clone());
+<%_ } _%>
 
         // Get the address to register with Consul for service discovery
         // This is the address other services will use to connect to this service
@@ -256,6 +289,9 @@ async fn main() {
 <%_ if (messageBrokerKafka) { _%>
         kafka_producer,
         kafka_consumer,
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+        circuit_breaker,
 <%_ } _%>
     };
 

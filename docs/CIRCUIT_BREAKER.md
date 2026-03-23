@@ -1,0 +1,405 @@
+# Circuit Breaker Pattern
+
+This document describes the circuit breaker pattern implementation in the JHipster Rust generator.
+
+## Overview
+
+The circuit breaker pattern prevents cascading failures in distributed systems by temporarily stopping calls to failing services. When a service experiences repeated failures, the circuit "opens" and subsequent requests are immediately rejected without attempting the call, giving the failing service time to recover.
+
+## States
+
+The circuit breaker has three states:
+
+| State         | Description                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| **CLOSED**    | Normal operation. Requests are allowed through. Failures are tracked.                            |
+| **OPEN**      | Circuit is tripped. Requests are rejected immediately without attempting the call.               |
+| **HALF_OPEN** | Testing recovery. A limited number of requests are allowed to test if the service has recovered. |
+
+### State Transitions
+
+```
+        Success            Failure threshold exceeded
+           ↓                         ↓
+    ┌──────────┐              ┌──────────┐
+    │  CLOSED  │──────────────→│   OPEN   │
+    └──────────┘              └──────────┘
+         ↑                          │
+         │                          │ Wait duration elapsed
+         │                          ↓
+         │                   ┌───────────┐
+         └───────────────────│ HALF_OPEN │
+              Success        └───────────┘
+                                   │
+                                   │ Failure
+                                   ↓
+                              ┌──────────┐
+                              │   OPEN   │
+                              └──────────┘
+```
+
+## Configuration
+
+Configure the circuit breaker using environment variables in your `.env` file:
+
+```env
+# Enable/disable circuit breaker
+CIRCUIT_BREAKER_ENABLED=true
+
+# Failure rate threshold (0.0 to 1.0)
+# Opens circuit when failure rate exceeds this value
+# Default: 0.5 (50%)
+CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD=0.5
+
+# Number of calls in sliding window for failure rate calculation
+# Default: 100
+CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE=100
+
+# Duration in seconds the circuit stays open before transitioning to half-open
+# Default: 60
+CIRCUIT_BREAKER_WAIT_DURATION_SECS=60
+
+# Number of permitted calls in half-open state to test recovery
+# Default: 10
+CIRCUIT_BREAKER_PERMITTED_CALLS_HALF_OPEN=10
+
+# Request timeout in milliseconds
+# Default: 30000 (30 seconds)
+CIRCUIT_BREAKER_REQUEST_TIMEOUT_MS=30000
+```
+
+## Usage
+
+### Using the Circuit Breaker Service Directly
+
+```rust
+use crate::services::CircuitBreakerService;
+
+// From AppState
+if let Some(circuit_breaker) = &state.circuit_breaker {
+    // Execute a function with circuit breaker protection
+    let result = circuit_breaker
+        .execute("external-service", || async {
+            // Your async operation here
+            external_api_call().await
+        })
+        .await;
+
+    match result {
+        Ok(response) => {
+            // Handle success
+        }
+        Err(CircuitBreakerError::CircuitOpen(service)) => {
+            // Circuit is open, request was rejected
+            tracing::warn!("Circuit open for service: {}", service);
+        }
+        Err(CircuitBreakerError::Timeout) => {
+            // Request timed out
+        }
+        Err(CircuitBreakerError::RequestFailed(msg)) => {
+            // Underlying request failed
+        }
+    }
+}
+```
+
+### Using the Resilient HTTP Client
+
+The `ResilientHttpClient` wraps `reqwest` with automatic circuit breaker protection:
+
+```rust
+use crate::services::ResilientHttpClient;
+use std::sync::Arc;
+
+// Create a resilient HTTP client
+let http_client = ResilientHttpClient::new(state.circuit_breaker.clone().unwrap());
+
+// Make a GET request with circuit breaker protection
+let response = http_client
+    .get("user-service", "http://user-service:8080/api/users")
+    .await?;
+
+// Make a POST request
+let user = CreateUserRequest { name: "John".to_string() };
+let response = http_client
+    .post("user-service", "http://user-service:8080/api/users", &user)
+    .await?;
+
+// Make a PUT request
+let response = http_client
+    .put("user-service", "http://user-service:8080/api/users/1", &update)
+    .await?;
+
+// Make a DELETE request
+let response = http_client
+    .delete("user-service", "http://user-service:8080/api/users/1")
+    .await?;
+```
+
+### Manual State Management
+
+For fine-grained control, you can manually manage circuit breaker state:
+
+```rust
+// Check if a request is allowed
+match circuit_breaker.is_request_allowed("my-service").await {
+    Ok(()) => {
+        // Proceed with the request
+        match make_request().await {
+            Ok(response) => {
+                circuit_breaker.record_success("my-service").await;
+            }
+            Err(e) => {
+                circuit_breaker.record_failure("my-service").await;
+            }
+        }
+    }
+    Err(CircuitBreakerError::CircuitOpen(_)) => {
+        // Circuit is open, handle rejection
+    }
+}
+```
+
+### Getting Circuit Breaker Status
+
+```rust
+// Get state for a specific service
+let state = circuit_breaker.get_state("my-service").await;
+println!("Circuit state: {}", state);
+
+// Get status for all circuit breakers
+let all_status = circuit_breaker.get_all_status().await;
+for (service, status) in all_status {
+    println!(
+        "Service: {}, State: {}, Failure Rate: {:.2}%",
+        service,
+        status.state,
+        status.failure_rate * 100.0
+    );
+}
+```
+
+## Integration with Service Discovery
+
+When both circuit breaker and Consul service discovery are enabled, the Consul service automatically uses circuit breaker protection for all its HTTP calls to the Consul API. This means:
+
+- Service registration/deregistration calls are protected
+- Service discovery calls are protected
+- KV store configuration reads/writes are protected
+
+The circuit breaker uses the service name `consul` for tracking Consul API call failures. If Consul becomes unavailable, the circuit will open and subsequent calls will fail fast instead of timing out.
+
+### Using with Service Discovery
+
+```rust
+// Get service URL from Consul (this call is circuit-breaker protected)
+let service_url = state.consul_service
+    .as_ref()
+    .unwrap()
+    .get_service_url("other-microservice")
+    .await?;
+
+// Make resilient call to the discovered service
+let response = http_client
+    .get("other-microservice", &format!("{}/api/data", service_url))
+    .await?;
+```
+
+### Consul-Specific Error Handling
+
+When circuit breaker is enabled, Consul operations can return `CircuitBreakerOpen` errors:
+
+```rust
+match state.consul_service.as_ref().unwrap().discover_service("my-service").await {
+    Ok(instances) => {
+        // Handle discovered instances
+    }
+    Err(ConsulError::CircuitBreakerOpen(msg)) => {
+        // Circuit is open - Consul is likely unavailable
+        // Fall back to cached data or fail gracefully
+        tracing::warn!("Consul circuit breaker open: {}", msg);
+    }
+    Err(e) => {
+        // Handle other errors
+    }
+}
+```
+
+## Error Handling
+
+The circuit breaker defines specific error types:
+
+```rust
+pub enum CircuitBreakerError {
+    /// Circuit breaker is open for the specified service
+    CircuitOpen(String),
+
+    /// Request rejected in half-open state (max calls reached)
+    HalfOpenRejected(String),
+
+    /// The underlying request failed
+    RequestFailed(String),
+
+    /// Request timed out
+    Timeout,
+
+    /// Circuit breaker not enabled
+    NotEnabled,
+}
+```
+
+## Best Practices
+
+### Service Naming
+
+Use consistent, meaningful names for services:
+
+```rust
+// Good - descriptive and consistent
+circuit_breaker.execute("user-service", || ...).await;
+circuit_breaker.execute("payment-gateway", || ...).await;
+circuit_breaker.execute("notification-service", || ...).await;
+
+// Avoid - generic or inconsistent names
+circuit_breaker.execute("api", || ...).await;
+circuit_breaker.execute("http://localhost:8080", || ...).await;
+```
+
+### Configuration Tuning
+
+| Scenario                | Recommendation                    |
+| ----------------------- | --------------------------------- |
+| High-traffic services   | Larger sliding window (200-500)   |
+| Critical services       | Lower failure threshold (0.3-0.4) |
+| Slow services           | Longer request timeout            |
+| Quick recovery expected | Shorter wait duration (30s)       |
+| Stable services         | Longer wait duration (120s)       |
+
+### Monitoring
+
+Enable debug logging to monitor circuit breaker state changes:
+
+```env
+RUST_LOG=info,your_app=debug
+```
+
+Circuit breaker state transitions are logged at INFO level:
+
+```
+INFO Circuit breaker for 'user-service' transitioning from CLOSED to OPEN (failure rate: 52.00%)
+INFO Circuit breaker for 'user-service' transitioning from OPEN to HALF_OPEN
+INFO Circuit breaker for 'user-service' transitioning from HALF_OPEN to CLOSED (success rate: 90.00%)
+```
+
+## Prometheus Metrics
+
+When both circuit breaker and Prometheus monitoring are enabled, the following metrics are automatically exposed at `/management/prometheus`:
+
+### Available Metrics
+
+| Metric                            | Type    | Labels               | Description                                     |
+| --------------------------------- | ------- | -------------------- | ----------------------------------------------- |
+| `circuit_breaker_state`           | Gauge   | `service`            | Current state (0=closed, 1=half_open, 2=open)   |
+| `circuit_breaker_calls_total`     | Counter | `service`, `outcome` | Total calls (outcome: success/failure/rejected) |
+| `circuit_breaker_failures_total`  | Counter | `service`            | Total failed calls                              |
+| `circuit_breaker_successes_total` | Counter | `service`            | Total successful calls                          |
+| `circuit_breaker_rejected_total`  | Counter | `service`            | Total rejected calls (circuit open)             |
+| `circuit_breaker_failure_rate`    | Gauge   | `service`            | Current failure rate (0.0 to 1.0)               |
+
+### Example PromQL Queries
+
+```promql
+# Circuit breaker state for a specific service
+circuit_breaker_state{service="user-service"}
+
+# Failure rate over time
+circuit_breaker_failure_rate{service="user-service"}
+
+# Request rate by outcome (last 5 minutes)
+rate(circuit_breaker_calls_total{service="user-service"}[5m])
+
+# Rejection rate (circuit open)
+rate(circuit_breaker_rejected_total{service="user-service"}[5m])
+
+# Success rate calculation
+sum(rate(circuit_breaker_successes_total{service="user-service"}[5m]))
+/
+sum(rate(circuit_breaker_calls_total{service="user-service", outcome!="rejected"}[5m]))
+```
+
+### Grafana Dashboard
+
+You can create a Grafana dashboard with the following panels:
+
+1. **Circuit State** - Table showing current state per service
+2. **Failure Rate** - Graph showing failure rate over time
+3. **Call Volume** - Stacked bar chart by outcome (success/failure/rejected)
+4. **Rejection Rate** - Alert indicator for circuits that are open
+
+### Alert Rules
+
+Example Prometheus alert rules:
+
+```yaml
+groups:
+  - name: circuit_breaker
+    rules:
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Circuit breaker is open for {{ $labels.service }}'
+          description: 'The circuit breaker for {{ $labels.service }} has been open for more than 1 minute.'
+
+      - alert: HighFailureRate
+        expr: circuit_breaker_failure_rate > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'High failure rate for {{ $labels.service }}'
+          description: 'The failure rate for {{ $labels.service }} is {{ $value | humanizePercentage }}.'
+```
+
+## Troubleshooting
+
+### Circuit Keeps Opening
+
+1. Check the failure threshold - it may be too low
+2. Verify the external service is actually healthy
+3. Check request timeout - requests may be timing out
+4. Review error logs for the underlying cause
+
+### Circuit Never Opens
+
+1. Ensure circuit breaker is enabled (`CIRCUIT_BREAKER_ENABLED=true`)
+2. Check sliding window size - may need more calls to trigger
+3. Verify failure rate threshold is appropriate
+
+### Slow Recovery
+
+1. Reduce `CIRCUIT_BREAKER_WAIT_DURATION_SECS`
+2. Increase `CIRCUIT_BREAKER_PERMITTED_CALLS_HALF_OPEN`
+3. Ensure external service has recovered before testing
+
+## Comparison with JHipster Spring
+
+| Feature       | JHipster Spring              | JHipster Rust                |
+| ------------- | ---------------------------- | ---------------------------- |
+| Library       | Resilience4j                 | Custom implementation        |
+| Integration   | Spring Cloud Circuit Breaker | AppState service             |
+| Configuration | application.yml              | Environment variables        |
+| Metrics       | Micrometer                   | Prometheus (optional)        |
+| Fallback      | @CircuitBreaker annotation   | Manual or execute() callback |
+
+## Dependencies
+
+The circuit breaker uses:
+
+- `tokio` - Async runtime with timeout support
+- `reqwest` - HTTP client (for ResilientHttpClient)
+- `thiserror` - Error handling
+
+These are automatically included when circuit breaker is enabled.
