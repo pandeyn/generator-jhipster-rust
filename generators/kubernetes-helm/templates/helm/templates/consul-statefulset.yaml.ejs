@@ -1,0 +1,88 @@
+{{- if .Values.consul.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-consul
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-consul
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-consul
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-consul
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-consul
+    spec:
+      containers:
+        - name: consul
+          image: hashicorp/consul:1.15
+          imagePullPolicy: IfNotPresent
+          args: ["agent", "-server", "-bootstrap-expect=1", "-ui", "-client=0.0.0.0", "-data-dir=/consul/data", "-log-level=INFO"]
+          ports:
+            - name: http
+              containerPort: 8500
+            - name: dns-tcp
+              containerPort: 8600
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 8600
+              protocol: UDP
+          livenessProbe:
+            exec:
+              command: ["consul", "members"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["consul", "members"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: consul-data
+              mountPath: /consul/data
+  volumeClaimTemplates:
+    - metadata:
+        name: consul-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.consul.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-consul
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-consul
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Release.Name }}-consul
+  ports:
+    - name: http
+      port: 8500
+      targetPort: http
+    - name: dns-tcp
+      port: 8600
+      targetPort: dns-tcp
+      protocol: TCP
+    - name: dns-udp
+      port: 8600
+      targetPort: dns-udp
+      protocol: UDP
+{{- end }}

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "<%= baseName.toLowerCase() %>.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "<%= baseName.toLowerCase() %>.selectorLabels" . | nindent 8 }}
+<%_ if (monitoringPrometheus) { _%>
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/api/metrics"
+<%_ } _%>
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-config
+            - secretRef:
+                name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-secret
+          livenessProbe:
+            httpGet:
+              path: /api/health/liveness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+<%_ if (devDatabaseTypeSqlite) { _%>
+          volumeMounts:
+            - name: sqlite-data
+              mountPath: /app/data
+      volumes:
+        - name: sqlite-data
+          persistentVolumeClaim:
+            claimName: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-sqlite-pvc
+<%_ } _%>
+<%_ if (devDatabaseTypeSqlite) { _%>
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-sqlite-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+<%_ } _%>

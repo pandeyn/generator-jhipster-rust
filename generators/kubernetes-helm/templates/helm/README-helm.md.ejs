@@ -1,0 +1,56 @@
+# Helm Chart for <%= baseName %>
+
+## Prerequisites
+
+- Helm 3.x installed
+- Kubernetes cluster running
+- Docker image built: `docker build -t <%= dockerImageName %>:latest .`
+
+## Quick Start
+
+```bash
+# Install
+./helm/helm-apply.sh install
+
+# Upgrade after changes
+./helm/helm-apply.sh upgrade
+
+# Uninstall
+./helm/helm-apply.sh uninstall
+
+# Dry-run (render templates)
+./helm/helm-apply.sh template
+```
+
+## Manual Helm Commands
+
+```bash
+# Install
+helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> --namespace <%= kubernetesNamespace %>
+
+# Upgrade
+helm upgrade <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> --namespace <%= kubernetesNamespace %>
+
+# Override values
+helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> -f custom-values.yaml
+
+# Uninstall
+helm uninstall <%= baseName.toLowerCase() %>
+```
+
+## Customizing Values
+
+Override defaults by creating a `custom-values.yaml`:
+
+```yaml
+replicaCount: 3
+image:
+  repository: my-registry.io/<%= baseName.toLowerCase() %>
+  tag: v1.0.0
+resources:
+  limits:
+    memory: "1Gi"
+    cpu: "1"
+```
+
+Then install with: `helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> -f custom-values.yaml`

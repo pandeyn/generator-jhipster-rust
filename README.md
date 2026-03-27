@@ -53,8 +53,10 @@ The generated Rust server provides a complete REST API implementation with authe
 | **Monitoring**           | Prometheus metrics           | HTTP request metrics with Grafana dashboards |
 | **Resilience**           | Circuit Breaker              | Prevents cascading failures in microservices |
 | **Kubernetes**           | K8s manifest generation      | Deployment, Service, ConfigMap, Secret       |
+|                          | Helm chart generation        | Parameterized charts with values.yaml        |
 |                          | Database StatefulSets        | PostgreSQL, MySQL, MongoDB on K8s            |
 |                          | Ingress support              | NGINX and Traefik controllers                |
+|                          | Horizontal Pod Autoscaler    | HPA support via Helm charts                  |
 |                          | Infrastructure manifests     | Keycloak, Consul, Kafka, Prometheus on K8s   |
 | **CI/CD**                | GitHub Actions               | Build, test, lint, Docker publish            |
 |                          | GitLab CI                    | Build, test, lint, Docker publish            |
@@ -175,7 +177,7 @@ This supports:
 ## Deployment
 
 - [Docker Guide](docs/DOCKER.md) - Container setup, Docker Compose, and deployment options
-- [Kubernetes Deployment](docs/KUBERNETES.md) - K8s manifests, StatefulSets, Ingress, and production deployment
+- [Kubernetes Deployment](docs/KUBERNETES.md) - K8s manifests, Helm charts, StatefulSets, Ingress, and production deployment
 - [Static UI Hosting](docs/STATIC_HOSTING.md) - Serve SPA from Rust backend in monolithic mode
 - [Microservices Architecture](docs/MICROSERVICES.md) - Deploy as part of a microservices architecture
 - [Consul Service Discovery](docs/CONSUL.md) - Service registration, discovery, and configuration management
@@ -314,7 +316,6 @@ The following features from the base JHipster generator are planned for future v
 | WebSocket Support      | tokio-tungstenite or STOMP messaging                     |
 | Additional Databases   | Cassandra, Neo4j, Couchbase, MSSQL, Oracle support       |
 | Elasticsearch          | full-text search integration                             |
-| Helm Charts            | Helm chart generation for Kubernetes                     |
 | Kustomize Support      | Kustomize overlays for dev/staging/prod K8s envs         |
 | K8s Database Operators | CloudNativePG, Percona operators instead of StatefulSets |
 | Rate Limiting          | throttle/rate limit middleware                           |

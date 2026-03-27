@@ -1,0 +1,397 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul and kafka > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/kafka-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with HPA enabled > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/hpa.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/hpaapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with mongodb > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/mongodb-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mongoapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with mysql > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/mysql-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/mysqlapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with nginx ingress > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/ingress.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/ingressapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with oauth2 > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/keycloak-deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/oauthapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with postgresql > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/postgresql-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/pgapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith with prometheus monitoring > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/monitoring.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monitorapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > run with defaults (sqlite) > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/myapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;

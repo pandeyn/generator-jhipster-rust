@@ -1,0 +1,124 @@
+# Default values for <%= baseName.toLowerCase() %>
+replicaCount: 1
+
+image:
+  repository: <%= dockerImageName %>
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: <%= kubernetesServiceType === 'Ingress' ? 'ClusterIP' : kubernetesServiceType %>
+  port: 8080
+
+<%_ if (ingressEnabled) { _%>
+ingress:
+  enabled: true
+<%_ if (ingressNginx) { _%>
+  className: nginx
+<%_ } else if (ingressTraefik) { _%>
+  className: traefik
+<%_ } _%>
+  host: <%= baseName.toLowerCase() %>.<%= ingressDomain %>
+  tls: []
+<%_ } else { _%>
+ingress:
+  enabled: false
+  className: nginx
+  host: <%= baseName.toLowerCase() %>.example.com
+  tls: []
+<%_ } _%>
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+<%_ if (helmEnableHpa) { _%>
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilization: 80
+<%_ } else { _%>
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilization: 80
+<%_ } _%>
+
+config:
+  RUST_LOG: "info"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8080"
+<%_ if (devDatabaseTypePostgresql) { _%>
+  DATABASE_URL: "postgres://postgres:postgres@<%= baseName.toLowerCase() %>-postgresql:5432/<%= baseName.toLowerCase() %>"
+<%_ } else if (devDatabaseTypeMysql) { _%>
+  DATABASE_URL: "mysql://root:root@<%= baseName.toLowerCase() %>-mysql:3306/<%= baseName.toLowerCase() %>"
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+  MONGODB_URI: "mongodb://<%= baseName.toLowerCase() %>-mongodb:27017/?directConnection=true"
+  MONGODB_DATABASE: "<%= baseName.toLowerCase() %>"
+<%_ } else { _%>
+  DATABASE_URL: "sqlite:///app/data/<%= baseName.toLowerCase() %>.db"
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+  CONSUL_HOST: "<%= baseName.toLowerCase() %>-consul"
+  CONSUL_PORT: "8500"
+  CONSUL_SERVICE_NAME: "<%= baseName.toLowerCase() %>"
+  CONSUL_REGISTER_SERVICE: "true"
+  CONSUL_REGISTER_HOST: "<%= baseName.toLowerCase() %>"
+  CONSUL_HEALTH_CHECK_INTERVAL: "10"
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+  KAFKA_BOOTSTRAP_SERVERS: "<%= baseName.toLowerCase() %>-kafka:9092"
+<%_ } _%>
+
+secrets:
+  JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
+<%_ if (devDatabaseTypePostgresql || devDatabaseTypeMysql) { _%>
+  DB_PASSWORD: "postgres"
+<%_ } _%>
+
+<%_ if (devDatabaseTypePostgresql) { _%>
+postgresql:
+  enabled: true
+  storage: 5Gi
+<%_ } _%>
+<%_ if (devDatabaseTypeMysql) { _%>
+mysql:
+  enabled: true
+  storage: 5Gi
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+mongodb:
+  enabled: true
+  storage: 5Gi
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+consul:
+  enabled: true
+  storage: 1Gi
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+kafka:
+  enabled: true
+  storage: 5Gi
+zookeeper:
+  enabled: true
+  storage: 1Gi
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+keycloak:
+  enabled: true
+<%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+prometheus:
+  enabled: true
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: admin
+<%_ } _%>

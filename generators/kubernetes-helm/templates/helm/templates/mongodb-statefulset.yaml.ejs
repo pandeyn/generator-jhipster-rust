@@ -1,0 +1,130 @@
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-mongodb-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+data:
+  mongodb_init.js: |
+    db = db.getSiblingDB('<%= baseName.toLowerCase() %>');
+    db.createCollection('users', {
+      validator: { $jsonSchema: { bsonType: 'object', required: ['login', 'email', 'password_hash', 'activated'] } }
+    });
+    db.users.createIndex({ login: 1 }, { unique: true });
+    db.users.createIndex({ email: 1 }, { unique: true });
+    db.createCollection('authorities');
+    db.authorities.insertMany([{ _id: 'ROLE_ADMIN' }, { _id: 'ROLE_USER' }]);
+    db.users.insertOne({ login: 'admin', password_hash: '$argon2id$v=19$m=19456,t=2,p=1$8BBmYkjL9OBiomwlcU11qA$hK8/3elLjKnt4mI7Tz+Q2AzU58pZqdpL1YnE0UEhjHE', first_name: 'Administrator', last_name: 'Administrator', email: 'admin@localhost', activated: true, lang_key: 'en', authorities: ['ROLE_ADMIN', 'ROLE_USER'], created_by: 'system', created_date: new Date() });
+    db.users.insertOne({ login: 'user', password_hash: '$argon2id$v=19$m=19456,t=2,p=1$f2qoLPEpsP79MNnV/DgLTw$sQ8ZzGZXDVbaHl9PxE9QzyHGaF9O+KsHp+2JbFRNf64', first_name: 'User', last_name: 'User', email: 'user@localhost', activated: true, lang_key: 'en', authorities: ['ROLE_USER'], created_by: 'system', created_date: new Date() });
+    print('MongoDB init complete');
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mongodb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-mongodb
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-mongodb
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+          ports:
+            - name: mongodb
+              containerPort: 27017
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command: ["mongosh", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "try { rs.status(); } catch(e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}); } db.adminCommand('ping');"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.mongodb.storage }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-mongodb-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-init
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          command: ["mongosh", "--host", "{{ .Release.Name }}-mongodb:27017", "--file", "/scripts/mongodb_init.js"]
+          volumeMounts:
+            - name: init-script
+              mountPath: /scripts
+      volumes:
+        - name: init-script
+          configMap:
+            name: {{ .Release.Name }}-mongodb-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongodb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-mongodb
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Release.Name }}-mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+      protocol: TCP
+{{- end }}
