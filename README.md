@@ -69,6 +69,51 @@ As this is a [JHipster](https://www.jhipster.tech/) blueprint, we expect you hav
 
 - [JHipster](https://www.jhipster.tech/)
 
+# Installation
+
+To install or update this blueprint:
+
+```bash
+npm install -g generator-jhipster-rust
+```
+
+# Usage
+
+To use this blueprint, run the below command
+
+````bash
+jhipster-rust
+
+You can look for updated rust blueprint specific options by running
+
+```bash
+jhipster-rust app --help
+````
+
+And looking for `(blueprint option: rust)` like
+
+##### Plugin Development USAGE
+
+To begin to work:
+
+- launch: npm install
+- link: npm link
+- link JHipster: npm link generator-jhipster
+- test your module in a JHipster project:
+  - create a new directory and go into it
+  - link the blueprint: npm link generator-jhipster-undefined
+  - launch JHipster with flags: jhipster --blueprints undefined
+- then, come back here, and begin to code!
+
+## Pre-release
+
+To use an unreleased version, install it using git.
+
+```bash
+npm install -g jhipster/generator-jhipster-rust#main
+jhipster --blueprints rust --skip-jhipster-dependencies
+```
+
 # Documentation
 
 ## Entity Generation
@@ -136,51 +181,6 @@ This supports:
 - [Consul Service Discovery](docs/CONSUL.md) - Service registration, discovery, and configuration management
 - [Monolithic Deployment](#monolithic-deployment) - Quick start guide for monolithic deployment
 - [Microservice Deployment](#microservice-deployment) - Quick start guide for microservice deployment
-
-# Installation
-
-To install or update this blueprint:
-
-```bash
-npm install -g generator-jhipster-rust
-```
-
-# Usage
-
-To use this blueprint, run the below command
-
-````bash
-jhipster-rust
-
-You can look for updated rust blueprint specific options by running
-
-```bash
-jhipster-rust app --help
-````
-
-And looking for `(blueprint option: rust)` like
-
-##### Plugin Development USAGE
-
-To begin to work:
-
-- launch: npm install
-- link: npm link
-- link JHipster: npm link generator-jhipster
-- test your module in a JHipster project:
-  - create a new directory and go into it
-  - link the blueprint: npm link generator-jhipster-undefined
-  - launch JHipster with flags: jhipster --blueprints undefined
-- then, come back here, and begin to code!
-
-## Pre-release
-
-To use an unreleased version, install it using git.
-
-```bash
-npm install -g jhipster/generator-jhipster-rust#main
-jhipster --blueprints rust --skip-jhipster-dependencies
-```
 
 ## Monolithic Deployment
 
