@@ -24,6 +24,7 @@ spec:
       containers:
         - name: zookeeper
           image: confluentinc/cp-zookeeper:7.5.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: client
               containerPort: 2181
@@ -113,6 +114,7 @@ spec:
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.5.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: kafka
               containerPort: 9092

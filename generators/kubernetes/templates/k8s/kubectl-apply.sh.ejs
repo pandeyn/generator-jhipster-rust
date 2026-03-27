@@ -11,6 +11,59 @@ echo "Kubernetes ${ACTION} for <%= baseName.toLowerCase() %> (namespace: ${NAMES
 echo "============================================="
 
 if [ "${ACTION}" = "apply" ]; then
+
+  # Pre-flight check: verify the application Docker image exists
+  APP_IMAGE="<%= dockerImageName %>:latest"
+  if ! docker image inspect "${APP_IMAGE}" > /dev/null 2>&1; then
+    echo ""
+    echo "ERROR: Docker image '${APP_IMAGE}' not found locally."
+    echo "Build it first with:"
+    echo "  docker build -t ${APP_IMAGE} ."
+    echo ""
+    exit 1
+  fi
+
+  # Detect local Kubernetes cluster (Kind/Docker Desktop) and pre-load images
+  CLUSTER_NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [ -n "${CLUSTER_NODE}" ] && docker exec "${CLUSTER_NODE}" true 2>/dev/null; then
+    load_image() {
+      local img="$1"
+      # Pull to host if not already present
+      if ! docker image inspect "${img}" > /dev/null 2>&1; then
+        echo "  Pulling ${img}..."
+        docker pull "${img}" > /dev/null 2>&1 || { echo "  WARNING: Failed to pull ${img}"; return; }
+      fi
+      echo "  Loading ${img}..."
+      docker save "${img}" | docker exec -i "${CLUSTER_NODE}" ctr -n k8s.io images import - > /dev/null 2>&1 \
+        || echo "  WARNING: Failed to load ${img} into cluster node."
+    }
+
+    echo "Loading Docker images into cluster node '${CLUSTER_NODE}'..."
+    load_image "${APP_IMAGE}"
+<%_ if (devDatabaseTypePostgresql) { _%>
+    load_image "postgres:16-alpine"
+<%_ } else if (devDatabaseTypeMysql) { _%>
+    load_image "mysql:8.0"
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+    load_image "mongo:7.0"
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+    load_image "hashicorp/consul:1.15"
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+    load_image "confluentinc/cp-zookeeper:7.5.0"
+    load_image "confluentinc/cp-kafka:7.5.0"
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+    load_image "quay.io/keycloak/keycloak:23.0"
+<%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+    load_image "prom/prometheus:v2.48.0"
+    load_image "grafana/grafana:10.2.0"
+<%_ } _%>
+    echo "All images loaded."
+  fi
+
 <%_ if (kubernetesNamespace !== 'default') { _%>
   echo "Creating namespace..."
   kubectl apply -f k8s/namespace.yml
@@ -35,6 +88,10 @@ if [ "${ACTION}" = "apply" ]; then
   kubectl apply -f k8s/mongodb-statefulset.yml
   echo "Waiting for MongoDB to be ready..."
   kubectl rollout status statefulset/<%= baseName.toLowerCase() %>-mongodb -n ${NAMESPACE} --timeout=120s
+  echo "Running MongoDB initialization (seeding default users)..."
+  kubectl delete job <%= baseName.toLowerCase() %>-mongodb-init -n ${NAMESPACE} --ignore-not-found > /dev/null 2>&1
+  kubectl apply -f k8s/mongodb-statefulset.yml
+  kubectl wait --for=condition=complete job/<%= baseName.toLowerCase() %>-mongodb-init -n ${NAMESPACE} --timeout=120s
 <%_ } _%>
 
 <%_ if (serviceDiscoveryConsul) { _%>
@@ -81,13 +138,28 @@ if [ "${ACTION}" = "apply" ]; then
 
   echo ""
   echo "Deployment complete!"
-  echo "Application: kubectl port-forward svc/<%= baseName.toLowerCase() %> 8080:8080 -n ${NAMESPACE}"
+  echo ""
+  echo "Access your services with port-forward:"
+  echo "  Application:  kubectl port-forward svc/<%= baseName.toLowerCase() %> 8080:8080 -n ${NAMESPACE}"
+<%_ if (devDatabaseTypePostgresql) { _%>
+  echo "  PostgreSQL:   kubectl port-forward svc/<%= baseName.toLowerCase() %>-postgresql 5432:5432 -n ${NAMESPACE}"
+<%_ } else if (devDatabaseTypeMysql) { _%>
+  echo "  MySQL:        kubectl port-forward svc/<%= baseName.toLowerCase() %>-mysql 3306:3306 -n ${NAMESPACE}"
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+  echo "  MongoDB:      kubectl port-forward svc/<%= baseName.toLowerCase() %>-mongodb 27017:27017 -n ${NAMESPACE}"
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+  echo "  Consul:       kubectl port-forward svc/<%= baseName.toLowerCase() %>-consul 8500:8500 -n ${NAMESPACE}"
+<%_ } _%>
 <%_ if (authenticationTypeOauth2) { _%>
-  echo "Keycloak:    kubectl port-forward svc/<%= baseName.toLowerCase() %>-keycloak 9080:9080 -n ${NAMESPACE}"
+  echo "  Keycloak:     kubectl port-forward svc/<%= baseName.toLowerCase() %>-keycloak 9080:9080 -n ${NAMESPACE}"
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+  echo "  Kafka:        kubectl port-forward svc/<%= baseName.toLowerCase() %>-kafka 9092:9092 -n ${NAMESPACE}"
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
-  echo "Prometheus:  kubectl port-forward svc/<%= baseName.toLowerCase() %>-prometheus 9090:9090 -n ${NAMESPACE}"
-  echo "Grafana:     kubectl port-forward svc/<%= baseName.toLowerCase() %>-grafana 3000:3000 -n ${NAMESPACE}"
+  echo "  Prometheus:   kubectl port-forward svc/<%= baseName.toLowerCase() %>-prometheus 9090:9090 -n ${NAMESPACE}"
+  echo "  Grafana:      kubectl port-forward svc/<%= baseName.toLowerCase() %>-grafana 3000:3000 -n ${NAMESPACE}"
 <%_ } _%>
 
 elif [ "${ACTION}" = "delete" ]; then
@@ -118,6 +190,23 @@ elif [ "${ACTION}" = "delete" ]; then
 <%_ } _%>
   kubectl delete -f k8s/app-configmap.yml --ignore-not-found
   kubectl delete -f k8s/app-secret.yml --ignore-not-found
+
+  echo "Cleaning up PersistentVolumeClaims..."
+  kubectl delete pvc -l app.kubernetes.io/part-of=<%= baseName.toLowerCase() %> -n ${NAMESPACE} --ignore-not-found
+<%_ if (devDatabaseTypePostgresql) { _%>
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-postgresql -n ${NAMESPACE} --ignore-not-found
+<%_ } else if (devDatabaseTypeMysql) { _%>
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-mysql -n ${NAMESPACE} --ignore-not-found
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-mongodb -n ${NAMESPACE} --ignore-not-found
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-consul -n ${NAMESPACE} --ignore-not-found
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-zookeeper -n ${NAMESPACE} --ignore-not-found
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-kafka -n ${NAMESPACE} --ignore-not-found
+<%_ } _%>
 <%_ if (kubernetesNamespace !== 'default') { _%>
   kubectl delete -f k8s/namespace.yml --ignore-not-found
 <%_ } _%>

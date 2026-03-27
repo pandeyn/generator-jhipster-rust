@@ -23,6 +23,7 @@ spec:
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:23.0
+          imagePullPolicy: IfNotPresent
           args:
             - start-dev
             - --import-realm

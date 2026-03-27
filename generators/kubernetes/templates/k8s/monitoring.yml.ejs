@@ -46,6 +46,7 @@ spec:
       containers:
         - name: prometheus
           image: prom/prometheus:v2.48.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 9090
@@ -129,6 +130,7 @@ spec:
       containers:
         - name: grafana
           image: grafana/grafana:10.2.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 3000

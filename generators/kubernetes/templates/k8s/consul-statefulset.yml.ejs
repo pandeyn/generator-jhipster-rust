@@ -24,6 +24,7 @@ spec:
       containers:
         - name: consul
           image: hashicorp/consul:1.15
+          imagePullPolicy: IfNotPresent
           args:
             - agent
             - -server

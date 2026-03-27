@@ -29,9 +29,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with 
   "k8s/kubectl-apply.sh": {
     "stateCleared": "modified",
   },
-  "k8s/namespace.yml": {
-    "stateCleared": "modified",
-  },
 }
 `;
 
@@ -59,9 +56,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with mong
     "stateCleared": "modified",
   },
   "k8s/mongodb-statefulset.yml": {
-    "stateCleared": "modified",
-  },
-  "k8s/namespace.yml": {
     "stateCleared": "modified",
   },
 }
@@ -93,9 +87,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with mysq
   "k8s/mysql-statefulset.yml": {
     "stateCleared": "modified",
   },
-  "k8s/namespace.yml": {
-    "stateCleared": "modified",
-  },
 }
 `;
 
@@ -123,9 +114,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with ngin
     "stateCleared": "modified",
   },
   "k8s/kubectl-apply.sh": {
-    "stateCleared": "modified",
-  },
-  "k8s/namespace.yml": {
     "stateCleared": "modified",
   },
 }
@@ -157,9 +145,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with oaut
   "k8s/kubectl-apply.sh": {
     "stateCleared": "modified",
   },
-  "k8s/namespace.yml": {
-    "stateCleared": "modified",
-  },
 }
 `;
 
@@ -184,9 +169,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with post
     "stateCleared": "modified",
   },
   "k8s/kubectl-apply.sh": {
-    "stateCleared": "modified",
-  },
-  "k8s/namespace.yml": {
     "stateCleared": "modified",
   },
   "k8s/postgresql-statefulset.yml": {
@@ -221,9 +203,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith with prom
   "k8s/monitoring.yml": {
     "stateCleared": "modified",
   },
-  "k8s/namespace.yml": {
-    "stateCleared": "modified",
-  },
 }
 `;
 
@@ -250,9 +229,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith without i
   "k8s/kubectl-apply.sh": {
     "stateCleared": "modified",
   },
-  "k8s/namespace.yml": {
-    "stateCleared": "modified",
-  },
 }
 `;
 
@@ -277,9 +253,6 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > run with defaults 
     "stateCleared": "modified",
   },
   "k8s/kubectl-apply.sh": {
-    "stateCleared": "modified",
-  },
-  "k8s/namespace.yml": {
     "stateCleared": "modified",
   },
 }

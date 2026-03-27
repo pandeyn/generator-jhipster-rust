@@ -1,6 +1,7 @@
 export const kubernetesFiles = {
   namespace: [
     {
+      condition: ctx => ctx.kubernetesNamespace !== 'default',
       path: 'k8s/',
       templates: ['namespace.yml'],
     },

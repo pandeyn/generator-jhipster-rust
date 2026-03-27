@@ -17,7 +17,7 @@ data:
 <%_ } else if (devDatabaseTypeMysql) { _%>
   DATABASE_URL: "mysql://root:root@<%= baseName.toLowerCase() %>-mysql:3306/<%= baseName.toLowerCase() %>"
 <%_ } else if (devDatabaseTypeMongodb) { _%>
-  MONGODB_URI: "mongodb://<%= baseName.toLowerCase() %>-mongodb:27017"
+  MONGODB_URI: "mongodb://<%= baseName.toLowerCase() %>-mongodb:27017/?directConnection=true"
   MONGODB_DATABASE: "<%= baseName.toLowerCase() %>"
 <%_ } else { _%>
   DATABASE_URL: "sqlite:///app/data/<%= baseName.toLowerCase() %>.db"

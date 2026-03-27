@@ -1,3 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <%= baseName.toLowerCase() %>-mongodb-init
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-mongodb
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+data:
+  mongodb_init.js: |
+    // MongoDB initialization script for <%= baseName %>
+    // Switch to the application database
+    db = db.getSiblingDB('<%= baseName.toLowerCase() %>');
+
+    // Create collections with validation schemas
+    db.createCollection('users', {
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: ['login', 'email', 'password_hash', 'activated'],
+          properties: {
+            login: { bsonType: 'string' },
+            email: { bsonType: 'string' },
+            password_hash: { bsonType: 'string' },
+            activated: { bsonType: 'bool' },
+          },
+        },
+      },
+    });
+
+    db.users.createIndex({ login: 1 }, { unique: true });
+    db.users.createIndex({ email: 1 }, { unique: true });
+
+    db.createCollection('authorities');
+    db.authorities.insertMany([{ _id: 'ROLE_ADMIN' }, { _id: 'ROLE_USER' }]);
+
+    // Insert default admin user (password: admin, hashed with argon2id)
+    db.users.insertOne({
+      login: 'admin',
+      password_hash: '$argon2id$v=19$m=19456,t=2,p=1$8BBmYkjL9OBiomwlcU11qA$hK8/3elLjKnt4mI7Tz+Q2AzU58pZqdpL1YnE0UEhjHE',
+      first_name: 'Administrator',
+      last_name: 'Administrator',
+      email: 'admin@localhost',
+      activated: true,
+      lang_key: 'en',
+      image_url: null,
+      authorities: ['ROLE_ADMIN', 'ROLE_USER'],
+      created_by: 'system',
+      created_date: new Date(),
+      last_modified_by: 'system',
+      last_modified_date: new Date(),
+    });
+
+    // Insert default user (password: user, hashed with argon2id)
+    db.users.insertOne({
+      login: 'user',
+      password_hash: '$argon2id$v=19$m=19456,t=2,p=1$f2qoLPEpsP79MNnV/DgLTw$sQ8ZzGZXDVbaHl9PxE9QzyHGaF9O+KsHp+2JbFRNf64',
+      first_name: 'User',
+      last_name: 'User',
+      email: 'user@localhost',
+      activated: true,
+      lang_key: 'en',
+      image_url: null,
+      authorities: ['ROLE_USER'],
+      created_by: 'system',
+      created_date: new Date(),
+      last_modified_by: 'system',
+      last_modified_date: new Date(),
+    });
+
+    print('MongoDB initialization completed: admin/admin, user/user');
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -24,6 +97,12 @@ spec:
       containers:
         - name: mongodb
           image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - mongod
+            - --replSet
+            - rs0
+            - --bind_ip_all
           ports:
             - name: mongodb
               containerPort: 27017
@@ -42,8 +121,13 @@ spec:
             exec:
               command:
                 - mongosh
+                - --quiet
                 - --eval
-                - "db.adminCommand('ping')"
+                - |
+                  try { rs.status(); } catch(e) {
+                    rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]});
+                  }
+                  db.adminCommand('ping');
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
@@ -67,6 +151,41 @@ spec:
         resources:
           requests:
             storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: <%= baseName.toLowerCase() %>-mongodb-init
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-mongodb-init
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-mongodb-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-init
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - mongosh
+            - --host
+            - <%= baseName.toLowerCase() %>-mongodb:27017
+            - --file
+            - /scripts/mongodb_init.js
+          volumeMounts:
+            - name: init-script
+              mountPath: /scripts
+      volumes:
+        - name: init-script
+          configMap:
+            name: <%= baseName.toLowerCase() %>-mongodb-init
 ---
 apiVersion: v1
 kind: Service
