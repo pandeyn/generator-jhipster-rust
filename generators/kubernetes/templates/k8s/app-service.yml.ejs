@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
     app.kubernetes.io/managed-by: jhipster-rust
 spec:
-  type: <%= kubernetesServiceType %>
+  type: <%= kubernetesServiceType === 'Ingress' ? 'ClusterIP' : kubernetesServiceType %>
   selector:
     app: <%= baseName.toLowerCase() %>
   ports:

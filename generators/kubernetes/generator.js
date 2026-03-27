@@ -22,7 +22,73 @@ export default class extends KubernetesGenerator {
 
   get [KubernetesGenerator.PROMPTING]() {
     return {
-      ...super.prompting,
+      async askForKubernetesConfig() {
+        // Skip prompts if all K8s config is already set (e.g., test environment or re-run)
+        if (
+          this.jhipsterConfig.kubernetesNamespace !== undefined &&
+          this.jhipsterConfig.kubernetesServiceType !== undefined &&
+          this.jhipsterConfig.ingressType !== undefined
+        ) {
+          return;
+        }
+
+        const prompts = [
+          {
+            type: 'input',
+            name: 'kubernetesNamespace',
+            message: 'What should we use for the Kubernetes namespace?',
+            default: this.jhipsterConfig.kubernetesNamespace || 'default',
+          },
+          {
+            type: 'list',
+            name: 'kubernetesServiceType',
+            message: 'What should we use for the Kubernetes service type?',
+            choices: [
+              { value: 'ClusterIP', name: 'ClusterIP (internal access only)' },
+              { value: 'NodePort', name: 'NodePort (expose on node port)' },
+              { value: 'LoadBalancer', name: 'LoadBalancer (cloud provider LB)' },
+              { value: 'Ingress', name: 'Ingress (requires ingress controller)' },
+            ],
+            default: this.jhipsterConfig.kubernetesServiceType || 'ClusterIP',
+          },
+          {
+            when: answers => answers.kubernetesServiceType === 'Ingress',
+            type: 'list',
+            name: 'ingressType',
+            message: 'Which ingress controller do you want to use?',
+            choices: [
+              { value: 'nginx', name: 'NGINX Ingress Controller' },
+              { value: 'traefik', name: 'Traefik Ingress Controller' },
+            ],
+            default: this.jhipsterConfig.ingressType || 'nginx',
+          },
+          {
+            when: answers => answers.kubernetesServiceType === 'Ingress',
+            type: 'input',
+            name: 'ingressDomain',
+            message: 'What is the root FQDN for your ingress?',
+            default: this.jhipsterConfig.ingressDomain || 'example.com',
+          },
+          {
+            type: 'input',
+            name: 'dockerRegistryUrl',
+            message: 'What Docker registry URL do you want to use? (leave empty for local images)',
+            default: this.jhipsterConfig.dockerRegistryUrl || '',
+          },
+        ];
+
+        const answers = await this.prompt(prompts);
+
+        this.jhipsterConfig.kubernetesNamespace = answers.kubernetesNamespace;
+        this.jhipsterConfig.kubernetesServiceType = answers.kubernetesServiceType;
+        if (answers.kubernetesServiceType === 'Ingress') {
+          this.jhipsterConfig.ingressType = answers.ingressType;
+          this.jhipsterConfig.ingressDomain = answers.ingressDomain;
+        } else {
+          this.jhipsterConfig.ingressType = 'none';
+        }
+        this.jhipsterConfig.dockerRegistryUrl = answers.dockerRegistryUrl;
+      },
     };
   }
 
