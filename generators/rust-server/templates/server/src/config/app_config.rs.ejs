@@ -79,7 +79,7 @@ impl AppConfig {
         }
     }
 
-<%_ if (serviceDiscoveryConsul) { _%>
+<%_ if (externalConfig) { _%>
     /// Create AppConfig with layered resolution:
     /// Compiled defaults → Consul base → Consul profile → .env → env vars
     /// Consul values are used as fallbacks — env vars always win

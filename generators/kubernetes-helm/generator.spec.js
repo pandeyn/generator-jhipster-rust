@@ -508,4 +508,60 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       result.assertNoFileContent('helm/novaultapp/templates/deployment.yaml', 'vault-secret');
     });
   });
+
+  // ==================== External Config Optional Tests ====================
+
+  describe('microservice with consul but external config disabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noExtHelm',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: false,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate consul-statefulset.yaml', () => {
+      result.assertFile('helm/noexthelm/templates/consul-statefulset.yaml');
+    });
+
+    it('should NOT generate consul-config-configmap.yaml or consul-config-job.yaml', () => {
+      result.assertNoFile(['helm/noexthelm/templates/consul-config-configmap.yaml', 'helm/noexthelm/templates/consul-config-job.yaml']);
+    });
+
+    it('should include consul service discovery vars in values.yaml', () => {
+      result.assertFileContent('helm/noexthelm/values.yaml', 'CONSUL_HOST');
+      result.assertFileContent('helm/noexthelm/values.yaml', 'CONSUL_PORT');
+      result.assertFileContent('helm/noexthelm/values.yaml', 'CONSUL_REGISTER_SERVICE');
+      result.assertFileContent('helm/noexthelm/values.yaml', 'APP_ENV');
+    });
+
+    it('should NOT include external config vars in values.yaml', () => {
+      result.assertNoFileContent('helm/noexthelm/values.yaml', 'APP_PROFILE');
+      result.assertNoFileContent('helm/noexthelm/values.yaml', 'CONSUL_CONFIG_WATCH_ENABLED');
+      result.assertNoFileContent('helm/noexthelm/values.yaml', 'CONSUL_CONFIG_WATCH_INTERVAL');
+    });
+
+    it('should NOT generate vault files', () => {
+      result.assertNoFile([
+        'helm/noexthelm/templates/vault-statefulset.yaml',
+        'helm/noexthelm/templates/vault-init-job.yaml',
+        'helm/noexthelm/templates/vault-secret.yaml',
+      ]);
+    });
+  });
 });

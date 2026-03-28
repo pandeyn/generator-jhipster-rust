@@ -112,6 +112,50 @@ exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul
 }
 `;
 
+exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul but external config disabled > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/noexthelm/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
 exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul but without vault > should succeed 1`] = `
 {
   ".yo-rc.json": {

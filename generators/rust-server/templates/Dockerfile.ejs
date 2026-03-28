@@ -1,4 +1,4 @@
-<%_ if (enableStaticHosting) { _%>
+<%_ if (enableStaticHosting && !skipClient) { _%>
 # =============================================================================
 # Client Build Stage (for serving SPA UI from Rust backend)
 # =============================================================================
@@ -105,7 +105,7 @@ COPY --from=builder /app/migrations /app/migrations
 RUN mkdir -p /app/target/db
 <%_ } _%>
 
-<%_ if (enableStaticHosting) { _%>
+<%_ if (enableStaticHosting && !skipClient) { _%>
 # Copy the built client for serving SPA UI from Rust backend
 COPY --from=client-builder /app/server/dist/static/ ./static/
 <%_ } _%>

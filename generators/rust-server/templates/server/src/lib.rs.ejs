@@ -31,6 +31,8 @@ use security::OAuth2Validator;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 use services::ConsulService;
+<%_ } _%>
+<%_ if (externalConfig) { _%>
 use config::SharedRemoteConfig;
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
@@ -50,7 +52,7 @@ use services::VaultService;
 <%_ if (circuitBreakerEnabled) { _%>
 use services::CircuitBreakerService;
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled || secretsManagementVault) { _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || externalConfig || messageBrokerKafka || circuitBreakerEnabled || secretsManagementVault) { _%>
 use std::sync::Arc;
 <%_ } _%>
 
@@ -76,6 +78,8 @@ pub struct AppState {
     /// Consul service for service registration and discovery
     /// None if Consul is not configured or unavailable
     pub consul_service: Option<Arc<ConsulService>>,
+<%_ } _%>
+<%_ if (externalConfig) { _%>
     /// Hot-reloadable remote configuration from Consul KV
     pub remote_config: SharedRemoteConfig,
 <%_ } _%>

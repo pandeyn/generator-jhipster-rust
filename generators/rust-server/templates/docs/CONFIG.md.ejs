@@ -1,0 +1,300 @@
+# Configuration Reference
+
+This document describes all configuration options for **<%= baseName %>**, organized by feature. Configuration is managed through environment variables in the `.env` file, with optional layered configuration via Consul KV when external configuration is enabled.
+
+## Configuration Layers
+
+<% if (externalConfig) { _%>
+This application supports layered configuration with the following precedence (highest wins):
+
+1. **Environment variables** (always take precedence)
+2. **`.env` file** (loaded at startup via `dotenvy`)
+3. **Consul KV profile-specific** (e.g., `config/<%= baseName.toLowerCase() %>/application-dev`)
+4. **Consul KV base** (e.g., `config/<%= baseName.toLowerCase() %>/application`)
+5. **Compiled defaults** (hardcoded fallbacks in the application)
+
+When a value is set in both Consul KV and the `.env` file, the `.env` / environment variable always wins.
+<%_ } else { _%>
+Configuration is loaded from the following sources (highest precedence wins):
+
+1. **Environment variables** (always take precedence)
+2. **`.env` file** (loaded at startup via `dotenvy`)
+3. **Compiled defaults** (hardcoded fallbacks in the application)
+<%_ } _%>
+
+## Application Settings
+
+Core application settings that control the server behavior.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `APP_NAME` | Application name (used in logs and metadata) | `<%= baseName %>` |
+| `APP_ENV` | Environment name (`development`, `staging`, `production`) | `development` |
+<%_ if (applicationTypeMicroservice) { _%>
+| `APP_PORT` | HTTP server port | `8081` |
+<%_ } else { _%>
+| `APP_PORT` | HTTP server port | `8080` |
+<%_ } _%>
+| `APP_HOST` | Bind address for the HTTP server | `0.0.0.0` |
+<%_ if (enableStaticHosting) { _%>
+| `APP_HTTPS` | Set to `true` when running behind HTTPS | `false` |
+| `SERVE_STATIC_FILES` | Enable serving the SPA UI from Rust backend | `false` |
+| `STATIC_FILES_DIR` | Directory containing the built frontend app | `./static` |
+<%_ } _%>
+| `RUST_LOG` | Logging level filter (uses `tracing` format) | `info,<%= baseName %>=debug,tower_http=debug` |
+
+## Database
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MONGODB_URI` | MongoDB connection URI | `mongodb://localhost:27017` |
+| `MONGODB_DATABASE` | Database name | `<%= baseName.toLowerCase() %>` |
+<%_ } else if (devDatabaseTypePostgresql) { _%>
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/<%= baseName.toLowerCase() %>` |
+<%_ } else if (devDatabaseTypeMysql) { _%>
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | MySQL connection string | `mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>` |
+<%_ } else { _%>
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | SQLite database file path | `sqlite://./target/db/<%= baseName %>.db` |
+<%_ } _%>
+
+## Authentication
+
+<%_ if (authenticationTypeOauth2) { _%>
+OAuth2/OIDC authentication with Keycloak.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OIDC_ISSUER_URI` | Keycloak realm issuer URI | `http://localhost:9080/realms/jhipster` |
+| `OIDC_CLIENT_ID` | OAuth2 client ID | `web_app` |
+| `OIDC_CLIENT_SECRET` | OAuth2 client secret | `web_app` |
+| `FRONTEND_URL` | Frontend URL for OAuth2 redirect | `http://localhost:9000` |
+<%_ } else { _%>
+JWT-based stateless authentication.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JWT_SECRET` | Secret key for signing JWT tokens. **Must be changed in production.** | Auto-generated |
+| `JWT_EXPIRATION_HOURS` | Token expiration time in hours | `24` |
+<%_ } _%>
+
+<%_ if (serviceDiscoveryConsul) { _%>
+## Consul Service Discovery
+
+Service registration and discovery via HashiCorp Consul. See [Consul Integration](CONSUL.md) for detailed documentation.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONSUL_HOST` | Consul server hostname | `localhost` |
+| `CONSUL_PORT` | Consul server port | `8500` |
+| `CONSUL_SERVICE_NAME` | Name to register in Consul | `<%= baseName.toLowerCase() %>` |
+| `CONSUL_REGISTER_SERVICE` | Enable/disable service registration | `true` |
+| `CONSUL_HEALTH_CHECK_INTERVAL` | Health check interval in seconds | `10` |
+| `CONSUL_REGISTER_ADDRESS` | Address other services use to find this service | Auto-detected |
+| `CONSUL_HEALTH_CHECK_HOST` | Address Consul uses for health checks | `localhost` |
+| `CONSUL_ACL_TOKEN` | ACL token for Consul authentication | None |
+
+<%_ } _%>
+<%_ if (externalConfig) { _%>
+## External Configuration (Consul KV)
+
+When external configuration is enabled, the application loads configuration from Consul's KV store at startup and optionally watches for changes at runtime.
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONSUL_ENABLE_CONFIG` | Enable loading configuration from Consul KV | `true` |
+| `CONSUL_CONFIG_KEY_PREFIX` | KV prefix for configuration keys | `config/<%= baseName.toLowerCase() %>` |
+| `APP_PROFILE` | Active configuration profile (`dev`, `staging`, `prod`) | `dev` |
+| `CONSUL_CONFIG_WATCH_ENABLED` | Enable hot-reload watching of KV changes | `true` |
+| `CONSUL_CONFIG_WATCH_INTERVAL` | Watch polling interval in seconds | `55` |
+
+### How It Works
+
+1. **Startup**: The application loads configuration from two Consul KV paths:
+   - `config/<%= baseName.toLowerCase() %>/application` (base configuration)
+   - `config/<%= baseName.toLowerCase() %>/application-{APP_PROFILE}` (profile-specific overrides)
+
+2. **Layering**: Values from the profile-specific path override the base path. Environment variables and `.env` values override both.
+
+3. **Hot-Reload**: When `CONSUL_CONFIG_WATCH_ENABLED=true`, a background watcher polls Consul KV for changes and updates the `RemoteConfig` in memory without restarting the application.
+
+### Hot-Reloadable Settings (RemoteConfig)
+
+These settings can be updated at runtime via Consul KV without restarting the application:
+
+| Consul KV Key | Description | Default |
+|----------------|-------------|---------|
+| `logging.level` | Log level (`debug`, `info`, `warn`, `error`) | `info` |
+| `database.pool_size` | Database connection pool size | `10` |
+| `health.interval_seconds` | Health check interval | `10` |
+<%_ if (circuitBreakerEnabled) { _%>
+| `circuit_breaker.failure_rate_threshold` | Failure rate to open circuit (0.0-1.0) | `0.5` |
+| `circuit_breaker.sliding_window_size` | Number of calls in sliding window | `100` |
+| `circuit_breaker.wait_duration_secs` | Seconds circuit stays open | `60` |
+| `circuit_breaker.request_timeout_ms` | Request timeout in milliseconds | `30000` |
+<%_ } _%>
+| `feature.*` | Custom feature flags (e.g., `feature.new_ui=true`) | None |
+
+### Profile Configuration Files
+
+When deployed with Docker Compose or Kubernetes, configuration profiles are loaded from YAML files into Consul KV:
+
+- `docker/central-server-config/application.yml` - Base configuration
+- `docker/central-server-config/application-dev.yml` - Development overrides
+- `docker/central-server-config/application-prod.yml` - Production overrides
+
+Example `application-dev.yml`:
+```yaml
+logging:
+  level: debug
+  format: text
+
+database:
+  pool_size: 5
+  timeout_seconds: 30
+```
+
+### Managing Configuration
+
+You can read and update configuration directly via the Consul API:
+
+```bash
+# Read a config value
+curl http://localhost:8500/v1/kv/config/<%= baseName.toLowerCase() %>/application/logging/level?raw
+
+# Set a config value
+curl -X PUT -d 'debug' http://localhost:8500/v1/kv/config/<%= baseName.toLowerCase() %>/application/logging/level
+
+# Set a feature flag
+curl -X PUT -d 'true' http://localhost:8500/v1/kv/config/<%= baseName.toLowerCase() %>/application/feature.dark_mode
+```
+
+Changes are picked up automatically when config watching is enabled.
+
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+## Vault Secrets Management
+
+Secure secrets storage with HashiCorp Vault. Secrets are loaded at startup and set as environment variables.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VAULT_ENABLED` | Enable Vault integration | `true` |
+| `VAULT_ADDR` | Vault server address | `http://localhost:8200` |
+| `VAULT_AUTH_METHOD` | Authentication method (`token` or `approle`) | `token` |
+| `VAULT_TOKEN` | Vault token (for `token` auth method) | `myroot` |
+| `VAULT_ROLE_ID` | AppRole role ID (for `approle` auth method) | None |
+| `VAULT_SECRET_ID` | AppRole secret ID (for `approle` auth method) | None |
+| `VAULT_SECRET_PATH` | Path to read secrets from | `secret/data/<%= baseName.toLowerCase() %>` |
+| `VAULT_AUTO_RENEW` | Enable automatic token renewal | `true` |
+
+### Authentication Methods
+
+- **Token** (`VAULT_AUTH_METHOD=token`): Use `VAULT_TOKEN` directly. Suitable for development.
+- **AppRole** (`VAULT_AUTH_METHOD=approle`): Use `VAULT_ROLE_ID` and `VAULT_SECRET_ID`. Recommended for production.
+
+### How Secrets Work
+
+1. On startup, the application reads all secrets from `VAULT_SECRET_PATH`
+2. Each secret key-value pair is set as an environment variable (if not already set)
+3. Environment variables always take precedence over Vault values
+4. When `VAULT_AUTO_RENEW=true`, the Vault token is automatically renewed before expiration
+
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+## Circuit Breaker
+
+Resilience pattern for HTTP calls to external services. See [Circuit Breaker Guide](CIRCUIT_BREAKER.md) for detailed documentation.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CIRCUIT_BREAKER_ENABLED` | Enable/disable circuit breaker | `true` |
+| `CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD` | Failure rate to open circuit (0.0-1.0) | `0.5` |
+| `CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE` | Number of calls in sliding window | `100` |
+| `CIRCUIT_BREAKER_WAIT_DURATION_SECS` | Seconds circuit stays open before half-open | `60` |
+| `CIRCUIT_BREAKER_PERMITTED_CALLS_HALF_OPEN` | Calls allowed in half-open state | `10` |
+| `CIRCUIT_BREAKER_REQUEST_TIMEOUT_MS` | Request timeout in milliseconds | `30000` |
+
+<%_ } _%>
+<%_ if (enableEmail) { _%>
+## Email
+
+SMTP email configuration for user registration and password reset.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MAIL_ENABLED` | Enable/disable email sending | `false` |
+| `MAIL_HOST` | SMTP server hostname | `localhost` |
+| `MAIL_PORT` | SMTP server port | `1025` |
+| `MAIL_USERNAME` | SMTP authentication username | None |
+| `MAIL_PASSWORD` | SMTP authentication password | None |
+| `MAIL_FROM` | Sender email address | `noreply@<%= dasherizedBaseName %>.com` |
+| `MAIL_FROM_NAME` | Sender display name | `<%= baseName %>` |
+| `MAIL_USE_TLS` | Enable TLS encryption | `false` |
+| `MAIL_USE_STARTTLS` | Enable STARTTLS upgrade | `false` |
+| `MAIL_BASE_URL` | Base URL for links in emails | Auto-detected or `http://localhost:9000` |
+
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+## Kafka Message Broker
+
+Apache Kafka configuration for asynchronous messaging. See [Kafka Integration](KAFKA.md) for detailed documentation.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `KAFKA_ENABLED` | Enable/disable Kafka | `true` |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker addresses | `localhost:29092` |
+| `KAFKA_GROUP_ID` | Consumer group ID | `<%= dasherizedBaseName %>-group` |
+| `KAFKA_DEFAULT_TOPIC` | Default topic name | `<%= dasherizedBaseName %>-topic` |
+| `KAFKA_AUTO_OFFSET_RESET` | Consumer offset reset policy | `earliest` |
+| `KAFKA_ENABLE_AUTO_COMMIT` | Enable auto-commit of offsets | `true` |
+| `KAFKA_AUTO_COMMIT_INTERVAL_MS` | Auto-commit interval (ms) | `5000` |
+| `KAFKA_SESSION_TIMEOUT_MS` | Consumer session timeout (ms) | `10000` |
+| `KAFKA_MESSAGE_TIMEOUT_MS` | Producer message timeout (ms) | `5000` |
+| `KAFKA_SECURITY_PROTOCOL` | Security protocol (`plaintext`, `ssl`, `sasl_ssl`) | `plaintext` |
+
+<%_ } _%>
+<%_ if (monitoringPrometheus) { _%>
+## Prometheus Monitoring
+
+Metrics collection via Prometheus. See [Prometheus Metrics](PROMETHEUS.md) for detailed documentation.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `METRICS_ENABLED` | Enable/disable Prometheus metrics | `true` |
+| `METRICS_PATH` | Metrics endpoint path | `/management/prometheus` |
+
+<%_ } _%>
+## Production Checklist
+
+Before deploying to production, review these critical settings:
+
+<%_ if (authenticationTypeJwt) { _%>
+- [ ] **`JWT_SECRET`**: Replace with a strong, random secret (minimum 256 bits)
+<%_ } _%>
+- [ ] **`APP_ENV`**: Set to `production`
+<%_ if (externalConfig) { _%>
+- [ ] **`APP_PROFILE`**: Set to `prod`
+<%_ } _%>
+<%_ if (devDatabaseTypePostgresql || devDatabaseTypeMysql) { _%>
+- [ ] **`DATABASE_URL`**: Update with production database credentials
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+- [ ] **`VAULT_AUTH_METHOD`**: Switch to `approle` with unique role/secret IDs
+- [ ] **`VAULT_TOKEN`**: Remove development token
+<%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
+- [ ] **`CONSUL_ACL_TOKEN`**: Set if Consul ACLs are enabled
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+- [ ] **`KAFKA_SECURITY_PROTOCOL`**: Enable `ssl` or `sasl_ssl` for production Kafka
+<%_ } _%>
+- [ ] **`RUST_LOG`**: Set to `info` or `warn` (avoid `debug` in production)

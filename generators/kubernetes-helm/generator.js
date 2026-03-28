@@ -129,6 +129,9 @@ export default class extends KubernetesHelmGenerator {
         const serviceDiscoveryType = this.jhipsterConfig.serviceDiscoveryType || 'no';
         const messageBroker = this.jhipsterConfig.messageBroker || 'no';
         const monitoring = this.jhipsterConfig.monitoring || 'no';
+        const isMicroservicesApp = appType === 'microservice' || appType === 'gateway';
+        const serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
+        const externalConfig = serviceDiscoveryConsul && this.jhipsterConfig.externalConfig !== false;
 
         const kubernetesNamespace = this.jhipsterConfig.kubernetesNamespace || 'default';
         const kubernetesServiceType = this.jhipsterConfig.kubernetesServiceType || 'ClusterIP';
@@ -146,11 +149,9 @@ export default class extends KubernetesHelmGenerator {
           devDatabaseTypeMongodb: devDbType === 'mongodb',
           authenticationTypeJwt: authType === 'jwt',
           authenticationTypeOauth2: authType === 'oauth2',
-          serviceDiscoveryConsul: (appType === 'microservice' || appType === 'gateway') && serviceDiscoveryType === 'consul',
-          secretsManagementVault:
-            (appType === 'microservice' || appType === 'gateway') &&
-            serviceDiscoveryType === 'consul' &&
-            (this.jhipsterConfig.secretsManagement || 'no') === 'vault',
+          serviceDiscoveryConsul,
+          externalConfig,
+          secretsManagementVault: externalConfig && (this.jhipsterConfig.secretsManagement || 'no') === 'vault',
           messageBrokerKafka: messageBroker === 'kafka',
           monitoringPrometheus: monitoring === 'prometheus',
           kubernetesNamespace,

@@ -82,6 +82,35 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with 
 }
 `;
 
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul but external config disabled > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
 exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul but without vault > should succeed 1`] = `
 {
   ".yo-rc.json": {

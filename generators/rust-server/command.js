@@ -33,6 +33,21 @@ export default asCommand({
       ],
       default: 'consul',
     },
+    externalConfig: {
+      cli: {
+        type: Boolean,
+        description: 'Enable external configuration via Consul KV store',
+      },
+      prompt: generator => ({
+        type: 'confirm',
+        message: `Would you like to enable ${chalk.yellow('*external configuration*')} via Consul KV store?`,
+        when:
+          ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType) &&
+          generator.jhipsterConfigWithDefaults.serviceDiscoveryType === 'consul',
+        default: true,
+      }),
+      default: true,
+    },
     devDatabaseType: {
       cli: {
         type: String,
@@ -112,7 +127,8 @@ export default asCommand({
         message: `Would you like to use a ${chalk.yellow('*secrets management*')} solution?`,
         when:
           ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType) &&
-          generator.jhipsterConfigWithDefaults.serviceDiscoveryType === 'consul',
+          generator.jhipsterConfigWithDefaults.serviceDiscoveryType === 'consul' &&
+          generator.jhipsterConfigWithDefaults.externalConfig !== false,
       }),
       choices: [
         { value: 'no', name: 'No secrets management (use environment variables)' },

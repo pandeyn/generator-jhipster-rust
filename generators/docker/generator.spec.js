@@ -255,4 +255,42 @@ describe('SubGenerator docker of rust JHipster blueprint', () => {
       result.assertNoFile(['docker/vault.yml', 'docker/vault-init/vault-init.sh']);
     });
   });
+
+  // ==================== External Config Optional Tests ====================
+
+  describe('microservice with consul but external config disabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noExtDocker',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: false,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate consul.yml', () => {
+      result.assertFile('docker/consul.yml');
+    });
+
+    it('should NOT generate central-server-config files', () => {
+      result.assertNoFile(['docker/central-server-config/application-dev.yml', 'docker/central-server-config/application-prod.yml']);
+    });
+
+    it('should NOT generate Vault docker files', () => {
+      result.assertNoFile(['docker/vault.yml', 'docker/vault-init/vault-init.sh']);
+    });
+  });
 });

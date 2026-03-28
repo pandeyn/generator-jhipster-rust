@@ -496,4 +496,56 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       result.assertFileContent('k8s/app-secret.yml', 'JWT_SECRET');
     });
   });
+
+  // ==================== External Config Optional Tests ====================
+
+  describe('microservice with consul but external config disabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noExtK8s',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: false,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate consul-statefulset.yml', () => {
+      result.assertFile('k8s/consul-statefulset.yml');
+    });
+
+    it('should NOT generate consul-config-configmap.yml or consul-config-job.yml', () => {
+      result.assertNoFile(['k8s/consul-config-configmap.yml', 'k8s/consul-config-job.yml']);
+    });
+
+    it('should include consul service discovery vars in app-configmap.yml', () => {
+      result.assertFileContent('k8s/app-configmap.yml', 'CONSUL_HOST');
+      result.assertFileContent('k8s/app-configmap.yml', 'CONSUL_PORT');
+      result.assertFileContent('k8s/app-configmap.yml', 'CONSUL_REGISTER_SERVICE');
+      result.assertFileContent('k8s/app-configmap.yml', 'APP_ENV');
+    });
+
+    it('should NOT include external config vars in app-configmap.yml', () => {
+      result.assertNoFileContent('k8s/app-configmap.yml', 'APP_PROFILE');
+      result.assertNoFileContent('k8s/app-configmap.yml', 'CONSUL_CONFIG_WATCH_ENABLED');
+      result.assertNoFileContent('k8s/app-configmap.yml', 'CONSUL_CONFIG_WATCH_INTERVAL');
+    });
+
+    it('should NOT generate vault files', () => {
+      result.assertNoFile(['k8s/vault-statefulset.yml', 'k8s/vault-init-job.yml', 'k8s/vault-secret.yml']);
+    });
+  });
 });

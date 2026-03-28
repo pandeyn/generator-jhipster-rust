@@ -26,8 +26,11 @@ use <%= rustCrateName %>::config::OAuth2Config;
 use <%= rustCrateName %>::security::OAuth2Validator;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
-use <%= rustCrateName %>::config::{ConsulConfig, ConfigWatcher, new_shared_remote_config};
+use <%= rustCrateName %>::config::ConsulConfig;
 use <%= rustCrateName %>::services::ConsulService;
+<%_ } _%>
+<%_ if (externalConfig) { _%>
+use <%= rustCrateName %>::config::{ConfigWatcher, new_shared_remote_config};
 use tokio_util::sync::CancellationToken;
 <%_ } _%>
 <%_ if (secretsManagementVault) { _%>
@@ -54,7 +57,7 @@ use <%= rustCrateName %>::services::CircuitBreakerService;
 use <%= rustCrateName %>::services::circuit_breaker_metrics;
 <%_ } _%>
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled || secretsManagementVault) { _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || externalConfig || messageBrokerKafka || circuitBreakerEnabled || secretsManagementVault) { _%>
 use std::sync::Arc;
 <%_ } _%>
 use <%= rustCrateName %>::handlers;
@@ -76,7 +79,7 @@ async fn main() {
         .init();
 
     // Load configuration
-<%_ if (serviceDiscoveryConsul) { _%>
+<%_ if (externalConfig) { _%>
     // First load Consul config to check if config loading is enabled
     let consul_config_tmp = ConsulConfig::from_env();
     let consul_remote_config = if consul_config_tmp.enable_config {
@@ -230,6 +233,8 @@ async fn main() {
         None
     };
 
+<%_ } _%>
+<%_ if (externalConfig) { _%>
     // Initialize shared remote config from Consul KV data
     let remote_config = new_shared_remote_config();
     {
@@ -390,6 +395,8 @@ async fn main() {
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: consul_service.clone(),
+<%_ } _%>
+<%_ if (externalConfig) { _%>
         remote_config: remote_config.clone(),
 <%_ } _%>
 <%_ if (secretsManagementVault) { _%>
@@ -468,18 +475,22 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
     tracing::info!("Starting {} server on {}", "<%= baseName %>", addr);
 
-<%_ if (serviceDiscoveryConsul) { _%>
+<%_ if (serviceDiscoveryConsul || externalConfig) { _%>
     // Setup graceful shutdown handler
     let consul_for_shutdown = consul_service.clone();
+<%_ if (externalConfig) { _%>
     let cancel_token_shutdown = cancel_token.clone();
+<%_ } _%>
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
         tracing::info!("Received shutdown signal...");
 
+<%_ if (externalConfig) { _%>
         // Cancel config watcher
         cancel_token_shutdown.cancel();
         tracing::info!("Config watcher cancelled");
 
+<%_ } _%>
         // Deregister from Consul
         if let Some(ref service) = consul_for_shutdown {
             tracing::info!("Deregistering from Consul...");

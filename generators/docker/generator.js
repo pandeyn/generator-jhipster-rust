@@ -30,9 +30,12 @@ export default class extends BaseApplicationGenerator {
         application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
         application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
 
+        // Set external configuration flag for docker templates
+        application.externalConfig = application.serviceDiscoveryConsul && this.jhipsterConfig.externalConfig !== false;
+
         // Set secrets management flags for docker templates
         const secretsManagement = this.jhipsterConfig.secretsManagement || 'no';
-        application.secretsManagementVault = application.serviceDiscoveryConsul && secretsManagement === 'vault';
+        application.secretsManagementVault = application.externalConfig && secretsManagement === 'vault';
 
         // Set message broker flags for docker templates
         const messageBroker = this.jhipsterConfig.messageBroker || 'no';
@@ -84,8 +87,13 @@ export default class extends BaseApplicationGenerator {
               {
                 condition: ctx => ctx.serviceDiscoveryConsul,
                 path: 'docker/',
+                templates: ['consul.yml'],
+              },
+              // External configuration files (Consul KV config)
+              {
+                condition: ctx => ctx.externalConfig,
+                path: 'docker/',
                 templates: [
-                  'consul.yml',
                   'central-server-config/application.yml',
                   'central-server-config/application-dev.yml',
                   'central-server-config/application-prod.yml',

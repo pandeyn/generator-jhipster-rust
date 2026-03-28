@@ -1064,4 +1064,253 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
       result.assertNoFileContent('server/src/main.rs', 'VaultConfig');
     });
   });
+
+  // ==================== External Config Optional Tests ====================
+
+  describe('microservice with consul but external config disabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noExtConfigApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: false,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    // Service discovery files SHOULD be generated
+    it('should generate consul_config.rs', () => {
+      result.assertFile('server/src/config/consul_config.rs');
+    });
+
+    it('should generate consul_service.rs', () => {
+      result.assertFile('server/src/services/consul_service.rs');
+    });
+
+    it('should include ConsulService in lib.rs', () => {
+      result.assertFileContent('server/src/lib.rs', 'use services::ConsulService;');
+      result.assertFileContent('server/src/lib.rs', 'pub consul_service: Option<Arc<ConsulService>>');
+    });
+
+    it('should include consul_config in config/mod.rs', () => {
+      result.assertFileContent('server/src/config/mod.rs', 'mod consul_config;');
+      result.assertFileContent('server/src/config/mod.rs', 'pub use consul_config::*;');
+    });
+
+    it('should include consul service discovery env vars in .env', () => {
+      result.assertFileContent('.env', 'CONSUL_HOST=localhost');
+      result.assertFileContent('.env', 'CONSUL_PORT=8500');
+      result.assertFileContent('.env', 'CONSUL_SERVICE_NAME=noextconfigapp');
+      result.assertFileContent('.env', 'CONSUL_REGISTER_SERVICE=true');
+    });
+
+    // External config files should NOT be generated
+    it('should NOT generate remote_config.rs', () => {
+      result.assertNoFile('server/src/config/remote_config.rs');
+    });
+
+    it('should NOT generate config_watcher.rs', () => {
+      result.assertNoFile('server/src/config/config_watcher.rs');
+    });
+
+    it('should NOT include remote_config or config_watcher in config/mod.rs', () => {
+      result.assertNoFileContent('server/src/config/mod.rs', 'mod remote_config;');
+      result.assertNoFileContent('server/src/config/mod.rs', 'mod config_watcher;');
+    });
+
+    it('should NOT include SharedRemoteConfig in lib.rs', () => {
+      result.assertNoFileContent('server/src/lib.rs', 'SharedRemoteConfig');
+    });
+
+    it('should NOT include from_consul_and_env in app_config.rs', () => {
+      result.assertNoFileContent('server/src/config/app_config.rs', 'from_consul_and_env');
+    });
+
+    it('should use AppConfig::from_env() in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'AppConfig::from_env()');
+      result.assertNoFileContent('server/src/main.rs', 'AppConfig::from_consul_and_env');
+    });
+
+    it('should NOT include external config env vars in .env', () => {
+      result.assertNoFileContent('.env', 'APP_PROFILE');
+      result.assertNoFileContent('.env', 'CONSUL_CONFIG_WATCH_ENABLED');
+      result.assertNoFileContent('.env', 'CONSUL_CONFIG_WATCH_INTERVAL');
+      result.assertNoFileContent('.env', 'CONSUL_ENABLE_CONFIG');
+    });
+
+    it('should NOT include ConfigWatcher in main.rs', () => {
+      result.assertNoFileContent('server/src/main.rs', 'ConfigWatcher');
+    });
+
+    it('should NOT generate Vault files (vault depends on external config)', () => {
+      result.assertNoFile(['server/src/config/vault_config.rs', 'server/src/services/vault_service.rs']);
+    });
+
+    it('should NOT include external config dependencies in Cargo.toml', () => {
+      result.assertNoFileContent('Cargo.toml', 'serde_yaml');
+      result.assertNoFileContent('Cargo.toml', 'tokio-util');
+    });
+
+    it('should include service discovery dependencies in Cargo.toml', () => {
+      result.assertFileContent('Cargo.toml', 'hostname');
+      result.assertFileContent('Cargo.toml', 'base64');
+    });
+  });
+
+  describe('gateway with consul but external config disabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'gwNoExtConfig',
+          applicationType: 'gateway',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: false,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    // Service discovery files SHOULD be generated
+    it('should generate consul_config.rs and consul_service.rs', () => {
+      result.assertFile(['server/src/config/consul_config.rs', 'server/src/services/consul_service.rs']);
+    });
+
+    // External config files should NOT be generated
+    it('should NOT generate remote_config.rs or config_watcher.rs', () => {
+      result.assertNoFile(['server/src/config/remote_config.rs', 'server/src/config/config_watcher.rs']);
+    });
+
+    it('should NOT include from_consul_and_env', () => {
+      result.assertNoFileContent('server/src/config/app_config.rs', 'from_consul_and_env');
+    });
+
+    it('should use AppConfig::from_env() in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'AppConfig::from_env()');
+    });
+
+    it('should include consul service discovery env vars but NOT config env vars', () => {
+      result.assertFileContent('.env', 'CONSUL_HOST=localhost');
+      result.assertNoFileContent('.env', 'APP_PROFILE');
+      result.assertNoFileContent('.env', 'CONSUL_CONFIG_WATCH_ENABLED');
+    });
+  });
+
+  describe('microservice with consul and external config explicitly enabled', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'extConfigApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: true,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate all consul and external config files', () => {
+      result.assertFile([
+        'server/src/config/consul_config.rs',
+        'server/src/config/remote_config.rs',
+        'server/src/config/config_watcher.rs',
+        'server/src/services/consul_service.rs',
+      ]);
+    });
+
+    it('should include from_consul_and_env in app_config.rs', () => {
+      result.assertFileContent('server/src/config/app_config.rs', 'fn from_consul_and_env');
+    });
+
+    it('should use AppConfig::from_consul_and_env in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'AppConfig::from_consul_and_env');
+    });
+
+    it('should include all config env vars in .env', () => {
+      result.assertFileContent('.env', 'CONSUL_HOST=localhost');
+      result.assertFileContent('.env', 'APP_PROFILE=dev');
+      result.assertFileContent('.env', 'CONSUL_CONFIG_WATCH_ENABLED=true');
+    });
+
+    it('should include SharedRemoteConfig in lib.rs', () => {
+      result.assertFileContent('server/src/lib.rs', 'SharedRemoteConfig');
+    });
+
+    it('should include ConfigWatcher in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'ConfigWatcher::new');
+    });
+  });
+
+  describe('microservice with consul, external config disabled, vault requested', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'vaultNoExtConfig',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          externalConfig: false,
+          secretsManagement: 'vault',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should NOT generate Vault files (vault requires external config)', () => {
+      result.assertNoFile(['server/src/config/vault_config.rs', 'server/src/services/vault_service.rs']);
+    });
+
+    it('should NOT include Vault env vars', () => {
+      result.assertNoFileContent('.env', 'VAULT_ENABLED');
+      result.assertNoFileContent('.env', 'VAULT_ADDR');
+    });
+
+    it('should NOT include Vault in lib.rs', () => {
+      result.assertNoFileContent('server/src/lib.rs', 'VaultService');
+    });
+
+    it('should generate consul service discovery files', () => {
+      result.assertFile(['server/src/config/consul_config.rs', 'server/src/services/consul_service.rs']);
+    });
+  });
 });

@@ -62,6 +62,9 @@ exports[`SubGenerator server of rust JHipster blueprint > run > should succeed 1
   "docs/CI_CD.md": {
     "stateCleared": "modified",
   },
+  "docs/CONFIG.md": {
+    "stateCleared": "modified",
+  },
   "docs/DOCKER.md": {
     "stateCleared": "modified",
   },

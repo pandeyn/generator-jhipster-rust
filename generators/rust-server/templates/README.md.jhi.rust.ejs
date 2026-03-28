@@ -26,11 +26,20 @@ This application was generated using JHipster <%= jhipsterVersion %> with the Ru
 <%_ if (serviceDiscoveryConsul) { _%>
 - **Service Discovery**: Consul
 <%_ } _%>
+<%_ if (externalConfig) { _%>
+- **External Configuration**: Consul KV with hot-reload
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+- **Secrets Management**: HashiCorp Vault
+<%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
 - **Message Broker**: Apache Kafka
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
 - **Monitoring**: Prometheus metrics
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+- **Resilience**: Circuit breaker pattern
 <%_ } _%>
 
 ## Development
@@ -182,6 +191,7 @@ See [CI/CD Documentation](docs/CI_CD.md) for more details.
 
 Detailed documentation is available in the `docs/` directory:
 
+- [Configuration Reference](docs/CONFIG.md) - All environment variables, external config, and production checklist
 - [CI/CD Integration](docs/CI_CD.md) - GitHub Actions, GitLab CI, running locally with act
 - [Docker Integration](docs/DOCKER.md) - Container configuration and deployment
 - [Testing Guide](docs/TESTING.md) - Unit tests, integration tests, and test utilities
@@ -210,6 +220,9 @@ Detailed documentation is available in the `docs/` directory:
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
 - [Prometheus Metrics](docs/PROMETHEUS.md) - Monitoring and metrics collection
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+- [Circuit Breaker](docs/CIRCUIT_BREAKER.md) - Resilient HTTP calls with circuit breaker pattern
 <%_ } _%>
 <%_ if (applicationTypeMicroservice) { _%>
 - [Microservices Guide](docs/MICROSERVICES.md) - Microservice architecture and patterns

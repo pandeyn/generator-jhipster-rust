@@ -121,12 +121,13 @@ export const serverFiles = {
       // Consul service discovery files (gateway and microservice apps)
       condition: generator => generator.serviceDiscoveryConsul,
       path: SERVER_RUST_DIR,
-      templates: [
-        'src/config/consul_config.rs',
-        'src/config/remote_config.rs',
-        'src/config/config_watcher.rs',
-        'src/services/consul_service.rs',
-      ],
+      templates: ['src/config/consul_config.rs', 'src/services/consul_service.rs'],
+    },
+    {
+      // External configuration files (Consul KV config loading and hot-reload)
+      condition: generator => generator.externalConfig,
+      path: SERVER_RUST_DIR,
+      templates: ['src/config/remote_config.rs', 'src/config/config_watcher.rs'],
     },
     {
       // Vault secrets management files
@@ -192,6 +193,7 @@ export const serverFiles = {
       // Common documentation files for all projects
       templates: [
         'docs/CI_CD.md',
+        'docs/CONFIG.md',
         'docs/DOCKER.md',
         'docs/EMAIL_INTEGRATION.md',
         'docs/ENTITY_GENERATION.md',

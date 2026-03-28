@@ -8,6 +8,8 @@ mod email_config;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 mod consul_config;
+<%_ } _%>
+<%_ if (externalConfig) { _%>
 mod remote_config;
 mod config_watcher;
 <%_ } _%>
@@ -34,6 +36,8 @@ pub use email_config::*;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 pub use consul_config::*;
+<%_ } _%>
+<%_ if (externalConfig) { _%>
 pub use remote_config::*;
 pub use config_watcher::*;
 <%_ } _%>

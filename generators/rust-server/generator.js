@@ -315,6 +315,12 @@ export default class extends BaseApplicationGenerator {
         application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
         application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
       },
+      rustExternalConfigConfig({ application }) {
+        // External config via Consul KV is optional when service discovery is Consul
+        // Defaults to true for backward compatibility
+        const externalConfig = this.jhipsterConfig.externalConfig;
+        application.externalConfig = externalConfig !== false && application.serviceDiscoveryConsul;
+      },
       rustMessageBrokerConfig({ application }) {
         // Set message broker flags for Kafka integration
         const messageBroker = this.jhipsterConfig.messageBroker || 'no';
@@ -333,7 +339,7 @@ export default class extends BaseApplicationGenerator {
         // Set secrets management flags for Vault integration
         const secretsManagement = this.jhipsterConfig.secretsManagement || 'no';
         application.secretsManagement = secretsManagement;
-        application.secretsManagementVault = secretsManagement === 'vault' && application.serviceDiscoveryConsul;
+        application.secretsManagementVault = secretsManagement === 'vault' && application.externalConfig;
       },
       rustCircuitBreakerConfig({ application }) {
         // Set circuit breaker flags for resilience in microservices

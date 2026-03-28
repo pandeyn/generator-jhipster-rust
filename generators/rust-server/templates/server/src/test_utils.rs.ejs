@@ -114,9 +114,18 @@ pub async fn create_test_state() -> AppState {
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
 <%_ } _%>
+<%_ if (externalConfig) { _%>
+        remote_config: crate::config::new_shared_remote_config(),
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+        vault_service: None,
+<%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
         kafka_producer: None,
         kafka_consumer: None,
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+        circuit_breaker: None,
 <%_ } _%>
     }
 <%_ } else { _%>
@@ -129,9 +138,18 @@ pub async fn create_test_state() -> AppState {
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
 <%_ } _%>
+<%_ if (externalConfig) { _%>
+        remote_config: crate::config::new_shared_remote_config(),
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+        vault_service: None,
+<%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
         kafka_producer: None, // Kafka disabled for tests
         kafka_consumer: None,
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+        circuit_breaker: None,
 <%_ } _%>
     }
 <%_ } _%>
@@ -577,9 +595,18 @@ pub fn create_test_state() -> AppState {
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
 <%_ } _%>
+<%_ if (externalConfig) { _%>
+        remote_config: crate::config::new_shared_remote_config(),
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+        vault_service: None,
+<%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
         kafka_producer: None,
         kafka_consumer: None,
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+        circuit_breaker: None,
 <%_ } _%>
     }
 <%_ } else { _%>
@@ -592,9 +619,18 @@ pub fn create_test_state() -> AppState {
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: None,
 <%_ } _%>
+<%_ if (externalConfig) { _%>
+        remote_config: crate::config::new_shared_remote_config(),
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+        vault_service: None,
+<%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
         kafka_producer: None, // Kafka disabled for tests
         kafka_consumer: None,
+<%_ } _%>
+<%_ if (circuitBreakerEnabled) { _%>
+        circuit_breaker: None,
 <%_ } _%>
     }
 <%_ } _%>

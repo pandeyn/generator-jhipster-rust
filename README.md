@@ -3,8 +3,9 @@
 > JHipster blueprint for generating Rust backends with Axum
 
 [![NPM version][npm-image]][npm-url]
-[![Generator][github-generator-image]][github-generator-url]
-[![Samples][github-samples-image]][github-samples-url]
+
+<!-- [![Generator][github-generator-image]][github-generator-url]
+[![Samples][github-samples-image]][github-samples-url] -->
 
 # Introduction
 
@@ -42,8 +43,11 @@ The generated Rust server provides a complete REST API implementation with authe
 | **Deployment**           | Docker support               | Multi-stage Dockerfile                       |
 |                          | Docker Compose               | Full stack with DB containers                |
 |                          | Monolithic mode              | Serve SPA from Rust backend                  |
+|                          | Gateway mode                 | Serve SPA UI + route to microservices        |
 |                          | Microservice mode            | API-only service for microservices arch      |
-|                          | Consul Service Discovery     | Service registration, discovery, KV config   |
+|                          | Consul Service Discovery     | Service registration and discovery           |
+|                          | External Configuration       | Optional Consul KV config with hot-reload    |
+|                          | Vault Secrets Management     | HashiCorp Vault with AppRole and auto-renew  |
 | **Testing**              | Rust unit tests              | Service and handler tests                    |
 |                          | Cypress E2E tests            | End-to-end UI testing                        |
 | **Email**                | SMTP email service           | Lettre + Tera templates                      |
@@ -118,6 +122,10 @@ jhipster --blueprints rust --skip-jhipster-dependencies
 
 # Documentation
 
+## Configuration
+
+- [Configuration Reference](docs/CONFIG.md) - All environment variables, external configuration, Vault secrets, and production checklist
+
 ## Entity Generation
 
 - [Entity Generation Guide](docs/ENTITY_GENERATION.md) - Field types, validations, pagination, and relationships
@@ -180,7 +188,8 @@ This supports:
 - [Kubernetes Deployment](docs/KUBERNETES.md) - K8s manifests, Helm charts, StatefulSets, Ingress, and production deployment
 - [Static UI Hosting](docs/STATIC_HOSTING.md) - Serve SPA from Rust backend in monolithic mode
 - [Microservices Architecture](docs/MICROSERVICES.md) - Deploy as part of a microservices architecture
-- [Consul Service Discovery](docs/CONSUL.md) - Service registration, discovery, and configuration management
+- [Consul Service Discovery](docs/CONSUL.md) - Service registration, discovery, and health checks
+- [Configuration Reference](docs/CONFIG.md) - External configuration via Consul KV with hot-reload and Vault secrets management
 - [Monolithic Deployment](#monolithic-deployment) - Quick start guide for monolithic deployment
 - [Microservice Deployment](#microservice-deployment) - Quick start guide for microservice deployment
 
@@ -301,13 +310,12 @@ The following features from the base JHipster generator are planned for future v
 
 ### Medium Priority (Enterprise Features)
 
-| Feature               | Notes                                                    |
-| --------------------- | -------------------------------------------------------- |
-| Cloud Configuration   | Spring Cloud Config equivalent for remote config loading |
-| Pulsar Message Broker | Apache Pulsar integration (Kafka is already supported)   |
-| Distributed Tracing   | Zipkin/Jaeger integration for request tracing            |
-| Caching (Redis)       | Redis dependencies or caching layer                      |
-| Gateway Routing Logic | Dynamic route management or request forwarding           |
+| Feature               | Notes                                                  |
+| --------------------- | ------------------------------------------------------ |
+| Pulsar Message Broker | Apache Pulsar integration (Kafka is already supported) |
+| Distributed Tracing   | Zipkin/Jaeger integration for request tracing          |
+| Caching (Redis)       | Redis dependencies or caching layer                    |
+| Gateway Routing Logic | Dynamic route management or request forwarding         |
 
 ### Lower Priority (Nice to Have)
 

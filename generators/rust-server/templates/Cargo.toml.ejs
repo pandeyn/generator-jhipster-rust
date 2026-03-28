@@ -63,15 +63,18 @@ lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls", "builder
 tera = "1.19"
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
-# Consul service discovery and configuration
+# Consul service discovery
 hostname = "0.3"
 base64 = "0.22"
-serde_yaml = "0.9"
-tokio-util = "0.7"
 <%_ if (!authenticationTypeOauth2) { _%>
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 urlencoding = "2.1"
 <%_ } _%>
+<%_ } _%>
+<%_ if (externalConfig) { _%>
+# External configuration via Consul KV
+serde_yaml = "0.9"
+tokio-util = "0.7"
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
 # Kafka message broker (rdkafka - librdkafka wrapper)

@@ -51,7 +51,12 @@ export const kubernetesFiles = {
     {
       condition: ctx => ctx.serviceDiscoveryConsul,
       path: 'k8s/',
-      templates: ['consul-statefulset.yml', 'consul-config-configmap.yml', 'consul-config-job.yml'],
+      templates: ['consul-statefulset.yml'],
+    },
+    {
+      condition: ctx => ctx.externalConfig,
+      path: 'k8s/',
+      templates: ['consul-config-configmap.yml', 'consul-config-job.yml'],
     },
   ],
   vault: [

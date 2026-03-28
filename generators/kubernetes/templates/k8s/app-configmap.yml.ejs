@@ -29,6 +29,9 @@ data:
   CONSUL_REGISTER_SERVICE: "true"
   CONSUL_REGISTER_HOST: "<%= baseName.toLowerCase() %>"
   CONSUL_HEALTH_CHECK_INTERVAL: "10"
+  APP_ENV: "development"
+<%_ } _%>
+<%_ if (externalConfig) { _%>
   APP_PROFILE: "dev"
   CONSUL_CONFIG_WATCH_ENABLED: "true"
   CONSUL_CONFIG_WATCH_INTERVAL: "55"
