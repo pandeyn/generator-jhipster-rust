@@ -30,6 +30,10 @@ export default class extends BaseApplicationGenerator {
         application.serviceDiscoveryConsul = isMicroservicesApp && serviceDiscoveryType === 'consul';
         application.serviceDiscoveryAny = isMicroservicesApp && serviceDiscoveryType !== 'no';
 
+        // Set secrets management flags for docker templates
+        const secretsManagement = this.jhipsterConfig.secretsManagement || 'no';
+        application.secretsManagementVault = application.serviceDiscoveryConsul && secretsManagement === 'vault';
+
         // Set message broker flags for docker templates
         const messageBroker = this.jhipsterConfig.messageBroker || 'no';
         application.messageBrokerKafka = messageBroker === 'kafka';
@@ -80,7 +84,18 @@ export default class extends BaseApplicationGenerator {
               {
                 condition: ctx => ctx.serviceDiscoveryConsul,
                 path: 'docker/',
-                templates: ['consul.yml', 'central-server-config/application.yml'],
+                templates: [
+                  'consul.yml',
+                  'central-server-config/application.yml',
+                  'central-server-config/application-dev.yml',
+                  'central-server-config/application-prod.yml',
+                ],
+              },
+              // Vault secrets management files
+              {
+                condition: ctx => ctx.secretsManagementVault,
+                path: 'docker/',
+                templates: ['vault.yml', 'vault-init/vault-init.sh'],
               },
               // Kafka message broker files
               {

@@ -102,6 +102,24 @@ export default asCommand({
       ],
       default: 'no',
     },
+    secretsManagement: {
+      cli: {
+        type: String,
+        description: 'Secrets management solution for secure credentials storage',
+      },
+      prompt: generator => ({
+        type: 'list',
+        message: `Would you like to use a ${chalk.yellow('*secrets management*')} solution?`,
+        when:
+          ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType) &&
+          generator.jhipsterConfigWithDefaults.serviceDiscoveryType === 'consul',
+      }),
+      choices: [
+        { value: 'no', name: 'No secrets management (use environment variables)' },
+        { value: 'vault', name: 'HashiCorp Vault (secure secrets storage with Consul backend)' },
+      ],
+      default: 'no',
+    },
     circuitBreaker: {
       cli: {
         type: Boolean,

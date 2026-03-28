@@ -1,0 +1,17 @@
+# Development profile configuration
+# Loaded into Consul KV store under config/<app>/application-dev
+
+# Verbose logging for development
+logging:
+  level: debug
+  format: text
+
+# Smaller pool sizes for development
+database:
+  pool_size: 5
+  timeout_seconds: 30
+
+# Relaxed health check timing
+health:
+  interval_seconds: 15
+  timeout_seconds: 10

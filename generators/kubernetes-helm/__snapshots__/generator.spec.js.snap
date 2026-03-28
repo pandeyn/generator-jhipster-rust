@@ -26,6 +26,12 @@ exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul
   "helm/microapp/templates/configmap.yaml": {
     "stateCleared": "modified",
   },
+  "helm/microapp/templates/consul-config-configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/microapp/templates/consul-config-job.yaml": {
+    "stateCleared": "modified",
+  },
   "helm/microapp/templates/consul-statefulset.yaml": {
     "stateCleared": "modified",
   },
@@ -42,6 +48,165 @@ exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul
     "stateCleared": "modified",
   },
   "helm/microapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul and vault > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/consul-config-configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/consul-config-job.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/vault-init-job.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/vault-secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/templates/vault-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/vaultapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul but without vault > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/consul-config-configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/consul-config-job.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/novaultapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul config loader > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/consul-config-configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/consul-config-job.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/configapp/values.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
     "stateCleared": "modified",
   },
 }

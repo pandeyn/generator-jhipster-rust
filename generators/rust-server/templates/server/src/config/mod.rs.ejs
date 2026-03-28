@@ -8,12 +8,17 @@ mod email_config;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 mod consul_config;
+mod remote_config;
+mod config_watcher;
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
 mod kafka_config;
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
 mod metrics_config;
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+mod vault_config;
 <%_ } _%>
 <%_ if (circuitBreakerEnabled) { _%>
 mod circuit_breaker_config;
@@ -29,12 +34,17 @@ pub use email_config::*;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 pub use consul_config::*;
+pub use remote_config::*;
+pub use config_watcher::*;
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
 pub use kafka_config::*;
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
 pub use metrics_config::*;
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+pub use vault_config::*;
 <%_ } _%>
 <%_ if (circuitBreakerEnabled) { _%>
 pub use circuit_breaker_config::*;

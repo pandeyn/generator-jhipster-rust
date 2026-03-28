@@ -39,6 +39,10 @@ spec:
                 name: <%= baseName.toLowerCase() %>-config
             - secretRef:
                 name: <%= baseName.toLowerCase() %>-secret
+<%_ if (secretsManagementVault) { _%>
+            - secretRef:
+                name: <%= baseName.toLowerCase() %>-vault-secret
+<%_ } _%>
           livenessProbe:
             httpGet:
               path: /api/health/liveness

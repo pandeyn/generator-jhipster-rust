@@ -1,0 +1,17 @@
+# Production profile configuration
+# Loaded into Consul KV store under config/<app>/application-prod
+
+# Structured JSON logging for production
+logging:
+  level: info
+  format: json
+
+# Larger pool sizes for production workloads
+database:
+  pool_size: 20
+  timeout_seconds: 15
+
+# Strict health check timing
+health:
+  interval_seconds: 10
+  timeout_seconds: 5

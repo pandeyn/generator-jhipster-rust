@@ -121,7 +121,18 @@ export const serverFiles = {
       // Consul service discovery files (gateway and microservice apps)
       condition: generator => generator.serviceDiscoveryConsul,
       path: SERVER_RUST_DIR,
-      templates: ['src/config/consul_config.rs', 'src/services/consul_service.rs'],
+      templates: [
+        'src/config/consul_config.rs',
+        'src/config/remote_config.rs',
+        'src/config/config_watcher.rs',
+        'src/services/consul_service.rs',
+      ],
+    },
+    {
+      // Vault secrets management files
+      condition: generator => generator.secretsManagementVault,
+      path: SERVER_RUST_DIR,
+      templates: ['src/config/vault_config.rs', 'src/services/vault_service.rs'],
     },
     {
       // Kafka message broker files

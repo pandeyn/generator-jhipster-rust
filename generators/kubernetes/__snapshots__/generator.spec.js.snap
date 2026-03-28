@@ -20,10 +20,130 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with 
   "k8s/app-service.yml": {
     "stateCleared": "modified",
   },
+  "k8s/consul-config-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-job.yml": {
+    "stateCleared": "modified",
+  },
   "k8s/consul-statefulset.yml": {
     "stateCleared": "modified",
   },
   "k8s/kafka-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul and vault > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-job.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/vault-init-job.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/vault-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/vault-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul but without vault > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-job.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul config loader > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-job.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
     "stateCleared": "modified",
   },
   "k8s/kubectl-apply.sh": {

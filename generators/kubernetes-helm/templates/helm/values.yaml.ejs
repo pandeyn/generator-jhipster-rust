@@ -71,6 +71,9 @@ config:
   CONSUL_REGISTER_SERVICE: "true"
   CONSUL_REGISTER_HOST: "<%= baseName.toLowerCase() %>"
   CONSUL_HEALTH_CHECK_INTERVAL: "10"
+  APP_PROFILE: "dev"
+  CONSUL_CONFIG_WATCH_ENABLED: "true"
+  CONSUL_CONFIG_WATCH_INTERVAL: "55"
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
   KAFKA_BOOTSTRAP_SERVERS: "<%= baseName.toLowerCase() %>-kafka:9092"
@@ -99,6 +102,11 @@ mongodb:
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 consul:
+  enabled: true
+  storage: 1Gi
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+vault:
   enabled: true
   storage: 1Gi
 <%_ } _%>

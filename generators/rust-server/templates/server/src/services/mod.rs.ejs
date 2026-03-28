@@ -30,6 +30,11 @@ pub use kafka_producer::{KafkaProducer, KafkaProducerError};
 pub use kafka_consumer::{KafkaConsumer, KafkaConsumerError, KafkaMessage};
 <%_ } _%>
 
+<%_ if (secretsManagementVault) { _%>
+mod vault_service;
+pub use vault_service::{VaultService, VaultError};
+<%_ } _%>
+
 <%_ if (circuitBreakerEnabled) { _%>
 mod circuit_breaker_service;
 mod resilient_http_client;

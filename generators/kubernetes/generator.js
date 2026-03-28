@@ -134,6 +134,10 @@ export default class extends KubernetesGenerator {
           authenticationTypeJwt: authType === 'jwt',
           authenticationTypeOauth2: authType === 'oauth2',
           serviceDiscoveryConsul: (appType === 'microservice' || appType === 'gateway') && serviceDiscoveryType === 'consul',
+          secretsManagementVault:
+            (appType === 'microservice' || appType === 'gateway') &&
+            serviceDiscoveryType === 'consul' &&
+            (this.jhipsterConfig.secretsManagement || 'no') === 'vault',
           messageBrokerKafka: messageBroker === 'kafka',
           monitoringPrometheus: monitoring === 'prometheus',
           kubernetesNamespace,

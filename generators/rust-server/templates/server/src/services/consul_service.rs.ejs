@@ -583,6 +583,196 @@ impl ConsulService {
 <%_ } _%>
     }
 
+    /// Load all config keys under a given prefix from Consul KV store
+    pub async fn load_all_config(&self, prefix: &str) -> Result<HashMap<String, String>, ConsulError> {
+        if !self.config.enable_config {
+            return Ok(HashMap::new());
+        }
+
+        let url = format!("{}/v1/kv/{}?recurse=true", self.config.consul_url(), prefix);
+
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+
+        self.execute_with_circuit_breaker("load_all_config", || async {
+            let response = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            if response.status() == reqwest::StatusCode::NOT_FOUND {
+                return Ok(HashMap::new());
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(ConsulError::ConfigError(format!("HTTP {}: {}", status, body)));
+            }
+
+            Self::parse_kv_response(response).await
+        }).await
+<%_ } else { _%>
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(HashMap::new());
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ConsulError::ConfigError(format!("HTTP {}: {}", status, body)));
+        }
+
+        Self::parse_kv_response(response).await
+<%_ } _%>
+    }
+
+    /// Load profiled configuration from Consul KV store
+    /// Reads base config (config/<app>/application) and profile-specific config
+    /// (config/<app>/application-<profile>), merging with profile taking precedence
+    pub async fn load_profiled_config(&self) -> Result<HashMap<String, String>, ConsulError> {
+        // Load base config
+        let base_key = self.config.config_base_key();
+        let mut config = self.load_all_config(&base_key).await.unwrap_or_default();
+
+        // Load profile-specific config and merge (profile values override base)
+        let profile_key = self.config.config_profile_key();
+        if let Ok(profile_config) = self.load_all_config(&profile_key).await {
+            for (key, value) in profile_config {
+                config.insert(key, value);
+            }
+        }
+
+        info!(
+            "Loaded {} config entries from Consul (profile: {})",
+            config.len(),
+            self.config.config_profile
+        );
+
+        Ok(config)
+    }
+
+    /// Watch a config key for changes using Consul blocking queries
+    /// Returns the new value and the updated modify index for the next call
+    pub async fn watch_config(&self, key: &str, last_index: u64) -> Result<(Option<String>, u64), ConsulError> {
+        if !self.config.enable_config {
+            return Ok((None, 0));
+        }
+
+        let url = format!(
+            "{}/v1/kv/{}?raw=true&index={}&wait={}s",
+            self.config.consul_url(),
+            key,
+            last_index,
+            self.config.watch_interval
+        );
+
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+
+        self.execute_with_circuit_breaker("watch_config", || async {
+            let response = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+            let new_index = response
+                .headers()
+                .get("X-Consul-Index")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(0);
+
+            if response.status() == reqwest::StatusCode::NOT_FOUND {
+                return Ok((None, new_index));
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(ConsulError::ConfigError(format!("HTTP {}: {}", status, body)));
+            }
+
+            let value = response
+                .text()
+                .await
+                .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+            Ok((Some(value), new_index))
+        }).await
+<%_ } else { _%>
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ConsulError::ConnectionError(e.to_string()))?;
+
+        let new_index = response
+            .headers()
+            .get("X-Consul-Index")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok((None, new_index));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ConsulError::ConfigError(format!("HTTP {}: {}", status, body)));
+        }
+
+        let value = response
+            .text()
+            .await
+            .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+        Ok((Some(value), new_index))
+<%_ } _%>
+    }
+
+    /// Parse Consul KV recursive response into a HashMap
+    async fn parse_kv_response(response: reqwest::Response) -> Result<HashMap<String, String>, ConsulError> {
+        use base64::Engine;
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct KvEntry {
+            key: String,
+            value: Option<String>,
+        }
+
+        let entries: Vec<KvEntry> = response
+            .json()
+            .await
+            .map_err(|e| ConsulError::ParseError(e.to_string()))?;
+
+        let mut result = HashMap::new();
+        for entry in entries {
+            if let Some(encoded_value) = entry.value {
+                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(&encoded_value) {
+                    if let Ok(value) = String::from_utf8(decoded) {
+                        result.insert(entry.key, value);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
     /// Get the service configuration
     pub fn config(&self) -> &ConsulConfig {
         &self.config
@@ -636,6 +826,9 @@ mod tests {
             acl_token: None,
             config_key_prefix: "config/test".to_string(),
             health_check_host: "localhost".to_string(),
+            config_profile: "dev".to_string(),
+            watch_enabled: true,
+            watch_interval: 55,
         }
     }
 

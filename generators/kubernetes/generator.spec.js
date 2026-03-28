@@ -356,4 +356,144 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       result.assertFileContent('k8s/app-ingress.yml', 'nginx');
     });
   });
+
+  describe('microservice with consul config loader', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'configApp',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          skipClient: true,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Consul config loader resources', () => {
+      result.assertFile(['k8s/consul-config-configmap.yml', 'k8s/consul-config-job.yml']);
+    });
+
+    it('should use Deployment for config loader with consul-config-loader image', () => {
+      result.assertFileContent('k8s/consul-config-job.yml', 'kind: Deployment');
+      result.assertFileContent('k8s/consul-config-job.yml', 'jhipster/consul-config-loader:v0.4.1');
+    });
+
+    it('should include profile-specific configs in configmap', () => {
+      result.assertFileContent('k8s/consul-config-configmap.yml', 'application-dev.yml');
+      result.assertFileContent('k8s/consul-config-configmap.yml', 'application-prod.yml');
+    });
+
+    it('should include APP_PROFILE in app configmap', () => {
+      result.assertFileContent('k8s/app-configmap.yml', 'APP_PROFILE');
+      result.assertFileContent('k8s/app-configmap.yml', 'CONSUL_CONFIG_WATCH_ENABLED');
+    });
+
+    it('should include config loader in kubectl-apply.sh', () => {
+      result.assertFileContent('k8s/kubectl-apply.sh', 'consul-config-configmap.yml');
+      result.assertFileContent('k8s/kubectl-apply.sh', 'consul-config-job.yml');
+      result.assertFileContent('k8s/kubectl-apply.sh', 'consul-config-loader');
+      result.assertFileContent('k8s/kubectl-apply.sh', 'rollout status deployment');
+    });
+  });
+
+  describe('microservice with consul and vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'vaultApp',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'vault',
+          skipClient: true,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Vault K8s resources', () => {
+      result.assertFile(['k8s/vault-statefulset.yml', 'k8s/vault-init-job.yml', 'k8s/vault-secret.yml']);
+    });
+
+    it('should include Vault image in statefulset', () => {
+      result.assertFileContent('k8s/vault-statefulset.yml', 'hashicorp/vault:1.15');
+    });
+
+    it('should include Vault init with AppRole setup', () => {
+      result.assertFileContent('k8s/vault-init-job.yml', 'vault auth enable approle');
+      result.assertFileContent('k8s/vault-init-job.yml', 'vault kv put');
+    });
+
+    it('should reference vault-secret in app deployment', () => {
+      result.assertFileContent('k8s/app-deployment.yml', 'vault-secret');
+    });
+
+    it('should include Vault in kubectl-apply.sh', () => {
+      result.assertFileContent('k8s/kubectl-apply.sh', 'vault-statefulset.yml');
+      result.assertFileContent('k8s/kubectl-apply.sh', 'vault-init-job.yml');
+      result.assertFileContent('k8s/kubectl-apply.sh', 'vault-secret.yml');
+    });
+
+    it('should conditionally handle JWT_SECRET in app-secret', () => {
+      result.assertFileContent('k8s/app-secret.yml', 'managed by Vault');
+      result.assertNoFileContent('k8s/app-secret.yml', 'your-super-secret-jwt-key');
+    });
+  });
+
+  describe('microservice with consul but without vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noVaultApp',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'no',
+          skipClient: true,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Vault K8s resources', () => {
+      result.assertNoFile(['k8s/vault-statefulset.yml', 'k8s/vault-init-job.yml', 'k8s/vault-secret.yml']);
+    });
+
+    it('should not reference vault-secret in app deployment', () => {
+      result.assertNoFileContent('k8s/app-deployment.yml', 'vault-secret');
+    });
+
+    it('should include JWT_SECRET in app-secret normally', () => {
+      result.assertFileContent('k8s/app-secret.yml', 'JWT_SECRET');
+    });
+  });
 });

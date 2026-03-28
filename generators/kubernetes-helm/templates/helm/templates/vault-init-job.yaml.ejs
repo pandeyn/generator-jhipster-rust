@@ -1,0 +1,78 @@
+{{- if .Values.vault.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-vault-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-vault-init
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-vault-init
+    spec:
+      initContainers:
+        - name: wait-for-vault
+          image: hashicorp/vault:1.15
+          env:
+            - name: VAULT_ADDR
+              value: "http://{{ .Release.Name }}-vault:8200"
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Vault to be ready..."
+              until vault status 2>/dev/null; do
+                echo "Vault not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "Vault is ready!"
+      containers:
+        - name: vault-init
+          image: hashicorp/vault:1.15
+          env:
+            - name: VAULT_ADDR
+              value: "http://{{ .Release.Name }}-vault:8200"
+            - name: VAULT_TOKEN
+              value: "myroot"
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              vault secrets enable -path=secret -version=2 kv 2>/dev/null || true
+
+              vault kv put secret/{{ .Release.Name | lower }} \
+<%_ if (authenticationTypeJwt) { _%>
+                JWT_SECRET="{{ .Values.secrets.JWT_SECRET | default "change-me-in-production" }}" \
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+                OIDC_CLIENT_SECRET="web_app" \
+<%_ } _%>
+                APP_NAME="{{ .Release.Name }}"
+
+              vault auth enable approle 2>/dev/null || true
+
+              vault policy write {{ .Release.Name | lower }}-policy - <<POLICY
+              path "secret/data/{{ .Release.Name | lower }}" {
+                  capabilities = ["read"]
+              }
+              path "secret/data/{{ .Release.Name | lower }}/*" {
+                  capabilities = ["read"]
+              }
+              path "auth/token/renew-self" {
+                  capabilities = ["update"]
+              }
+              POLICY
+
+              vault write auth/approle/role/{{ .Release.Name | lower }}-role \
+                token_policies="{{ .Release.Name | lower }}-policy" \
+                token_ttl=1h \
+                token_max_ttl=4h
+
+              echo "Vault initialization complete!"
+      restartPolicy: OnFailure
+{{- end }}

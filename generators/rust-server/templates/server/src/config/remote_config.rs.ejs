@@ -1,0 +1,130 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// Hot-reloadable configuration loaded from Consul KV store.
+/// Only includes values that can be safely changed at runtime.
+/// Non-reloadable values (DB URL, port, auth type, JWT secret) stay in AppConfig/.env.
+#[derive(Clone, Debug)]
+pub struct RemoteConfig {
+    /// Log level (e.g., "info", "debug", "warn")
+    pub log_level: String,
+<%_ if (circuitBreakerEnabled) { _%>
+    /// Circuit breaker failure rate threshold (0.0 to 1.0)
+    pub circuit_breaker_failure_rate_threshold: f64,
+    /// Circuit breaker sliding window size
+    pub circuit_breaker_sliding_window_size: u64,
+    /// Circuit breaker wait duration in open state (seconds)
+    pub circuit_breaker_wait_duration_secs: u64,
+    /// Circuit breaker request timeout (milliseconds)
+    pub circuit_breaker_request_timeout_ms: u64,
+<%_ } _%>
+    /// Database connection pool size
+    pub database_pool_size: u32,
+    /// Health check interval in seconds
+    pub health_interval_seconds: u64,
+    /// Custom feature flags
+    pub feature_flags: HashMap<String, String>,
+}
+
+impl Default for RemoteConfig {
+    fn default() -> Self {
+        Self {
+            log_level: "info".to_string(),
+<%_ if (circuitBreakerEnabled) { _%>
+            circuit_breaker_failure_rate_threshold: 0.5,
+            circuit_breaker_sliding_window_size: 100,
+            circuit_breaker_wait_duration_secs: 60,
+            circuit_breaker_request_timeout_ms: 30000,
+<%_ } _%>
+            database_pool_size: 10,
+            health_interval_seconds: 10,
+            feature_flags: HashMap::new(),
+        }
+    }
+}
+
+impl RemoteConfig {
+    /// Create a RemoteConfig from a flat key-value map (from Consul KV)
+    pub fn from_consul_kv(kv: &HashMap<String, String>) -> Self {
+        let get = |key: &str| kv.get(key).cloned();
+        let get_or = |key: &str, default: &str| get(key).unwrap_or_else(|| default.to_string());
+
+        // Extract feature flags (keys starting with "feature.")
+        let feature_flags: HashMap<String, String> = kv
+            .iter()
+            .filter(|(k, _)| k.starts_with("feature."))
+            .map(|(k, v)| (k.trim_start_matches("feature.").to_string(), v.clone()))
+            .collect();
+
+        Self {
+            log_level: get_or("logging.level", "info"),
+<%_ if (circuitBreakerEnabled) { _%>
+            circuit_breaker_failure_rate_threshold: get_or("circuit_breaker.failure_rate_threshold", "0.5")
+                .parse()
+                .unwrap_or(0.5),
+            circuit_breaker_sliding_window_size: get_or("circuit_breaker.sliding_window_size", "100")
+                .parse()
+                .unwrap_or(100),
+            circuit_breaker_wait_duration_secs: get_or("circuit_breaker.wait_duration_secs", "60")
+                .parse()
+                .unwrap_or(60),
+            circuit_breaker_request_timeout_ms: get_or("circuit_breaker.request_timeout_ms", "30000")
+                .parse()
+                .unwrap_or(30000),
+<%_ } _%>
+            database_pool_size: get_or("database.pool_size", "10")
+                .parse()
+                .unwrap_or(10),
+            health_interval_seconds: get_or("health.interval_seconds", "10")
+                .parse()
+                .unwrap_or(10),
+            feature_flags,
+        }
+    }
+}
+
+/// Thread-safe shared remote configuration
+pub type SharedRemoteConfig = Arc<RwLock<RemoteConfig>>;
+
+/// Create a new shared remote config with default values
+pub fn new_shared_remote_config() -> SharedRemoteConfig {
+    Arc::new(RwLock::new(RemoteConfig::default()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_remote_config() {
+        let config = RemoteConfig::default();
+        assert_eq!(config.log_level, "info");
+        assert_eq!(config.database_pool_size, 10);
+        assert_eq!(config.health_interval_seconds, 10);
+        assert!(config.feature_flags.is_empty());
+    }
+
+    #[test]
+    fn test_from_consul_kv() {
+        let mut kv = HashMap::new();
+        kv.insert("logging.level".to_string(), "debug".to_string());
+        kv.insert("database.pool_size".to_string(), "20".to_string());
+        kv.insert("feature.dark_mode".to_string(), "true".to_string());
+        kv.insert("feature.beta_api".to_string(), "false".to_string());
+
+        let config = RemoteConfig::from_consul_kv(&kv);
+        assert_eq!(config.log_level, "debug");
+        assert_eq!(config.database_pool_size, 20);
+        assert_eq!(config.feature_flags.get("dark_mode"), Some(&"true".to_string()));
+        assert_eq!(config.feature_flags.get("beta_api"), Some(&"false".to_string()));
+    }
+
+    #[test]
+    fn test_from_consul_kv_with_defaults() {
+        let kv = HashMap::new();
+        let config = RemoteConfig::from_consul_kv(&kv);
+        assert_eq!(config.log_level, "info");
+        assert_eq!(config.database_pool_size, 10);
+    }
+}

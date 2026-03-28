@@ -1,0 +1,58 @@
+{{- if .Values.consul.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-consul-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-consul-config
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+data:
+  application.yml: |
+    # Central configuration for all microservices
+    # Loaded into Consul KV store by consul-config-loader
+
+    configserver:
+      name: Kubernetes Consul Config Server
+      status: Connected to Consul Server running in Kubernetes
+
+<%_ if (authenticationTypeJwt) { _%>
+    jwt:
+      secret: {{ .Values.secrets.JWT_SECRET | default "change-me-in-production" }}
+      expiration_hours: 24
+<%_ } _%>
+
+    database:
+      pool_size: 10
+      timeout_seconds: 30
+
+    logging:
+      level: info
+      format: json
+
+    health:
+      interval_seconds: 10
+      timeout_seconds: 5
+  application-dev.yml: |
+    # Development profile configuration
+    logging:
+      level: debug
+      format: text
+    database:
+      pool_size: 5
+      timeout_seconds: 30
+    health:
+      interval_seconds: 15
+      timeout_seconds: 10
+  application-prod.yml: |
+    # Production profile configuration
+    logging:
+      level: info
+      format: json
+    database:
+      pool_size: 20
+      timeout_seconds: 15
+    health:
+      interval_seconds: 10
+      timeout_seconds: 5
+{{- end }}

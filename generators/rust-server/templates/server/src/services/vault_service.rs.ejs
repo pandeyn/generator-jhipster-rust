@@ -1,0 +1,417 @@
+//! HashiCorp Vault service for secrets management.
+//!
+//! Provides integration with Vault for:
+//! - Reading secrets from KV v2 secrets engine
+//! - Token and AppRole authentication
+//! - Automatic token renewal
+<%_ if (circuitBreakerEnabled) { _%>
+//! - Circuit breaker protection for resilient Vault communication
+<%_ } _%>
+
+use crate::config::VaultConfig;
+use reqwest::Client;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{error, info, warn};
+<%_ if (circuitBreakerEnabled) { _%>
+use crate::services::{CircuitBreakerService, CircuitBreakerError};
+<%_ } _%>
+
+/// Vault service for secrets management
+#[derive(Clone)]
+pub struct VaultService {
+    config: VaultConfig,
+    client: Client,
+    /// Current Vault client token
+    token: Arc<RwLock<String>>,
+<%_ if (circuitBreakerEnabled) { _%>
+    /// Optional circuit breaker for resilient Vault communication
+    circuit_breaker: Option<Arc<CircuitBreakerService>>,
+<%_ } _%>
+}
+
+<%_ if (circuitBreakerEnabled) { _%>
+const VAULT_CIRCUIT_BREAKER_NAME: &str = "vault";
+
+<%_ } _%>
+/// Response from Vault KV v2 read
+#[derive(Debug, Deserialize)]
+struct KvV2Response {
+    data: KvV2Data,
+}
+
+#[derive(Debug, Deserialize)]
+struct KvV2Data {
+    data: HashMap<String, serde_json::Value>,
+}
+
+/// Response from Vault AppRole login
+#[derive(Debug, Deserialize)]
+struct AppRoleLoginResponse {
+    auth: AuthData,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuthData {
+    client_token: String,
+    lease_duration: u64,
+    renewable: bool,
+}
+
+/// Response from Vault token lookup-self
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct TokenLookupResponse {
+    data: TokenData,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct TokenData {
+    ttl: u64,
+    renewable: bool,
+}
+
+impl VaultService {
+    /// Create a new Vault service instance
+<%_ if (circuitBreakerEnabled) { _%>
+    pub async fn new(config: VaultConfig, circuit_breaker: Option<Arc<CircuitBreakerService>>) -> Result<Self, VaultError> {
+<%_ } else { _%>
+    pub async fn new(config: VaultConfig) -> Result<Self, VaultError> {
+<%_ } _%>
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| VaultError::ConnectionError(e.to_string()))?;
+
+        let initial_token = match config.auth_method.as_str() {
+            "approle" => {
+                let role_id = config.role_id.clone()
+                    .ok_or_else(|| VaultError::AuthError("VAULT_ROLE_ID is required for AppRole auth".to_string()))?;
+                let secret_id = config.secret_id.clone()
+                    .ok_or_else(|| VaultError::AuthError("VAULT_SECRET_ID is required for AppRole auth".to_string()))?;
+
+                Self::approle_login_static(&client, &config.addr, &role_id, &secret_id).await?
+            }
+            "token" | _ => {
+                config.token.clone()
+                    .ok_or_else(|| VaultError::AuthError("VAULT_TOKEN is required for token auth".to_string()))?
+            }
+        };
+
+        Ok(Self {
+            config,
+            client,
+            token: Arc::new(RwLock::new(initial_token)),
+<%_ if (circuitBreakerEnabled) { _%>
+            circuit_breaker,
+<%_ } _%>
+        })
+    }
+
+    /// Login with AppRole credentials (static method for initial login)
+    async fn approle_login_static(
+        client: &Client,
+        addr: &str,
+        role_id: &str,
+        secret_id: &str,
+    ) -> Result<String, VaultError> {
+        let url = format!("{}/v1/auth/approle/login", addr);
+        let body = serde_json::json!({
+            "role_id": role_id,
+            "secret_id": secret_id,
+        });
+
+        let response = client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| VaultError::ConnectionError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(VaultError::AuthError(format!("AppRole login failed: HTTP {}: {}", status, body)));
+        }
+
+        let login_response: AppRoleLoginResponse = response
+            .json()
+            .await
+            .map_err(|e| VaultError::ParseError(e.to_string()))?;
+
+        info!(
+            "Vault AppRole login successful (lease: {}s, renewable: {})",
+            login_response.auth.lease_duration,
+            login_response.auth.renewable
+        );
+
+        Ok(login_response.auth.client_token)
+    }
+
+<%_ if (circuitBreakerEnabled) { _%>
+    /// Execute a request with optional circuit breaker protection
+    async fn execute_with_circuit_breaker<F, Fut, T>(
+        &self,
+        operation: &str,
+        f: F,
+    ) -> Result<T, VaultError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T, VaultError>>,
+    {
+        match &self.circuit_breaker {
+            Some(cb) if cb.is_enabled() => {
+                cb.execute(VAULT_CIRCUIT_BREAKER_NAME, f)
+                    .await
+                    .map_err(|e| match e {
+                        CircuitBreakerError::CircuitOpen(svc) => {
+                            warn!("Circuit breaker open for Vault {} operation", operation);
+                            VaultError::CircuitBreakerOpen(format!(
+                                "Circuit breaker open for service '{}' during {} operation",
+                                svc, operation
+                            ))
+                        }
+                        CircuitBreakerError::HalfOpenRejected(svc) => {
+                            VaultError::CircuitBreakerOpen(format!(
+                                "Circuit breaker half-open, rejected for service '{}' during {} operation",
+                                svc, operation
+                            ))
+                        }
+                        CircuitBreakerError::Timeout => {
+                            VaultError::ConnectionError(format!(
+                                "Request timed out during {} operation",
+                                operation
+                            ))
+                        }
+                        CircuitBreakerError::RequestFailed(msg) => {
+                            VaultError::ConnectionError(msg)
+                        }
+                        CircuitBreakerError::NotEnabled => {
+                            panic!("Circuit breaker not enabled but was called")
+                        }
+                    })
+            }
+            _ => f().await,
+        }
+    }
+
+<%_ } _%>
+    /// Read secrets from Vault KV v2 at the configured path
+    pub async fn read_secrets(&self, path: &str) -> Result<HashMap<String, String>, VaultError> {
+        let url = format!("{}/v1/{}", self.config.addr, path);
+        let token = self.token.read().await.clone();
+
+<%_ if (circuitBreakerEnabled) { _%>
+        let client = self.client.clone();
+
+        self.execute_with_circuit_breaker("read_secrets", || async {
+            let response = client
+                .get(&url)
+                .header("X-Vault-Token", &token)
+                .send()
+                .await
+                .map_err(|e| VaultError::ConnectionError(e.to_string()))?;
+
+            if response.status() == reqwest::StatusCode::NOT_FOUND {
+                return Ok(HashMap::new());
+            }
+
+            if response.status() == reqwest::StatusCode::FORBIDDEN {
+                return Err(VaultError::PermissionError(
+                    "Access denied to Vault secret path".to_string(),
+                ));
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(VaultError::ReadError(format!("HTTP {}: {}", status, body)));
+            }
+
+            let kv_response: KvV2Response = response
+                .json()
+                .await
+                .map_err(|e| VaultError::ParseError(e.to_string()))?;
+
+            let secrets: HashMap<String, String> = kv_response
+                .data
+                .data
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    v.as_str().map(|s| (k, s.to_string()))
+                })
+                .collect();
+
+            Ok(secrets)
+        }).await
+<%_ } else { _%>
+        let response = self
+            .client
+            .get(&url)
+            .header("X-Vault-Token", &token)
+            .send()
+            .await
+            .map_err(|e| VaultError::ConnectionError(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(HashMap::new());
+        }
+
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return Err(VaultError::PermissionError(
+                "Access denied to Vault secret path".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(VaultError::ReadError(format!("HTTP {}: {}", status, body)));
+        }
+
+        let kv_response: KvV2Response = response
+            .json()
+            .await
+            .map_err(|e| VaultError::ParseError(e.to_string()))?;
+
+        let secrets: HashMap<String, String> = kv_response
+            .data
+            .data
+            .into_iter()
+            .filter_map(|(k, v)| {
+                v.as_str().map(|s| (k, s.to_string()))
+            })
+            .collect();
+
+        Ok(secrets)
+<%_ } _%>
+    }
+
+    /// Read secrets from the default configured path
+    pub async fn read_default_secrets(&self) -> Result<HashMap<String, String>, VaultError> {
+        self.read_secrets(&self.config.secret_path).await
+    }
+
+    /// Renew the current Vault token
+    pub async fn renew_token(&self) -> Result<u64, VaultError> {
+        let url = format!("{}/v1/auth/token/renew-self", self.config.addr);
+        let token = self.token.read().await.clone();
+
+        let response = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &token)
+            .send()
+            .await
+            .map_err(|e| VaultError::ConnectionError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(VaultError::AuthError(format!(
+                "Token renewal failed: HTTP {}: {}",
+                status, body
+            )));
+        }
+
+        let auth_response: AppRoleLoginResponse = response
+            .json()
+            .await
+            .map_err(|e| VaultError::ParseError(e.to_string()))?;
+
+        // Update the token if it changed
+        let mut current_token = self.token.write().await;
+        *current_token = auth_response.auth.client_token;
+
+        info!("Vault token renewed (new lease: {}s)", auth_response.auth.lease_duration);
+        Ok(auth_response.auth.lease_duration)
+    }
+
+    /// Start a background task that automatically renews the Vault token
+    pub fn start_token_renewal(self: Arc<Self>, cancel_token: tokio_util::sync::CancellationToken) {
+        if !self.config.auto_renew {
+            info!("Vault auto token renewal disabled");
+            return;
+        }
+
+        tokio::spawn(async move {
+            // Initial delay before first renewal check
+            let mut renewal_interval = 3600u64; // Default to 1 hour
+
+            loop {
+                // Renew at 75% of the lease duration
+                let sleep_duration = std::time::Duration::from_secs(renewal_interval * 3 / 4);
+
+                tokio::select! {
+                    _ = cancel_token.cancelled() => {
+                        info!("Vault token renewal task shutting down");
+                        return;
+                    }
+                    _ = tokio::time::sleep(sleep_duration) => {
+                        match self.renew_token().await {
+                            Ok(new_lease) => {
+                                renewal_interval = new_lease;
+                            }
+                            Err(e) => {
+                                error!("Failed to renew Vault token: {}. Will retry in 60s.", e);
+                                renewal_interval = 80; // Retry sooner on failure (60s * 4/3)
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// Get the vault configuration
+    pub fn config(&self) -> &VaultConfig {
+        &self.config
+    }
+}
+
+/// Errors that can occur when interacting with Vault
+#[derive(Debug, thiserror::Error)]
+pub enum VaultError {
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+
+    #[error("Authentication error: {0}")]
+    AuthError(String),
+
+    #[error("Permission denied: {0}")]
+    PermissionError(String),
+
+    #[error("Secret read error: {0}")]
+    ReadError(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+
+<%_ if (circuitBreakerEnabled) { _%>
+    #[error("Circuit breaker open: {0}")]
+    CircuitBreakerOpen(String),
+<%_ } _%>
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vault_error_display() {
+        let err = VaultError::ConnectionError("timeout".to_string());
+        assert_eq!(err.to_string(), "Connection error: timeout");
+
+        let err = VaultError::AuthError("invalid token".to_string());
+        assert_eq!(err.to_string(), "Authentication error: invalid token");
+
+        let err = VaultError::PermissionError("denied".to_string());
+        assert_eq!(err.to_string(), "Permission denied: denied");
+    }
+}

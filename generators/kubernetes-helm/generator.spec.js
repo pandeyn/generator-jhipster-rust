@@ -366,4 +366,146 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       result.assertFileContent('helm/hpaapp/values.yaml', 'enabled: true');
     });
   });
+
+  describe('microservice with consul config loader', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'configApp',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          skipClient: true,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Consul config loader Helm templates', () => {
+      result.assertFile(['helm/configapp/templates/consul-config-configmap.yaml', 'helm/configapp/templates/consul-config-job.yaml']);
+    });
+
+    it('should include Helm guards in config loader templates', () => {
+      result.assertFileContent('helm/configapp/templates/consul-config-configmap.yaml', '{{- if .Values.consul.enabled }}');
+      result.assertFileContent('helm/configapp/templates/consul-config-job.yaml', '{{- if .Values.consul.enabled }}');
+    });
+
+    it('should use Deployment for config loader (long-running process)', () => {
+      result.assertFileContent('helm/configapp/templates/consul-config-job.yaml', 'kind: Deployment');
+      result.assertFileContent('helm/configapp/templates/consul-config-job.yaml', 'replicas: 1');
+    });
+
+    it('should include profile-specific configs in configmap', () => {
+      result.assertFileContent('helm/configapp/templates/consul-config-configmap.yaml', 'application-dev.yml');
+      result.assertFileContent('helm/configapp/templates/consul-config-configmap.yaml', 'application-prod.yml');
+    });
+
+    it('should include APP_PROFILE in values.yaml', () => {
+      result.assertFileContent('helm/configapp/values.yaml', 'APP_PROFILE');
+      result.assertFileContent('helm/configapp/values.yaml', 'CONSUL_CONFIG_WATCH_ENABLED');
+    });
+  });
+
+  describe('microservice with consul and vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'vaultApp',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'vault',
+          skipClient: true,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Vault Helm templates', () => {
+      result.assertFile([
+        'helm/vaultapp/templates/vault-statefulset.yaml',
+        'helm/vaultapp/templates/vault-init-job.yaml',
+        'helm/vaultapp/templates/vault-secret.yaml',
+      ]);
+    });
+
+    it('should include Helm guards on Vault templates', () => {
+      result.assertFileContent('helm/vaultapp/templates/vault-statefulset.yaml', '{{- if .Values.vault.enabled }}');
+      result.assertFileContent('helm/vaultapp/templates/vault-init-job.yaml', '{{- if .Values.vault.enabled }}');
+      result.assertFileContent('helm/vaultapp/templates/vault-secret.yaml', '{{- if .Values.vault.enabled }}');
+    });
+
+    it('should not use Helm hooks on vault init job (runs as regular resource)', () => {
+      result.assertNoFileContent('helm/vaultapp/templates/vault-init-job.yaml', 'helm.sh/hook');
+    });
+
+    it('should include vault section in values.yaml', () => {
+      result.assertFileContent('helm/vaultapp/values.yaml', 'vault:');
+      result.assertFileContent('helm/vaultapp/values.yaml', 'enabled: true');
+      result.assertFileContent('helm/vaultapp/values.yaml', 'storage: 1Gi');
+    });
+
+    it('should reference vault-secret in deployment', () => {
+      result.assertFileContent('helm/vaultapp/templates/deployment.yaml', 'vault-secret');
+    });
+  });
+
+  describe('microservice with consul but without vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noVaultApp',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'no',
+          skipClient: true,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Vault Helm templates', () => {
+      result.assertNoFile([
+        'helm/novaultapp/templates/vault-statefulset.yaml',
+        'helm/novaultapp/templates/vault-init-job.yaml',
+        'helm/novaultapp/templates/vault-secret.yaml',
+      ]);
+    });
+
+    it('should not include vault section in values.yaml', () => {
+      result.assertNoFileContent('helm/novaultapp/values.yaml', 'vault:');
+    });
+
+    it('should not reference vault-secret in deployment', () => {
+      result.assertNoFileContent('helm/novaultapp/templates/deployment.yaml', 'vault-secret');
+    });
+  });
 });

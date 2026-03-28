@@ -79,6 +79,63 @@ impl AppConfig {
         }
     }
 
+<%_ if (serviceDiscoveryConsul) { _%>
+    /// Create AppConfig with layered resolution:
+    /// Compiled defaults → Consul base → Consul profile → .env → env vars
+    /// Consul values are used as fallbacks — env vars always win
+    pub fn from_consul_and_env(consul_config: &std::collections::HashMap<String, String>) -> Self {
+        // Helper: check env var first, then consul, then default
+        let get = |env_key: &str, consul_key: &str, default: &str| -> String {
+            env::var(env_key)
+                .or_else(|_| consul_config.get(consul_key).cloned().ok_or(std::env::VarError::NotPresent))
+                .unwrap_or_else(|_| default.to_string())
+        };
+
+        Self {
+            app_name: get("APP_NAME", "app_name", "<%= baseName %>"),
+            app_env: get("APP_ENV", "app_env", "development"),
+            app_port: get("APP_PORT", "app_port", "8080")
+                .parse()
+                .expect("APP_PORT must be a valid port number"),
+            app_host: get("APP_HOST", "app_host", "0.0.0.0"),
+<%_ if (enableStaticHosting) { _%>
+            app_https: env::var("APP_HTTPS")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            mongodb_uri: env::var("MONGODB_URI")
+                .or_else(|_| consul_config.get("mongodb_uri").cloned().ok_or(std::env::VarError::NotPresent))
+                .expect("MONGODB_URI must be set"),
+            mongodb_database: env::var("MONGODB_DATABASE")
+                .or_else(|_| consul_config.get("mongodb_database").cloned().ok_or(std::env::VarError::NotPresent))
+                .expect("MONGODB_DATABASE must be set"),
+<%_ } else { _%>
+            database_url: env::var("DATABASE_URL")
+                .or_else(|_| consul_config.get("database_url").cloned().ok_or(std::env::VarError::NotPresent))
+                .expect("DATABASE_URL must be set"),
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            jwt_secret: env::var("JWT_SECRET")
+                .or_else(|_| consul_config.get("jwt.secret").cloned().ok_or(std::env::VarError::NotPresent))
+                .expect("JWT_SECRET must be set"),
+            jwt_expiration_hours: get("JWT_EXPIRATION_HOURS", "jwt.expiration_hours", "24")
+                .parse()
+                .expect("JWT_EXPIRATION_HOURS must be a valid number"),
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            frontend_url: get("FRONTEND_URL", "frontend_url", "http://localhost:9000"),
+<%_ } _%>
+<%_ if (enableStaticHosting) { _%>
+            static_files_dir: env::var("STATIC_FILES_DIR").ok(),
+            serve_static_files: env::var("SERVE_STATIC_FILES")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or_else(|_| env::var("STATIC_FILES_DIR").is_ok()),
+<%_ } _%>
+        }
+    }
+
+<%_ } _%>
     pub fn is_production(&self) -> bool {
         self.app_env == "production"
     }

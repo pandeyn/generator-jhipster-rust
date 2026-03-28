@@ -18,6 +18,11 @@ export const helmConditionalTemplateFiles = {
   mongodb: { condition: ctx => ctx.devDatabaseTypeMongodb, file: 'templates/mongodb-statefulset.yaml' },
   keycloak: { condition: ctx => ctx.authenticationTypeOauth2, file: 'templates/keycloak-deployment.yaml' },
   consul: { condition: ctx => ctx.serviceDiscoveryConsul, file: 'templates/consul-statefulset.yaml' },
+  consulConfigConfigmap: { condition: ctx => ctx.serviceDiscoveryConsul, file: 'templates/consul-config-configmap.yaml' },
+  consulConfigJob: { condition: ctx => ctx.serviceDiscoveryConsul, file: 'templates/consul-config-job.yaml' },
+  vault: { condition: ctx => ctx.secretsManagementVault, file: 'templates/vault-statefulset.yaml' },
+  vaultInitJob: { condition: ctx => ctx.secretsManagementVault, file: 'templates/vault-init-job.yaml' },
+  vaultSecret: { condition: ctx => ctx.secretsManagementVault, file: 'templates/vault-secret.yaml' },
   kafka: { condition: ctx => ctx.messageBrokerKafka, file: 'templates/kafka-statefulset.yaml' },
   monitoring: { condition: ctx => ctx.monitoringPrometheus, file: 'templates/monitoring.yaml' },
 };

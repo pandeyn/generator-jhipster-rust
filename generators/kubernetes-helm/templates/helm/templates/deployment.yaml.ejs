@@ -16,8 +16,10 @@ spec:
     metadata:
       labels:
         {{- include "<%= baseName.toLowerCase() %>.selectorLabels" . | nindent 8 }}
-<%_ if (monitoringPrometheus) { _%>
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+<%_ if (monitoringPrometheus) { _%>
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/api/metrics"
@@ -36,6 +38,12 @@ spec:
                 name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-config
             - secretRef:
                 name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-secret
+<%_ if (secretsManagementVault) { _%>
+            {{- if .Values.vault.enabled }}
+            - secretRef:
+                name: {{ .Release.Name }}-vault-secret
+            {{- end }}
+<%_ } _%>
           livenessProbe:
             httpGet:
               path: /api/health/liveness

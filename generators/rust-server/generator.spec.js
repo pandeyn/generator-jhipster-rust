@@ -468,13 +468,14 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
       result.assertFileContent('server/src/main.rs', 'CircuitBreakerService::new(circuit_breaker_config)');
     });
 
-    it('should initialize circuit breaker before Consul', () => {
-      // Circuit breaker should be initialized before Consul so Consul can use it
+    it('should initialize circuit breaker before Consul service registration', () => {
+      // Circuit breaker should be initialized before the main Consul service registration
+      // Note: A temporary ConsulService is created earlier for config loading (without circuit breaker)
       const mainRs = result.getSnapshot()['server/src/main.rs']?.contents;
       if (mainRs) {
         const cbIndex = mainRs.indexOf('CircuitBreakerConfig::from_env()');
-        const consulIndex = mainRs.indexOf('ConsulConfig::from_env()');
-        expect(cbIndex).toBeLessThan(consulIndex);
+        const consulRegisterIndex = mainRs.indexOf('register_service');
+        expect(cbIndex).toBeLessThan(consulRegisterIndex);
       }
     });
 
@@ -813,6 +814,254 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
 
     it('should NOT initialize circuit breaker metrics in main.rs', () => {
       result.assertNoFileContent('server/src/main.rs', 'circuit_breaker_metrics::init_metrics');
+    });
+  });
+
+  // ==================== External Configuration Tests ====================
+
+  describe('microservice with consul config profiles and watching', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'configApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should include config profile env vars in .env', () => {
+      result.assertFileContent('.env', 'APP_PROFILE=dev');
+      result.assertFileContent('.env', 'CONSUL_CONFIG_WATCH_ENABLED=true');
+      result.assertFileContent('.env', 'CONSUL_CONFIG_WATCH_INTERVAL=55');
+    });
+
+    it('should include config_profile field in consul_config.rs', () => {
+      result.assertFileContent('server/src/config/consul_config.rs', 'config_profile: String');
+      result.assertFileContent('server/src/config/consul_config.rs', 'watch_enabled: bool');
+      result.assertFileContent('server/src/config/consul_config.rs', 'watch_interval: u64');
+    });
+
+    it('should include config key helper methods in consul_config.rs', () => {
+      result.assertFileContent('server/src/config/consul_config.rs', 'fn config_base_key');
+      result.assertFileContent('server/src/config/consul_config.rs', 'fn config_profile_key');
+    });
+
+    it('should include profiled config loading in consul_service.rs', () => {
+      result.assertFileContent('server/src/services/consul_service.rs', 'fn load_profiled_config');
+      result.assertFileContent('server/src/services/consul_service.rs', 'fn watch_config');
+      result.assertFileContent('server/src/services/consul_service.rs', 'fn load_all_config');
+    });
+
+    it('should include from_consul_and_env in app_config.rs', () => {
+      result.assertFileContent('server/src/config/app_config.rs', 'fn from_consul_and_env');
+    });
+
+    it('should use from_consul_and_env in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'AppConfig::from_consul_and_env');
+      result.assertFileContent('server/src/main.rs', 'load_profiled_config');
+    });
+
+    it('should generate remote_config.rs for hot-reload', () => {
+      result.assertFile('server/src/config/remote_config.rs');
+      result.assertFileContent('server/src/config/remote_config.rs', 'pub struct RemoteConfig');
+      result.assertFileContent('server/src/config/remote_config.rs', 'fn from_consul_kv');
+      result.assertFileContent('server/src/config/remote_config.rs', 'SharedRemoteConfig');
+    });
+
+    it('should generate config_watcher.rs for hot-reload', () => {
+      result.assertFile('server/src/config/config_watcher.rs');
+      result.assertFileContent('server/src/config/config_watcher.rs', 'pub struct ConfigWatcher');
+      result.assertFileContent('server/src/config/config_watcher.rs', 'async fn run');
+    });
+
+    it('should include remote_config and config_watcher in config/mod.rs', () => {
+      result.assertFileContent('server/src/config/mod.rs', 'mod remote_config;');
+      result.assertFileContent('server/src/config/mod.rs', 'mod config_watcher;');
+      result.assertFileContent('server/src/config/mod.rs', 'pub use remote_config::*;');
+      result.assertFileContent('server/src/config/mod.rs', 'pub use config_watcher::*;');
+    });
+
+    it('should include SharedRemoteConfig in AppState', () => {
+      result.assertFileContent('server/src/lib.rs', 'use config::SharedRemoteConfig;');
+      result.assertFileContent('server/src/lib.rs', 'pub remote_config: SharedRemoteConfig');
+    });
+
+    it('should spawn config watcher in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'ConfigWatcher::new');
+      result.assertFileContent('server/src/main.rs', 'watcher.run()');
+      result.assertFileContent('server/src/main.rs', 'CancellationToken');
+    });
+
+    it('should include base64, serde_yaml, tokio-util dependencies', () => {
+      result.assertFileContent('Cargo.toml', 'base64');
+      result.assertFileContent('Cargo.toml', 'serde_yaml');
+      result.assertFileContent('Cargo.toml', 'tokio-util');
+    });
+  });
+
+  describe('monolith should not have external config features', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noConfigApp',
+          applicationType: 'monolith',
+          skipClient: true,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not have config profile env vars', () => {
+      result.assertNoFileContent('.env', 'APP_PROFILE');
+      result.assertNoFileContent('.env', 'CONSUL_CONFIG_WATCH');
+    });
+
+    it('should not generate remote_config or config_watcher', () => {
+      result.assertNoFile(['server/src/config/remote_config.rs', 'server/src/config/config_watcher.rs']);
+    });
+
+    it('should not have from_consul_and_env', () => {
+      result.assertNoFileContent('server/src/config/app_config.rs', 'from_consul_and_env');
+    });
+
+    it('should not have Vault env vars', () => {
+      result.assertNoFileContent('.env', 'VAULT_ENABLED');
+      result.assertNoFileContent('.env', 'VAULT_ADDR');
+    });
+  });
+
+  // ==================== Vault Secrets Management Tests ====================
+
+  describe('microservice with consul and vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'vaultApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'vault',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Vault config file', () => {
+      result.assertFile('server/src/config/vault_config.rs');
+      result.assertFileContent('server/src/config/vault_config.rs', 'pub struct VaultConfig');
+      result.assertFileContent('server/src/config/vault_config.rs', 'VAULT_ADDR');
+      result.assertFileContent('server/src/config/vault_config.rs', 'auth_method');
+      result.assertFileContent('server/src/config/vault_config.rs', 'role_id');
+    });
+
+    it('should generate Vault service file', () => {
+      result.assertFile('server/src/services/vault_service.rs');
+      result.assertFileContent('server/src/services/vault_service.rs', 'pub struct VaultService');
+      result.assertFileContent('server/src/services/vault_service.rs', 'fn read_secrets');
+      result.assertFileContent('server/src/services/vault_service.rs', 'fn renew_token');
+      result.assertFileContent('server/src/services/vault_service.rs', 'fn start_token_renewal');
+      result.assertFileContent('server/src/services/vault_service.rs', 'approle_login_static');
+    });
+
+    it('should include Vault in config/mod.rs', () => {
+      result.assertFileContent('server/src/config/mod.rs', 'mod vault_config;');
+      result.assertFileContent('server/src/config/mod.rs', 'pub use vault_config::*;');
+    });
+
+    it('should include Vault in services/mod.rs', () => {
+      result.assertFileContent('server/src/services/mod.rs', 'mod vault_service;');
+      result.assertFileContent('server/src/services/mod.rs', 'pub use vault_service::{VaultService, VaultError};');
+    });
+
+    it('should include Vault in AppState', () => {
+      result.assertFileContent('server/src/lib.rs', 'use services::VaultService;');
+      result.assertFileContent('server/src/lib.rs', 'pub vault_service: Option<Arc<VaultService>>');
+    });
+
+    it('should include Vault environment variables in .env', () => {
+      result.assertFileContent('.env', 'VAULT_ENABLED=true');
+      result.assertFileContent('.env', 'VAULT_ADDR=http://localhost:8200');
+      result.assertFileContent('.env', 'VAULT_AUTH_METHOD=token');
+      result.assertFileContent('.env', 'VAULT_TOKEN=myroot');
+      result.assertFileContent('.env', 'VAULT_SECRET_PATH=secret/data/vaultapp');
+    });
+
+    it('should initialize Vault in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'VaultConfig::from_env()');
+      result.assertFileContent('server/src/main.rs', 'VaultService::new');
+      result.assertFileContent('server/src/main.rs', 'read_default_secrets');
+      result.assertFileContent('server/src/main.rs', 'start_token_renewal');
+    });
+  });
+
+  describe('microservice with consul but without vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noVaultApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Vault files', () => {
+      result.assertNoFile(['server/src/config/vault_config.rs', 'server/src/services/vault_service.rs']);
+    });
+
+    it('should not include Vault environment variables in .env', () => {
+      result.assertNoFileContent('.env', 'VAULT_ENABLED');
+      result.assertNoFileContent('.env', 'VAULT_ADDR');
+    });
+
+    it('should not include Vault in lib.rs', () => {
+      result.assertNoFileContent('server/src/lib.rs', 'VaultService');
+    });
+
+    it('should not include Vault initialization in main.rs', () => {
+      result.assertNoFileContent('server/src/main.rs', 'VaultConfig');
     });
   });
 });

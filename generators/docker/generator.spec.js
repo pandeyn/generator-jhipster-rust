@@ -146,4 +146,113 @@ describe('SubGenerator docker of rust JHipster blueprint', () => {
       result.assertNoFile('docker/kafka.yml');
     });
   });
+
+  describe('microservice with consul config profiles', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'configApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate profile-specific central server config files', () => {
+      result.assertFile([
+        'docker/central-server-config/application.yml',
+        'docker/central-server-config/application-dev.yml',
+        'docker/central-server-config/application-prod.yml',
+      ]);
+    });
+
+    it('should include dev profile settings', () => {
+      result.assertFileContent('docker/central-server-config/application-dev.yml', 'level: debug');
+      result.assertFileContent('docker/central-server-config/application-dev.yml', 'pool_size: 5');
+    });
+
+    it('should include prod profile settings', () => {
+      result.assertFileContent('docker/central-server-config/application-prod.yml', 'level: info');
+      result.assertFileContent('docker/central-server-config/application-prod.yml', 'pool_size: 20');
+    });
+  });
+
+  describe('microservice with consul and vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'vaultApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'vault',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate Vault docker files', () => {
+      result.assertFile(['docker/vault.yml', 'docker/vault-init/vault-init.sh']);
+    });
+
+    it('should include Vault server configuration', () => {
+      result.assertFileContent('docker/vault.yml', 'hashicorp/vault');
+      result.assertFileContent('docker/vault.yml', 'VAULT_DEV_ROOT_TOKEN_ID=myroot');
+    });
+
+    it('should include vault-init script with AppRole setup', () => {
+      result.assertFileContent('docker/vault-init/vault-init.sh', 'vault secrets enable');
+      result.assertFileContent('docker/vault-init/vault-init.sh', 'vault auth enable approle');
+      result.assertFileContent('docker/vault-init/vault-init.sh', 'vault policy write');
+      result.assertFileContent('docker/vault-init/vault-init.sh', 'vaultapp-policy');
+    });
+  });
+
+  describe('microservice without vault', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noVaultApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          secretsManagement: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should not generate Vault docker files', () => {
+      result.assertNoFile(['docker/vault.yml', 'docker/vault-init/vault-init.sh']);
+    });
+  });
 });

@@ -26,8 +26,13 @@ use <%= rustCrateName %>::config::OAuth2Config;
 use <%= rustCrateName %>::security::OAuth2Validator;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
-use <%= rustCrateName %>::config::ConsulConfig;
+use <%= rustCrateName %>::config::{ConsulConfig, ConfigWatcher, new_shared_remote_config};
 use <%= rustCrateName %>::services::ConsulService;
+use tokio_util::sync::CancellationToken;
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+use <%= rustCrateName %>::config::VaultConfig;
+use <%= rustCrateName %>::services::VaultService;
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
 use <%= rustCrateName %>::config::KafkaConfig;
@@ -49,7 +54,7 @@ use <%= rustCrateName %>::services::CircuitBreakerService;
 use <%= rustCrateName %>::services::circuit_breaker_metrics;
 <%_ } _%>
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled) { _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled || secretsManagementVault) { _%>
 use std::sync::Arc;
 <%_ } _%>
 use <%= rustCrateName %>::handlers;
@@ -71,7 +76,36 @@ async fn main() {
         .init();
 
     // Load configuration
+<%_ if (serviceDiscoveryConsul) { _%>
+    // First load Consul config to check if config loading is enabled
+    let consul_config_tmp = ConsulConfig::from_env();
+    let consul_remote_config = if consul_config_tmp.enable_config {
+        tracing::info!(
+            "Loading configuration from Consul KV (profile: {})",
+            consul_config_tmp.config_profile
+        );
+<%_ if (circuitBreakerEnabled) { _%>
+        let tmp_service = ConsulService::new(consul_config_tmp.clone(), None);
+<%_ } else { _%>
+        let tmp_service = ConsulService::new(consul_config_tmp.clone());
+<%_ } _%>
+        match tmp_service.load_profiled_config().await {
+            Ok(cfg) => {
+                tracing::info!("Loaded {} config entries from Consul", cfg.len());
+                cfg
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load config from Consul: {}. Using env vars only.", e);
+                std::collections::HashMap::new()
+            }
+        }
+    } else {
+        std::collections::HashMap::new()
+    };
+    let config = AppConfig::from_consul_and_env(&consul_remote_config);
+<%_ } else { _%>
     let config = AppConfig::from_env();
+<%_ } _%>
 
 <%_ if (authenticationTypeOauth2) { _%>
     // Load OAuth2 configuration
@@ -196,6 +230,77 @@ async fn main() {
         None
     };
 
+    // Initialize shared remote config from Consul KV data
+    let remote_config = new_shared_remote_config();
+    {
+        let initial_config = <%= rustCrateName %>::config::RemoteConfig::from_consul_kv(&consul_remote_config);
+        let mut rc = remote_config.write().await;
+        *rc = initial_config;
+    }
+
+    // Start config watcher for hot-reload
+    let cancel_token = CancellationToken::new();
+    if let Some(ref consul_svc) = consul_service {
+        let consul_config = ConsulConfig::from_env();
+        if consul_config.watch_enabled {
+            let watcher = ConfigWatcher::new(
+                consul_svc.clone(),
+                consul_config,
+                remote_config.clone(),
+                cancel_token.clone(),
+            );
+            tokio::spawn(async move {
+                watcher.run().await;
+            });
+            tracing::info!("Config watcher started for hot-reload");
+        }
+    }
+
+<%_ if (secretsManagementVault) { _%>
+    // Initialize Vault for secrets management
+    let vault_config = VaultConfig::from_env();
+    let vault_service = if vault_config.enabled {
+        tracing::info!("Vault enabled, connecting to {}", vault_config.addr);
+<%_ if (circuitBreakerEnabled) { _%>
+        match VaultService::new(vault_config, circuit_breaker.clone()).await {
+<%_ } else { _%>
+        match VaultService::new(vault_config).await {
+<%_ } _%>
+            Ok(service) => {
+                // Load secrets and set as environment variables
+                match service.read_default_secrets().await {
+                    Ok(secrets) => {
+                        tracing::info!("Loaded {} secrets from Vault", secrets.len());
+                        for (key, value) in &secrets {
+                            // Only set if not already set in environment (env vars take precedence)
+                            if std::env::var(key).is_err() {
+                                std::env::set_var(key, value);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load secrets from Vault: {}. Using env vars only.", e);
+                    }
+                }
+
+                let service = Arc::new(service);
+
+                // Start token auto-renewal
+                service.clone().start_token_renewal(cancel_token.clone());
+
+                Some(service)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to connect to Vault: {}. Secrets management disabled.", e);
+                None
+            }
+        }
+    } else {
+        tracing::info!("Vault disabled (VAULT_ENABLED=false)");
+        None
+    };
+
+<%_ } _%>
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
     // Initialize Kafka producer and consumer
@@ -285,6 +390,10 @@ async fn main() {
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
         consul_service: consul_service.clone(),
+        remote_config: remote_config.clone(),
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+        vault_service,
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
         kafka_producer,
@@ -362,10 +471,18 @@ async fn main() {
 <%_ if (serviceDiscoveryConsul) { _%>
     // Setup graceful shutdown handler
     let consul_for_shutdown = consul_service.clone();
+    let cancel_token_shutdown = cancel_token.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
-        tracing::info!("Received shutdown signal, deregistering from Consul...");
+        tracing::info!("Received shutdown signal...");
+
+        // Cancel config watcher
+        cancel_token_shutdown.cancel();
+        tracing::info!("Config watcher cancelled");
+
+        // Deregister from Consul
         if let Some(ref service) = consul_for_shutdown {
+            tracing::info!("Deregistering from Consul...");
             if let Err(e) = service.deregister_service().await {
                 tracing::warn!("Failed to deregister from Consul: {}", e);
             } else {

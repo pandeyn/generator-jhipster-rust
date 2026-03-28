@@ -1,0 +1,83 @@
+#!/bin/sh
+# Vault initialization script for development
+# Configures secrets engine, writes default secrets, and sets up AppRole auth
+
+set -e
+
+echo "Waiting for Vault to be ready..."
+until vault status > /dev/null 2>&1; do
+    sleep 2
+done
+echo "Vault is ready!"
+
+# Enable KV v2 secrets engine (may already be enabled in dev mode)
+vault secrets enable -path=secret -version=2 kv 2>/dev/null || echo "KV v2 secrets engine already enabled"
+
+# Write application secrets
+echo "Writing application secrets..."
+vault kv put secret/<%= baseName.toLowerCase() %> \
+<%_ if (authenticationTypeJwt) { _%>
+    JWT_SECRET="<%= baseName %>-vault-jwt-secret-change-in-production" \
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+    OIDC_CLIENT_SECRET="web_app" \
+<%_ } _%>
+<%_ if (devDatabaseTypePostgresql) { _%>
+    DATABASE_URL="postgres://postgres:postgres@localhost:5432/<%= baseName.toLowerCase() %>" \
+<%_ } else if (devDatabaseTypeMysql) { _%>
+    DATABASE_URL="mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>" \
+<%_ } else if (devDatabaseTypeMongodb) { _%>
+    MONGODB_URI="mongodb://localhost:27017" \
+<%_ } _%>
+<%_ if (messageBrokerKafka) { _%>
+    KAFKA_SASL_USERNAME="" \
+    KAFKA_SASL_PASSWORD="" \
+<%_ } _%>
+    APP_NAME="<%= baseName %>"
+
+echo "Application secrets written to secret/<%= baseName.toLowerCase() %>"
+
+# Enable AppRole auth method
+echo "Configuring AppRole authentication..."
+vault auth enable approle 2>/dev/null || echo "AppRole auth already enabled"
+
+# Create policy for the application
+vault policy write <%= baseName.toLowerCase() %>-policy - <<EOF
+path "secret/data/<%= baseName.toLowerCase() %>" {
+    capabilities = ["read"]
+}
+path "secret/data/<%= baseName.toLowerCase() %>/*" {
+    capabilities = ["read"]
+}
+path "auth/token/renew-self" {
+    capabilities = ["update"]
+}
+EOF
+
+# Create AppRole
+vault write auth/approle/role/<%= baseName.toLowerCase() %>-role \
+    token_policies="<%= baseName.toLowerCase() %>-policy" \
+    token_ttl=1h \
+    token_max_ttl=4h \
+    secret_id_ttl=24h
+
+# Get Role ID and Secret ID
+ROLE_ID=$(vault read -field=role_id auth/approle/role/<%= baseName.toLowerCase() %>-role/role-id)
+SECRET_ID=$(vault write -field=secret_id -f auth/approle/role/<%= baseName.toLowerCase() %>-role/secret-id)
+
+echo ""
+echo "============================================="
+echo "Vault initialization complete!"
+echo "============================================="
+echo ""
+echo "Development token: myroot"
+echo ""
+echo "AppRole credentials (for production use):"
+echo "  VAULT_ROLE_ID=${ROLE_ID}"
+echo "  VAULT_SECRET_ID=${SECRET_ID}"
+echo ""
+echo "To use AppRole auth, set in .env:"
+echo "  VAULT_AUTH_METHOD=approle"
+echo "  VAULT_ROLE_ID=${ROLE_ID}"
+echo "  VAULT_SECRET_ID=${SECRET_ID}"
+echo ""

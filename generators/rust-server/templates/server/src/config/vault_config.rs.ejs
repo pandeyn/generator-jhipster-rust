@@ -1,0 +1,83 @@
+use std::env;
+
+/// Configuration for HashiCorp Vault secrets management
+#[derive(Clone, Debug)]
+pub struct VaultConfig {
+    /// Whether Vault integration is enabled
+    pub enabled: bool,
+    /// Vault server address (default: http://localhost:8200)
+    pub addr: String,
+    /// Authentication method: "token" or "approle"
+    pub auth_method: String,
+    /// Vault token (for token auth method)
+    pub token: Option<String>,
+    /// AppRole role ID (for approle auth method)
+    pub role_id: Option<String>,
+    /// AppRole secret ID (for approle auth method)
+    pub secret_id: Option<String>,
+    /// Path to secrets in Vault KV v2 (default: secret/data/<app-name>)
+    pub secret_path: String,
+    /// Whether to enable automatic token renewal
+    pub auto_renew: bool,
+}
+
+impl VaultConfig {
+    pub fn from_env() -> Self {
+        Self {
+            enabled: env::var("VAULT_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            addr: env::var("VAULT_ADDR")
+                .unwrap_or_else(|_| "http://localhost:8200".to_string()),
+            auth_method: env::var("VAULT_AUTH_METHOD")
+                .unwrap_or_else(|_| "token".to_string()),
+            token: env::var("VAULT_TOKEN").ok(),
+            role_id: env::var("VAULT_ROLE_ID").ok(),
+            secret_id: env::var("VAULT_SECRET_ID").ok(),
+            secret_path: env::var("VAULT_SECRET_PATH")
+                .unwrap_or_else(|_| "secret/data/<%= baseName.toLowerCase() %>".to_string()),
+            auto_renew: env::var("VAULT_AUTO_RENEW")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vault_config_defaults() {
+        let config = VaultConfig {
+            enabled: true,
+            addr: "http://localhost:8200".to_string(),
+            auth_method: "token".to_string(),
+            token: Some("myroot".to_string()),
+            role_id: None,
+            secret_id: None,
+            secret_path: "secret/data/myapp".to_string(),
+            auto_renew: true,
+        };
+        assert!(config.enabled);
+        assert_eq!(config.auth_method, "token");
+        assert!(config.auto_renew);
+    }
+
+    #[test]
+    fn test_vault_config_approle() {
+        let config = VaultConfig {
+            enabled: true,
+            addr: "http://vault:8200".to_string(),
+            auth_method: "approle".to_string(),
+            token: None,
+            role_id: Some("my-role-id".to_string()),
+            secret_id: Some("my-secret-id".to_string()),
+            secret_path: "secret/data/myapp".to_string(),
+            auto_renew: true,
+        };
+        assert_eq!(config.auth_method, "approle");
+        assert!(config.role_id.is_some());
+        assert!(config.secret_id.is_some());
+    }
+}

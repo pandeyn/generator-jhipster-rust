@@ -50,6 +50,10 @@ if [ "${ACTION}" = "install" ]; then
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
     load_image "hashicorp/consul:1.15"
+    load_image "jhipster/consul-config-loader:v0.4.1"
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+    load_image "hashicorp/vault:1.15"
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
     load_image "confluentinc/cp-zookeeper:7.5.0"
@@ -97,6 +101,9 @@ elif [ "${ACTION}" = "uninstall" ]; then
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
   kubectl delete pvc consul-data-${RELEASE_NAME}-consul-0 -n ${NAMESPACE} --ignore-not-found
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+  kubectl delete pvc vault-data-${RELEASE_NAME}-vault-0 -n ${NAMESPACE} --ignore-not-found
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
   kubectl delete pvc zookeeper-data-${RELEASE_NAME}-zookeeper-0 -n ${NAMESPACE} --ignore-not-found

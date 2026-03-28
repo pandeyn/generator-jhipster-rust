@@ -1,0 +1,57 @@
+{{- if .Values.consul.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-consul-config-loader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-consul-config-loader
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-consul-config-loader
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-consul-config-loader
+    spec:
+      initContainers:
+        - name: wait-for-consul
+          image: hashicorp/consul:1.15
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Consul to be ready..."
+              until consul members -http-addr=http://{{ .Release.Name }}-consul:8500 2>/dev/null; do
+                echo "Consul not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "Consul is ready!"
+      containers:
+        - name: consul-config-loader
+          image: jhipster/consul-config-loader:v0.4.1
+          env:
+            - name: INIT_SLEEP_SECONDS
+              value: "5"
+            - name: CONSUL_URL
+              value: "{{ .Release.Name }}-consul"
+            - name: CONSUL_PORT
+              value: "8500"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-consul-config
+{{- end }}

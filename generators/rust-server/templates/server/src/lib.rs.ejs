@@ -31,6 +31,7 @@ use security::OAuth2Validator;
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
 use services::ConsulService;
+use config::SharedRemoteConfig;
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
 use services::{KafkaProducer, KafkaConsumer};
@@ -43,10 +44,13 @@ use db::connection::DbPool;
 <%_ if (enableEmail) { _%>
 use services::EmailService;
 <%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+use services::VaultService;
+<%_ } _%>
 <%_ if (circuitBreakerEnabled) { _%>
 use services::CircuitBreakerService;
 <%_ } _%>
-<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled) { _%>
+<%_ if (enableEmail || serviceDiscoveryConsul || messageBrokerKafka || circuitBreakerEnabled || secretsManagementVault) { _%>
 use std::sync::Arc;
 <%_ } _%>
 
@@ -72,6 +76,8 @@ pub struct AppState {
     /// Consul service for service registration and discovery
     /// None if Consul is not configured or unavailable
     pub consul_service: Option<Arc<ConsulService>>,
+    /// Hot-reloadable remote configuration from Consul KV
+    pub remote_config: SharedRemoteConfig,
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
     /// Kafka producer for publishing messages
@@ -80,6 +86,11 @@ pub struct AppState {
     /// Kafka consumer for consuming messages
     /// None if Kafka is disabled or unavailable
     pub kafka_consumer: Option<Arc<KafkaConsumer>>,
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+    /// Vault service for secrets management
+    /// None if Vault is disabled or unavailable
+    pub vault_service: Option<Arc<VaultService>>,
 <%_ } _%>
 <%_ if (circuitBreakerEnabled) { _%>
     /// Circuit breaker service for resilient HTTP calls

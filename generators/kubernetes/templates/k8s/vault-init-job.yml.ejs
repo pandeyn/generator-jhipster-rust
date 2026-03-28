@@ -1,0 +1,91 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: <%= baseName.toLowerCase() %>-vault-init
+  namespace: <%= kubernetesNamespace %>
+  labels:
+    app: <%= baseName.toLowerCase() %>-vault-init
+    app.kubernetes.io/name: <%= baseName.toLowerCase() %>-vault-init
+    app.kubernetes.io/part-of: <%= baseName.toLowerCase() %>
+    app.kubernetes.io/managed-by: jhipster-rust
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: <%= baseName.toLowerCase() %>-vault-init
+    spec:
+      initContainers:
+        - name: wait-for-vault
+          image: hashicorp/vault:1.15
+          env:
+            - name: VAULT_ADDR
+              value: "http://<%= baseName.toLowerCase() %>-vault:8200"
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Vault to be ready..."
+              until vault status 2>/dev/null; do
+                echo "Vault not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "Vault is ready!"
+      containers:
+        - name: vault-init
+          image: hashicorp/vault:1.15
+          env:
+            - name: VAULT_ADDR
+              value: "http://<%= baseName.toLowerCase() %>-vault:8200"
+            - name: VAULT_TOKEN
+              value: "myroot"
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Initializing Vault secrets..."
+
+              # Enable KV v2 secrets engine
+              vault secrets enable -path=secret -version=2 kv 2>/dev/null || true
+
+              # Write application secrets
+              vault kv put secret/<%= baseName.toLowerCase() %> \
+<%_ if (authenticationTypeJwt) { _%>
+                JWT_SECRET="change-me-in-production" \
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+                OIDC_CLIENT_SECRET="web_app" \
+<%_ } _%>
+                APP_NAME="<%= baseName %>"
+
+              # Enable AppRole auth
+              vault auth enable approle 2>/dev/null || true
+
+              # Create policy
+              vault policy write <%= baseName.toLowerCase() %>-policy - <<POLICY
+              path "secret/data/<%= baseName.toLowerCase() %>" {
+                  capabilities = ["read"]
+              }
+              path "secret/data/<%= baseName.toLowerCase() %>/*" {
+                  capabilities = ["read"]
+              }
+              path "auth/token/renew-self" {
+                  capabilities = ["update"]
+              }
+              POLICY
+
+              # Create AppRole
+              vault write auth/approle/role/<%= baseName.toLowerCase() %>-role \
+                token_policies="<%= baseName.toLowerCase() %>-policy" \
+                token_ttl=1h \
+                token_max_ttl=4h
+
+              # Get and store credentials in a K8s secret
+              ROLE_ID=$(vault read -field=role_id auth/approle/role/<%= baseName.toLowerCase() %>-role/role-id)
+              SECRET_ID=$(vault write -field=secret_id -f auth/approle/role/<%= baseName.toLowerCase() %>-role/secret-id)
+
+              echo "Vault initialization complete!"
+              echo "Role ID: ${ROLE_ID}"
+              echo "Secret ID: ${SECRET_ID}"
+      restartPolicy: OnFailure

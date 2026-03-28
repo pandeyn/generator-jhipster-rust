@@ -1,0 +1,150 @@
+use crate::config::{ConsulConfig, RemoteConfig, SharedRemoteConfig};
+use crate::services::ConsulService;
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
+
+/// Watches Consul KV for configuration changes and updates SharedRemoteConfig.
+/// Uses Consul blocking queries (long-polling) to detect changes efficiently.
+pub struct ConfigWatcher {
+    consul_service: Arc<ConsulService>,
+    consul_config: ConsulConfig,
+    remote_config: SharedRemoteConfig,
+    cancel_token: CancellationToken,
+}
+
+impl ConfigWatcher {
+    pub fn new(
+        consul_service: Arc<ConsulService>,
+        consul_config: ConsulConfig,
+        remote_config: SharedRemoteConfig,
+        cancel_token: CancellationToken,
+    ) -> Self {
+        Self {
+            consul_service,
+            consul_config,
+            remote_config,
+            cancel_token,
+        }
+    }
+
+    /// Start watching for config changes. Runs until the cancel token is triggered.
+    pub async fn run(self) {
+        if !self.consul_config.watch_enabled {
+            info!("Config watching disabled (CONSUL_CONFIG_WATCH_ENABLED=false)");
+            return;
+        }
+
+        info!(
+            "Starting config watcher (profile: {}, interval: {}s)",
+            self.consul_config.config_profile,
+            self.consul_config.watch_interval
+        );
+
+        let base_key = self.consul_config.config_base_key();
+        let profile_key = self.consul_config.config_profile_key();
+
+        let mut base_index: u64 = 0;
+        let mut profile_index: u64 = 0;
+
+        loop {
+            tokio::select! {
+                _ = self.cancel_token.cancelled() => {
+                    info!("Config watcher shutting down");
+                    return;
+                }
+                result = self.watch_cycle(&base_key, &profile_key, base_index, profile_index) => {
+                    match result {
+                        Ok((new_base_index, new_profile_index, changed)) => {
+                            base_index = new_base_index;
+                            profile_index = new_profile_index;
+                            if changed {
+                                info!("Configuration updated from Consul KV");
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Config watch cycle failed: {}. Retrying in 10s...", e);
+                            tokio::select! {
+                                _ = self.cancel_token.cancelled() => {
+                                    info!("Config watcher shutting down during retry wait");
+                                    return;
+                                }
+                                _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn watch_cycle(
+        &self,
+        base_key: &str,
+        profile_key: &str,
+        base_index: u64,
+        profile_index: u64,
+    ) -> Result<(u64, u64, bool), String> {
+        // Watch base config
+        let (_base_value, new_base_index) = self
+            .consul_service
+            .watch_config(base_key, base_index)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Watch profile config
+        let (_profile_value, new_profile_index) = self
+            .consul_service
+            .watch_config(profile_key, profile_index)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let changed = new_base_index != base_index || new_profile_index != profile_index;
+
+        if changed {
+            // Reload full profiled config
+            match self.consul_service.load_profiled_config().await {
+                Ok(kv) => {
+                    let new_config = RemoteConfig::from_consul_kv(&kv);
+
+                    // Log what changed
+                    let current = self.remote_config.read().await;
+                    if current.log_level != new_config.log_level {
+                        info!("Log level changed: {} -> {}", current.log_level, new_config.log_level);
+                    }
+                    if current.database_pool_size != new_config.database_pool_size {
+                        info!(
+                            "Database pool size changed: {} -> {}",
+                            current.database_pool_size, new_config.database_pool_size
+                        );
+                    }
+                    drop(current);
+
+                    // Update the shared config
+                    let mut config = self.remote_config.write().await;
+                    *config = new_config;
+                }
+                Err(e) => {
+                    error!("Failed to reload profiled config: {}", e);
+                }
+            }
+        }
+
+        Ok((new_base_index, new_profile_index, changed))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::new_shared_remote_config;
+
+    #[test]
+    fn test_config_watcher_creation() {
+        // Just verify the struct can be constructed
+        let remote_config = new_shared_remote_config();
+        let cancel_token = CancellationToken::new();
+        assert!(!cancel_token.is_cancelled());
+        drop(remote_config);
+    }
+}

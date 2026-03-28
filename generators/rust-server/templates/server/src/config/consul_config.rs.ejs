@@ -26,6 +26,13 @@ pub struct ConsulConfig {
     /// Host address for health check endpoint (default: localhost)
     /// This should be an address that Consul can use to reach this service's health endpoint
     pub health_check_host: String,
+    /// Configuration profile (e.g., dev, staging, prod)
+    /// Determines which profile-specific config to load from Consul KV
+    pub config_profile: String,
+    /// Whether to enable config watching for hot-reload
+    pub watch_enabled: bool,
+    /// Interval in seconds for config watch long-polling
+    pub watch_interval: u64,
 }
 
 impl ConsulConfig {
@@ -75,12 +82,31 @@ impl ConsulConfig {
             // Override with CONSUL_HEALTH_CHECK_HOST when Consul runs remotely or in a different container
             health_check_host: env::var("CONSUL_HEALTH_CHECK_HOST")
                 .unwrap_or_else(|_| "localhost".to_string()),
+            config_profile: env::var("APP_PROFILE")
+                .unwrap_or_else(|_| "dev".to_string()),
+            watch_enabled: env::var("CONSUL_CONFIG_WATCH_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(true),
+            watch_interval: env::var("CONSUL_CONFIG_WATCH_INTERVAL")
+                .unwrap_or_else(|_| "55".to_string())
+                .parse()
+                .expect("CONSUL_CONFIG_WATCH_INTERVAL must be a valid number"),
         }
     }
 
     /// Get the full Consul URL
     pub fn consul_url(&self) -> String {
         format!("http://{}:{}", self.host, self.port)
+    }
+
+    /// Get the base config key in Consul KV (shared across all profiles)
+    pub fn config_base_key(&self) -> String {
+        format!("{}/application", self.config_key_prefix)
+    }
+
+    /// Get the profile-specific config key in Consul KV
+    pub fn config_profile_key(&self) -> String {
+        format!("{}/application-{}", self.config_key_prefix, self.config_profile)
     }
 }
 
@@ -102,8 +128,33 @@ mod tests {
             acl_token: None,
             config_key_prefix: "config/test".to_string(),
             health_check_host: "localhost".to_string(),
+            config_profile: "dev".to_string(),
+            watch_enabled: true,
+            watch_interval: 55,
         };
         assert_eq!(config.consul_url(), "http://localhost:8500");
+    }
+
+    #[test]
+    fn test_config_keys() {
+        let config = ConsulConfig {
+            host: "localhost".to_string(),
+            port: 8500,
+            service_name: "test-service".to_string(),
+            service_id: "test-service-1".to_string(),
+            service_tags: vec!["test".to_string()],
+            health_check_interval: 10,
+            register_service: true,
+            enable_config: true,
+            acl_token: None,
+            config_key_prefix: "config/test".to_string(),
+            health_check_host: "localhost".to_string(),
+            config_profile: "prod".to_string(),
+            watch_enabled: true,
+            watch_interval: 55,
+        };
+        assert_eq!(config.config_base_key(), "config/test/application");
+        assert_eq!(config.config_profile_key(), "config/test/application-prod");
     }
 
     #[test]
@@ -120,6 +171,9 @@ mod tests {
             acl_token: Some("secret-token".to_string()),
             config_key_prefix: "config/my-service".to_string(),
             health_check_host: "localhost".to_string(),
+            config_profile: "prod".to_string(),
+            watch_enabled: true,
+            watch_interval: 55,
         };
         let cloned = config.clone();
         assert_eq!(cloned.host, config.host);

@@ -1,4 +1,4 @@
-use axum::{routing::get, Json, Router};
+use axum::{routing::get, extract::State, Json, Router};
 use serde::Serialize;
 <%_ if (enableSwaggerCodegen) { _%>
 use utoipa::ToSchema;
@@ -35,9 +35,30 @@ pub fn routes() -> Router<AppState> {
     )
 )]
 <%_ } _%>
-pub async fn info() -> Json<InfoResponse> {
+pub async fn info(State(state): State<AppState>) -> Json<InfoResponse> {
+    // Use APP_PROFILE if set (Consul config profile), otherwise fall back to APP_ENV
+    let profile = std::env::var("APP_PROFILE")
+        .unwrap_or_else(|_| state.config.app_env.clone());
+
+    // Map common environment names to JHipster profile names
+    let normalized = match profile.as_str() {
+        "production" => "prod".to_string(),
+        "development" => "dev".to_string(),
+        other => other.to_string(),
+    };
+
+    // Determine active profiles based on environment
+    let mut active_profiles = vec![normalized.clone()];
+<%_ if (enableSwaggerCodegen) { _%>
+    // Include api-docs profile when not in production (enables Swagger UI link in Angular navbar)
+    if normalized != "prod" {
+        active_profiles.push("api-docs".to_string());
+    }
+<%_ } _%>
+
     Json(InfoResponse {
-        display_ribbon_on_profiles: "dev".to_string(),
-        active_profiles: vec!["dev".to_string(), "api-docs".to_string()],
+        // Set to the active profile so the Angular ribbon can match and display appropriately
+        display_ribbon_on_profiles: normalized.clone(),
+        active_profiles,
     })
 }

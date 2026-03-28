@@ -329,6 +329,12 @@ export default class extends BaseApplicationGenerator {
         application.monitoringPrometheus = monitoring === 'prometheus';
         application.monitoringAny = monitoring !== 'no';
       },
+      rustSecretsManagementConfig({ application }) {
+        // Set secrets management flags for Vault integration
+        const secretsManagement = this.jhipsterConfig.secretsManagement || 'no';
+        application.secretsManagement = secretsManagement;
+        application.secretsManagementVault = secretsManagement === 'vault' && application.serviceDiscoveryConsul;
+      },
       rustCircuitBreakerConfig({ application }) {
         // Set circuit breaker flags for resilience in microservices
         // Circuit breaker is applicable for gateway and microservice application types
@@ -501,6 +507,42 @@ pub use ${rustModuleName}_dto::*;`,
           sections: serverFiles,
           context: application,
         });
+      },
+    });
+  }
+
+  get [BaseApplicationGenerator.POST_WRITING]() {
+    return this.asPostWritingTaskGroup({
+      async patchRibbonTranslations({ application }) {
+        // The JHipster Angular PageRibbonComponent has a bug where the ribbon always renders
+        // (checks Signal object truthiness instead of Signal value). When the profile is not "dev",
+        // it tries to translate "global.ribbon.<profile>" which doesn't exist → "translation-not-found".
+        // Fix: add missing ribbon translations for common profiles.
+        if (application.skipClient) return;
+
+        const languages = application.languages || ['en'];
+        for (const lang of languages) {
+          const globalJsonPath = `client/src/i18n/${lang}/global.json`;
+          if (this.existsDestination(globalJsonPath)) {
+            this.editFile(globalJsonPath, content => {
+              try {
+                const json = JSON.parse(content);
+                if (json.global?.ribbon) {
+                  // Add translations for common profiles if missing
+                  if (!json.global.ribbon.prod) {
+                    json.global.ribbon.prod = 'Production';
+                  }
+                  if (!json.global.ribbon.staging) {
+                    json.global.ribbon.staging = 'Staging';
+                  }
+                }
+                return `${JSON.stringify(json, null, 2)}\n`;
+              } catch {
+                return content;
+              }
+            });
+          }
+        }
       },
     });
   }

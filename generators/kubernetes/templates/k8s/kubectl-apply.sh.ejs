@@ -49,10 +49,14 @@ if [ "${ACTION}" = "apply" ]; then
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
     load_image "hashicorp/consul:1.15"
+    load_image "jhipster/consul-config-loader:v0.4.1"
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
     load_image "confluentinc/cp-zookeeper:7.5.0"
     load_image "confluentinc/cp-kafka:7.5.0"
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+    load_image "hashicorp/vault:1.15"
 <%_ } _%>
 <%_ if (authenticationTypeOauth2) { _%>
     load_image "quay.io/keycloak/keycloak:23.0"
@@ -99,6 +103,25 @@ if [ "${ACTION}" = "apply" ]; then
   kubectl apply -f k8s/consul-statefulset.yml
   echo "Waiting for Consul to be ready..."
   kubectl rollout status statefulset/<%= baseName.toLowerCase() %>-consul -n ${NAMESPACE} --timeout=120s
+
+  echo "Loading central configuration into Consul KV..."
+  kubectl apply -f k8s/consul-config-configmap.yml
+  kubectl apply -f k8s/consul-config-job.yml
+  echo "Waiting for Consul config loader to be ready..."
+  kubectl rollout status deployment/<%= baseName.toLowerCase() %>-consul-config-loader -n ${NAMESPACE} --timeout=120s
+<%_ } _%>
+
+<%_ if (secretsManagementVault) { _%>
+  echo "Deploying Vault..."
+  kubectl apply -f k8s/vault-secret.yml
+  kubectl apply -f k8s/vault-statefulset.yml
+  echo "Waiting for Vault to be ready..."
+  kubectl rollout status statefulset/<%= baseName.toLowerCase() %>-vault -n ${NAMESPACE} --timeout=120s
+
+  echo "Initializing Vault secrets and AppRole..."
+  kubectl delete job <%= baseName.toLowerCase() %>-vault-init -n ${NAMESPACE} --ignore-not-found > /dev/null 2>&1
+  kubectl apply -f k8s/vault-init-job.yml
+  kubectl wait --for=condition=complete job/<%= baseName.toLowerCase() %>-vault-init -n ${NAMESPACE} --timeout=120s
 <%_ } _%>
 
 <%_ if (messageBrokerKafka) { _%>
@@ -151,6 +174,9 @@ if [ "${ACTION}" = "apply" ]; then
 <%_ if (serviceDiscoveryConsul) { _%>
   echo "  Consul:       kubectl port-forward svc/<%= baseName.toLowerCase() %>-consul 8500:8500 -n ${NAMESPACE}"
 <%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+  echo "  Vault:        kubectl port-forward svc/<%= baseName.toLowerCase() %>-vault 8200:8200 -n ${NAMESPACE}"
+<%_ } _%>
 <%_ if (authenticationTypeOauth2) { _%>
   echo "  Keycloak:     kubectl port-forward svc/<%= baseName.toLowerCase() %>-keycloak 9080:9080 -n ${NAMESPACE}"
 <%_ } _%>
@@ -178,7 +204,14 @@ elif [ "${ACTION}" = "delete" ]; then
 <%_ if (messageBrokerKafka) { _%>
   kubectl delete -f k8s/kafka-statefulset.yml --ignore-not-found
 <%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+  kubectl delete job <%= baseName.toLowerCase() %>-vault-init -n ${NAMESPACE} --ignore-not-found
+  kubectl delete -f k8s/vault-statefulset.yml --ignore-not-found
+  kubectl delete -f k8s/vault-secret.yml --ignore-not-found
+<%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
+  kubectl delete -f k8s/consul-config-job.yml --ignore-not-found
+  kubectl delete -f k8s/consul-config-configmap.yml --ignore-not-found
   kubectl delete -f k8s/consul-statefulset.yml --ignore-not-found
 <%_ } _%>
 <%_ if (devDatabaseTypePostgresql) { _%>
@@ -199,6 +232,9 @@ elif [ "${ACTION}" = "delete" ]; then
   kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-mysql -n ${NAMESPACE} --ignore-not-found
 <%_ } else if (devDatabaseTypeMongodb) { _%>
   kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-mongodb -n ${NAMESPACE} --ignore-not-found
+<%_ } _%>
+<%_ if (secretsManagementVault) { _%>
+  kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-vault -n ${NAMESPACE} --ignore-not-found
 <%_ } _%>
 <%_ if (serviceDiscoveryConsul) { _%>
   kubectl delete pvc -l app=<%= baseName.toLowerCase() %>-consul -n ${NAMESPACE} --ignore-not-found

@@ -1,0 +1,83 @@
+{{- if .Values.vault.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-vault
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-vault
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-vault
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-vault
+    spec:
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.15
+          imagePullPolicy: IfNotPresent
+          args: ["server", "-dev", "-dev-root-token-id=myroot", "-dev-listen-address=0.0.0.0:8200"]
+          env:
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+            - name: VAULT_API_ADDR
+              value: "http://{{ .Release.Name }}-vault:8200"
+          ports:
+            - name: http
+              containerPort: 8200
+          securityContext:
+            capabilities:
+              add:
+                - IPC_LOCK
+          livenessProbe:
+            exec:
+              command: ["vault", "status"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["vault", "status"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: vault-data
+              mountPath: /vault/data
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.vault.storage | default "1Gi" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-vault
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-vault
+    {{- include "<%= baseName.toLowerCase() %>.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Release.Name }}-vault
+  ports:
+    - name: http
+      port: 8200
+      targetPort: http
+{{- end }}

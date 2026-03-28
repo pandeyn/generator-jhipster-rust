@@ -51,7 +51,14 @@ export const kubernetesFiles = {
     {
       condition: ctx => ctx.serviceDiscoveryConsul,
       path: 'k8s/',
-      templates: ['consul-statefulset.yml'],
+      templates: ['consul-statefulset.yml', 'consul-config-configmap.yml', 'consul-config-job.yml'],
+    },
+  ],
+  vault: [
+    {
+      condition: ctx => ctx.secretsManagementVault,
+      path: 'k8s/',
+      templates: ['vault-statefulset.yml', 'vault-init-job.yml', 'vault-secret.yml'],
     },
   ],
   kafka: [
