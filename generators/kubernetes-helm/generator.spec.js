@@ -564,4 +564,130 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       ]);
     });
   });
+
+  // ==================== Distributed Tracing Tests ====================
+
+  describe('microservice with Zipkin tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'zipkinHelm',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'zipkin',
+          skipClient: true,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate tracing template', () => {
+      result.assertFile('helm/zipkinhelm/templates/tracing.yaml');
+    });
+
+    it('should include Zipkin deployment in tracing template', () => {
+      result.assertFileContent('helm/zipkinhelm/templates/tracing.yaml', 'openzipkin/zipkin');
+      result.assertFileContent('helm/zipkinhelm/templates/tracing.yaml', 'zipkin.enabled');
+    });
+
+    it('should include zipkin enabled in values.yaml', () => {
+      result.assertFileContent('helm/zipkinhelm/values.yaml', 'zipkin:');
+      result.assertFileContent('helm/zipkinhelm/values.yaml', 'enabled: true');
+    });
+
+    it('should include tracing endpoint in values.yaml config', () => {
+      result.assertFileContent('helm/zipkinhelm/values.yaml', 'TRACING_ENABLED');
+      result.assertFileContent('helm/zipkinhelm/values.yaml', 'TRACING_ENDPOINT');
+      result.assertFileContent('helm/zipkinhelm/values.yaml', 'zipkin:9411');
+    });
+  });
+
+  describe('gateway with Jaeger tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'jaegerHelm',
+          applicationType: 'gateway',
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'jaeger',
+          skipClient: true,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate tracing template', () => {
+      result.assertFile('helm/jaegerhelm/templates/tracing.yaml');
+    });
+
+    it('should include Jaeger deployment in tracing template', () => {
+      result.assertFileContent('helm/jaegerhelm/templates/tracing.yaml', 'jaegertracing/all-in-one');
+      result.assertFileContent('helm/jaegerhelm/templates/tracing.yaml', 'jaeger.enabled');
+    });
+
+    it('should include jaeger enabled in values.yaml', () => {
+      result.assertFileContent('helm/jaegerhelm/values.yaml', 'jaeger:');
+      result.assertFileContent('helm/jaegerhelm/values.yaml', 'enabled: true');
+    });
+
+    it('should include tracing endpoint in values.yaml config', () => {
+      result.assertFileContent('helm/jaegerhelm/values.yaml', 'TRACING_ENDPOINT');
+      result.assertFileContent('helm/jaegerhelm/values.yaml', 'jaeger:4317');
+    });
+  });
+
+  describe('monolith should NOT have tracing in Helm even if configured', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'monoTraceHelm',
+          applicationType: 'monolith',
+          distributedTracing: 'jaeger',
+          skipClient: true,
+          ...defaultHelmConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should NOT generate tracing template', () => {
+      result.assertNoFile('helm/monotracehelm/templates/tracing.yaml');
+    });
+
+    it('should NOT include tracing values in values.yaml', () => {
+      result.assertNoFileContent('helm/monotracehelm/values.yaml', 'TRACING_ENABLED');
+      result.assertNoFileContent('helm/monotracehelm/values.yaml', 'TRACING_ENDPOINT');
+      result.assertNoFileContent('helm/monotracehelm/values.yaml', 'zipkin:');
+      result.assertNoFileContent('helm/monotracehelm/values.yaml', 'jaeger:');
+    });
+  });
 });

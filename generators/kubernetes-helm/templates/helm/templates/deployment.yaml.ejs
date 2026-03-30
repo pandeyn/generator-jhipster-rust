@@ -21,7 +21,7 @@ spec:
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
 <%_ if (monitoringPrometheus) { _%>
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "{{ .Values.service.port }}"
         prometheus.io/path: "/api/metrics"
 <%_ } _%>
     spec:
@@ -31,7 +31,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: {{ .Values.service.port }}
               protocol: TCP
           envFrom:
             - configMapRef:

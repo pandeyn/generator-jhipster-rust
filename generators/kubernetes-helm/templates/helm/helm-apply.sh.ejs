@@ -68,6 +68,11 @@ if [ "${ACTION}" = "install" ]; then
     load_image "prom/prometheus:v2.48.0"
     load_image "grafana/grafana:10.2.0"
 <%_ } _%>
+<%_ if (distributedTracingZipkin) { _%>
+    load_image "openzipkin/zipkin:3"
+<%_ } else if (distributedTracingJaeger) { _%>
+    load_image "jaegertracing/all-in-one:latest"
+<%_ } _%>
     echo "All images loaded."
   fi
 

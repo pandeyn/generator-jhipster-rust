@@ -15,7 +15,7 @@ data:
       - job_name: '<%= baseName.toLowerCase() %>'
         metrics_path: '/api/metrics'
         static_configs:
-          - targets: ['{{ include "<%= baseName.toLowerCase() %>.fullname" . }}:8080']
+          - targets: ['{{ include "<%= baseName.toLowerCase() %>.fullname" . }}:{{ .Values.service.port }}']
             labels:
               application: '<%= baseName.toLowerCase() %>'
 ---

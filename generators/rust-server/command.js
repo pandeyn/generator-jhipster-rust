@@ -117,6 +117,23 @@ export default asCommand({
       ],
       default: 'no',
     },
+    distributedTracing: {
+      cli: {
+        type: String,
+        description: 'Distributed tracing solution for microservices',
+      },
+      prompt: generator => ({
+        type: 'list',
+        message: `Would you like to enable ${chalk.yellow('*distributed tracing*')} for your application?`,
+        when: ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType),
+      }),
+      choices: [
+        { value: 'no', name: 'No distributed tracing' },
+        { value: 'zipkin', name: 'Zipkin (lightweight distributed tracing)' },
+        { value: 'jaeger', name: 'Jaeger (full-featured distributed tracing with Jaeger UI)' },
+      ],
+      default: 'no',
+    },
     secretsManagement: {
       cli: {
         type: String,

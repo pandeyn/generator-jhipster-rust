@@ -1,5 +1,111 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`SubGenerator helm of rust JHipster blueprint > gateway with Jaeger tracing > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/consul-config-configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/consul-config-job.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/templates/tracing.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/jaegerhelm/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > microservice with Zipkin tracing > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/consul-config-configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/consul-config-job.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/consul-statefulset.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/templates/tracing.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/zipkinhelm/values.yaml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
 exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul and kafka > should succeed 1`] = `
 {
   ".yo-rc.json": {
@@ -251,6 +357,47 @@ exports[`SubGenerator helm of rust JHipster blueprint > microservice with consul
     "stateCleared": "modified",
   },
   "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator helm of rust JHipster blueprint > monolith should NOT have tracing in Helm even if configured > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "helm/README-helm.md": {
+    "stateCleared": "modified",
+  },
+  "helm/helm-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/.helmignore": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/Chart.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/templates/NOTES.txt": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/templates/_helpers.tpl": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/templates/configmap.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/templates/deployment.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/templates/secret.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/templates/service.yaml": {
+    "stateCleared": "modified",
+  },
+  "helm/monotracehelm/values.yaml": {
     "stateCleared": "modified",
   },
 }

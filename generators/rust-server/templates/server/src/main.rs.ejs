@@ -16,6 +16,9 @@ use utoipa_scalar::{Scalar, Servable};
 <%_ if (monitoringPrometheus) { _%>
 use <%= rustCrateName %>::config::{MetricsConfig, PrometheusMetricLayer};
 <%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+use <%= rustCrateName %>::config::TracingConfig;
+<%_ } _%>
 
 use <%= rustCrateName %>::config::AppConfig;
 <%_ if (enableSwaggerCodegen) { _%>
@@ -70,6 +73,20 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // Initialize tracing (reads RUST_LOG from environment)
+<%_ if (distributedTracingAny) { _%>
+    let tracing_config = TracingConfig::from_env();
+    let otel_layer = tracing_config.init_tracer();
+
+    // OTel layer must be added first (directly on Registry) since it's typed to Registry
+    tracing_subscriber::registry()
+        .with(otel_layer)
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,<%= rustCrateName %>=debug,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+<%_ } else { _%>
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -77,6 +94,7 @@ async fn main() {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+<%_ } _%>
 
     // Load configuration
 <%_ if (externalConfig) { _%>
@@ -475,9 +493,11 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
     tracing::info!("Starting {} server on {}", "<%= baseName %>", addr);
 
-<%_ if (serviceDiscoveryConsul || externalConfig) { _%>
+<%_ if (serviceDiscoveryConsul || externalConfig || distributedTracingAny) { _%>
     // Setup graceful shutdown handler
+<%_ if (serviceDiscoveryConsul) { _%>
     let consul_for_shutdown = consul_service.clone();
+<%_ } _%>
 <%_ if (externalConfig) { _%>
     let cancel_token_shutdown = cancel_token.clone();
 <%_ } _%>
@@ -491,6 +511,7 @@ async fn main() {
         tracing::info!("Config watcher cancelled");
 
 <%_ } _%>
+<%_ if (serviceDiscoveryConsul) { _%>
         // Deregister from Consul
         if let Some(ref service) = consul_for_shutdown {
             tracing::info!("Deregistering from Consul...");
@@ -500,6 +521,12 @@ async fn main() {
                 tracing::info!("Successfully deregistered from Consul");
             }
         }
+<%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+        // Flush pending traces before shutdown
+        <%= rustCrateName %>::config::tracing_config::shutdown_tracer();
+        tracing::info!("Distributed tracing shut down");
+<%_ } _%>
         std::process::exit(0);
     });
 

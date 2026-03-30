@@ -1,3 +1,132 @@
+# Release Notes - v0.9.6
+
+## Overview
+
+JHipster Rust Blueprint v0.9.6 adds distributed tracing support with Zipkin and Jaeger for microservices and gateway applications, fixes several deployment issues across Docker, Kubernetes, and Helm, and improves PostgreSQL credential handling for local development.
+
+## What's New in v0.9.6
+
+### Distributed Tracing (Zipkin / Jaeger)
+
+OpenTelemetry-based distributed tracing is now available for microservice and gateway applications. During project generation, you can choose between Zipkin and Jaeger:
+
+```
+? Would you like to enable distributed tracing for your application?
+  No distributed tracing
+  Zipkin (lightweight distributed tracing)
+  Jaeger (full-featured distributed tracing with Jaeger UI)
+```
+
+This feature is **not available for monolith applications** — the prompt only appears for microservice and gateway app types.
+
+#### What's Generated
+
+| Layer              | Zipkin                                          | Jaeger                                               |
+| ------------------ | ----------------------------------------------- | ---------------------------------------------------- |
+| **Rust code**      | `tracing_config.rs` with Zipkin HTTP exporter   | `tracing_config.rs` with OTLP gRPC exporter          |
+| **Dependencies**   | `opentelemetry-zipkin`                          | `opentelemetry-otlp` with tonic                      |
+| **Docker Compose** | `docker/tracing.yml` with `openzipkin/zipkin:3` | `docker/tracing.yml` with `jaegertracing/all-in-one` |
+| **Kubernetes**     | Zipkin Deployment + Service                     | Jaeger Deployment + Service (UI + OTLP ports)        |
+| **Helm**           | Zipkin template with `Values.zipkin.enabled`    | Jaeger template with `Values.jaeger.enabled`         |
+| **Documentation**  | `docs/DISTRIBUTED_TRACING.md`                   | `docs/DISTRIBUTED_TRACING.md`                        |
+
+#### Configuration
+
+| Variable               | Description                        | Default                                                                       |
+| ---------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
+| `TRACING_ENABLED`      | Enable/disable distributed tracing | `true`                                                                        |
+| `TRACING_SERVICE_NAME` | Service name reported in traces    | `<baseName>`                                                                  |
+| `TRACING_ENDPOINT`     | Tracing backend endpoint           | Zipkin: `http://localhost:9411/api/v2/spans`, Jaeger: `http://localhost:4317` |
+| `TRACING_SAMPLE_RATIO` | Sampling ratio (0.0 to 1.0)        | `1.0`                                                                         |
+
+#### OpenTelemetry Integration
+
+The tracing layer integrates with the existing `tracing` + `tracing-subscriber` stack:
+
+- OTel layer is composed directly on `Registry` (innermost layer) to avoid type mismatches
+- `Option<OpenTelemetryLayer>` passed to `.with()` — acts as no-op when tracing is disabled at runtime
+- Graceful shutdown flushes pending spans via `shutdown_tracer_provider()`
+
+### Bug Fixes
+
+#### Production Ribbon Fix (All App Types)
+
+- **Root cause**: The `/management/info` endpoint set `display-ribbon-on-profiles` to the current active profile (e.g., `"prod"`), causing the Angular UI to show a ribbon in every environment including production
+- **Fix**: `display-ribbon-on-profiles` is now always `"dev"`. The Angular client only shows the ribbon when this value appears in `activeProfiles`, so the ribbon correctly shows in development and is hidden in production
+- **Scope**: Affects monolith, microservice, and gateway applications
+
+#### APP_ENV Missing for Monoliths in K8s/Helm
+
+- **Root cause**: `APP_ENV: "development"` was only set inside the `serviceDiscoveryConsul` conditional block in K8s configmaps and Helm values, so monolith deployments inherited `APP_ENV=production` from the Dockerfile
+- **Fix**: Moved `APP_ENV: "development"` to the common config section in both `app-configmap.yml` and `values.yaml`, ensuring all app types get the correct environment in K8s/Helm deployments
+- **Symptom**: Monolith apps showed "translation-not-found" instead of "Development" ribbon
+
+#### Microservice Port Fix in K8s/Helm
+
+- **Root cause**: K8s configmaps, Helm values, deployments, and services all hardcoded port `8080`, but microservices use port `8081`
+- **Fix**: Added `appPort` context variable (`8081` for microservices, `8080` for everything else) and updated all templates to use it
+- **Files updated**: `app-configmap.yml`, `app-deployment.yml`, `app-service.yml`, `monitoring.yml`, `values.yaml`, `deployment.yaml`, `monitoring.yaml`, `NOTES.txt`, `kubectl-apply.sh`
+
+#### PostgreSQL Credentials Mismatch
+
+- **Root cause**: JHipster's `docker/postgresql.yml` creates a PostgreSQL user matching `baseName` with trust auth (no password), but the `.env` and `test_utils.rs` hardcoded `postgres:postgres`
+- **Fix**: Updated `.env` and `test_utils.rs` templates to use `<%= baseName %>` as the PostgreSQL user with no password, matching the Docker Compose configuration
+- **Note**: K8s/Helm deployments are unaffected — they use their own PostgreSQL StatefulSets with `postgres:postgres` credentials
+
+#### Helm values.yaml Template Expressions
+
+- **Root cause**: `TRACING_ENDPOINT` in `values.yaml` used Helm template expressions (`{{ .Release.Name }}`), but `values.yaml` is a data file where Helm expressions are not evaluated
+- **Fix**: Replaced with EJS `<%= baseName.toLowerCase() %>` which resolves at generation time
+
+#### Jaeger Docker Image
+
+- **Root cause**: Templates used `jaegertracing/jaeger:2` which doesn't exist on Docker Hub
+- **Fix**: Updated to `jaegertracing/all-in-one:latest` across all templates (Docker Compose, K8s, Helm, deploy scripts)
+
+### Deployment Script Improvements
+
+- **Image pre-loading**: `helm-apply.sh` and `kubectl-apply.sh` now pre-load Zipkin/Jaeger images into local cluster nodes
+- **K8s tracing manifests**: `kubectl-apply.sh` now applies and deletes `tracing.yml` with rollout status checks
+- **Port-forward instructions**: `NOTES.txt` and `kubectl-apply.sh` use the correct port for microservices
+
+### Test Coverage
+
+63 new tests added across all generators (326 to 389 total):
+
+| Test File                           | New Tests | What They Cover                                                                                                 |
+| ----------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `rust-server/generator.spec.js`     | 42        | Zipkin+microservice, Jaeger+gateway, monolith rejection, no-tracing microservice, Zipkin+Prometheus coexistence |
+| `kubernetes/generator.spec.js`      | 10        | Zipkin K8s, Jaeger K8s, monolith tracing rejection                                                              |
+| `kubernetes-helm/generator.spec.js` | 11        | Zipkin Helm, Jaeger Helm, monolith tracing rejection                                                            |
+
+### Documentation
+
+- **docs/DISTRIBUTED_TRACING.md**: New comprehensive guide covering both Zipkin and Jaeger, configuration, Docker/K8s/Helm deployment, sampling strategies, backend comparison, and troubleshooting
+- **README.md**: Added Distributed Tracing to implemented features table, added documentation link, removed from "Not Yet Implemented" list, updated K8s infrastructure manifests entry
+
+## Upgrade Notes
+
+### Adding Distributed Tracing to Existing Projects
+
+1. Regenerate your microservice or gateway project with `jhipster-rust --force`
+2. Select Zipkin or Jaeger when prompted
+3. For Docker: `docker compose -f docker/tracing.yml up -d`
+4. For Helm: regenerate charts with `jhipster-rust kubernetes-helm --force`
+
+### PostgreSQL Credential Change
+
+If you have an existing PostgreSQL project, the `DATABASE_URL` in `.env` now uses `<baseName>` as the user instead of `postgres`. After regenerating:
+
+1. Stop and remove your existing PostgreSQL container: `docker compose -f docker/postgresql.yml down -v`
+2. Start a fresh container: `docker compose -f docker/postgresql.yml up -d`
+3. Run tests: `cargo test -- --test-threads=1`
+
+### Monolith Ribbon Fix
+
+If your monolith app shows "Production" ribbon or "translation-not-found" in K8s/Helm, regenerate the project and redeploy. The fix applies automatically.
+
+---
+
 # Release Notes - v0.9.5
 
 ## Overview

@@ -74,6 +74,19 @@ axum-prometheus.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
 <%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+tracing-opentelemetry.workspace = true
+<%_ if (distributedTracingZipkin) { _%>
+opentelemetry-zipkin.workspace = true
+<%_ if (!authenticationTypeOauth2 && !serviceDiscoveryConsul && !circuitBreakerEnabled) { _%>
+reqwest.workspace = true
+<%_ } _%>
+<%_ } else if (distributedTracingJaeger) { _%>
+opentelemetry-otlp.workspace = true
+<%_ } _%>
+<%_ } _%>
 
 [dev-dependencies]
 axum-test = "14"

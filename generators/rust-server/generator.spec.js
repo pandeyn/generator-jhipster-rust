@@ -1313,4 +1313,294 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
       result.assertFile(['server/src/config/consul_config.rs', 'server/src/services/consul_service.rs']);
     });
   });
+
+  // ==================== Distributed Tracing Tests ====================
+
+  describe('microservice with Zipkin distributed tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'zipkinApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'zipkin',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate tracing config file', () => {
+      result.assertFile('server/src/config/tracing_config.rs');
+    });
+
+    it('should include OpenTelemetry and Zipkin dependencies in Cargo.toml', () => {
+      result.assertFileContent('Cargo.toml', 'opentelemetry');
+      result.assertFileContent('Cargo.toml', 'opentelemetry_sdk');
+      result.assertFileContent('Cargo.toml', 'tracing-opentelemetry');
+      result.assertFileContent('Cargo.toml', 'opentelemetry-zipkin');
+    });
+
+    it('should NOT include Jaeger/OTLP dependency', () => {
+      result.assertNoFileContent('Cargo.toml', 'opentelemetry-otlp');
+    });
+
+    it('should include tracing config in config/mod.rs', () => {
+      result.assertFileContent('server/src/config/mod.rs', 'pub mod tracing_config;');
+      result.assertFileContent('server/src/config/mod.rs', 'pub use tracing_config::*;');
+    });
+
+    it('should include TracingConfig import in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'TracingConfig');
+    });
+
+    it('should initialize tracing with OpenTelemetry layer in main.rs', () => {
+      result.assertFileContent('server/src/main.rs', 'tracing_config.init_tracer()');
+    });
+
+    it('should include tracing shutdown in graceful shutdown handler', () => {
+      result.assertFileContent('server/src/main.rs', 'shutdown_tracer()');
+    });
+
+    it('should include tracing environment variables in .env', () => {
+      result.assertFileContent('.env', 'TRACING_ENABLED=true');
+      result.assertFileContent('.env', 'TRACING_SERVICE_NAME=zipkinApp');
+      result.assertFileContent('.env', 'TRACING_ENDPOINT=http://localhost:9411/api/v2/spans');
+      result.assertFileContent('.env', 'TRACING_SAMPLE_RATIO=1.0');
+    });
+
+    it('should include Zipkin endpoint in tracing_config.rs', () => {
+      result.assertFileContent('server/src/config/tracing_config.rs', '9411/api/v2/spans');
+      result.assertFileContent('server/src/config/tracing_config.rs', 'opentelemetry_zipkin');
+    });
+
+    it('should generate distributed tracing documentation', () => {
+      result.assertFile('docs/DISTRIBUTED_TRACING.md');
+      result.assertFileContent('docs/DISTRIBUTED_TRACING.md', 'Zipkin');
+    });
+
+    it('should generate docker tracing.yml', () => {
+      result.assertFile('docker/tracing.yml');
+      result.assertFileContent('docker/tracing.yml', 'openzipkin/zipkin');
+      result.assertFileContent('docker/tracing.yml', '9411:9411');
+    });
+  });
+
+  describe('gateway with Jaeger distributed tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'jaegerApp',
+          applicationType: 'gateway',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'jaeger',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate tracing config file', () => {
+      result.assertFile('server/src/config/tracing_config.rs');
+    });
+
+    it('should include OpenTelemetry and OTLP dependencies in Cargo.toml', () => {
+      result.assertFileContent('Cargo.toml', 'opentelemetry');
+      result.assertFileContent('Cargo.toml', 'opentelemetry_sdk');
+      result.assertFileContent('Cargo.toml', 'tracing-opentelemetry');
+      result.assertFileContent('Cargo.toml', 'opentelemetry-otlp');
+    });
+
+    it('should NOT include Zipkin dependency', () => {
+      result.assertNoFileContent('Cargo.toml', 'opentelemetry-zipkin');
+    });
+
+    it('should include Jaeger OTLP endpoint in tracing_config.rs', () => {
+      result.assertFileContent('server/src/config/tracing_config.rs', 'http://localhost:4317');
+      result.assertFileContent('server/src/config/tracing_config.rs', 'opentelemetry_otlp');
+    });
+
+    it('should include tracing environment variables in .env', () => {
+      result.assertFileContent('.env', 'TRACING_ENABLED=true');
+      result.assertFileContent('.env', 'TRACING_ENDPOINT=http://localhost:4317');
+    });
+
+    it('should generate distributed tracing documentation', () => {
+      result.assertFile('docs/DISTRIBUTED_TRACING.md');
+      result.assertFileContent('docs/DISTRIBUTED_TRACING.md', 'Jaeger');
+    });
+
+    it('should generate docker tracing.yml', () => {
+      result.assertFile('docker/tracing.yml');
+      result.assertFileContent('docker/tracing.yml', 'jaegertracing/all-in-one');
+      result.assertFileContent('docker/tracing.yml', '16686:16686');
+      result.assertFileContent('docker/tracing.yml', '4317:4317');
+    });
+  });
+
+  describe('monolith should NOT have distributed tracing even if configured', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'monoTraceApp',
+          applicationType: 'monolith',
+          skipClient: true,
+          distributedTracing: 'jaeger',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should NOT generate tracing config file', () => {
+      result.assertNoFile('server/src/config/tracing_config.rs');
+    });
+
+    it('should NOT include OpenTelemetry dependencies in Cargo.toml', () => {
+      result.assertNoFileContent('Cargo.toml', 'opentelemetry');
+      result.assertNoFileContent('Cargo.toml', 'tracing-opentelemetry');
+      result.assertNoFileContent('Cargo.toml', 'opentelemetry-otlp');
+      result.assertNoFileContent('Cargo.toml', 'opentelemetry-zipkin');
+    });
+
+    it('should NOT include tracing config in config/mod.rs', () => {
+      result.assertNoFileContent('server/src/config/mod.rs', 'tracing_config');
+    });
+
+    it('should NOT include TracingConfig in main.rs', () => {
+      result.assertNoFileContent('server/src/main.rs', 'TracingConfig');
+    });
+
+    it('should NOT include tracing environment variables in .env', () => {
+      result.assertNoFileContent('.env', 'TRACING_ENABLED');
+      result.assertNoFileContent('.env', 'TRACING_ENDPOINT');
+      result.assertNoFileContent('.env', 'TRACING_SERVICE_NAME');
+    });
+
+    it('should NOT generate distributed tracing documentation', () => {
+      result.assertNoFile('docs/DISTRIBUTED_TRACING.md');
+    });
+
+    it('should NOT generate docker tracing.yml', () => {
+      result.assertNoFile('docker/tracing.yml');
+    });
+  });
+
+  describe('microservice without distributed tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'noTraceApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'no',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should NOT generate tracing config file', () => {
+      result.assertNoFile('server/src/config/tracing_config.rs');
+    });
+
+    it('should NOT include OpenTelemetry dependencies in Cargo.toml', () => {
+      result.assertNoFileContent('Cargo.toml', 'opentelemetry');
+      result.assertNoFileContent('Cargo.toml', 'tracing-opentelemetry');
+    });
+
+    it('should NOT include tracing environment variables in .env', () => {
+      result.assertNoFileContent('.env', 'TRACING_ENABLED');
+      result.assertNoFileContent('.env', 'TRACING_ENDPOINT');
+    });
+
+    it('should NOT generate distributed tracing documentation', () => {
+      result.assertNoFile('docs/DISTRIBUTED_TRACING.md');
+    });
+
+    it('should NOT generate docker tracing.yml', () => {
+      result.assertNoFile('docker/tracing.yml');
+    });
+  });
+
+  describe('microservice with both Zipkin tracing and Prometheus monitoring', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(SUB_GENERATOR_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'fullObsApp',
+          applicationType: 'microservice',
+          skipClient: true,
+          serviceDiscoveryType: 'consul',
+          monitoring: 'prometheus',
+          distributedTracing: 'zipkin',
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+          blueprint: ['rust'],
+        })
+        .withJHipsterLookup()
+        .withParentBlueprintLookup();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate both tracing and metrics config files', () => {
+      result.assertFile('server/src/config/tracing_config.rs');
+      result.assertFile('server/src/config/metrics_config.rs');
+    });
+
+    it('should include both Prometheus and OpenTelemetry dependencies', () => {
+      result.assertFileContent('Cargo.toml', 'axum-prometheus');
+      result.assertFileContent('Cargo.toml', 'opentelemetry');
+      result.assertFileContent('Cargo.toml', 'opentelemetry-zipkin');
+    });
+
+    it('should generate both docker compose files', () => {
+      result.assertFile('docker/monitoring.yml');
+      result.assertFile('docker/tracing.yml');
+    });
+
+    it('should generate both documentation files', () => {
+      result.assertFile('docs/PROMETHEUS.md');
+      result.assertFile('docs/DISTRIBUTED_TRACING.md');
+    });
+  });
 });

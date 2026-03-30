@@ -67,6 +67,11 @@ if [ "${ACTION}" = "apply" ]; then
     load_image "prom/prometheus:v2.48.0"
     load_image "grafana/grafana:10.2.0"
 <%_ } _%>
+<%_ if (distributedTracingZipkin) { _%>
+    load_image "openzipkin/zipkin:3"
+<%_ } else if (distributedTracingJaeger) { _%>
+    load_image "jaegertracing/all-in-one:latest"
+<%_ } _%>
     echo "All images loaded."
   fi
 
@@ -151,6 +156,16 @@ if [ "${ACTION}" = "apply" ]; then
   kubectl rollout status deployment/<%= baseName.toLowerCase() %>-grafana -n ${NAMESPACE} --timeout=120s
 <%_ } _%>
 
+<%_ if (distributedTracingZipkin) { _%>
+  echo "Deploying distributed tracing (Zipkin)..."
+  kubectl apply -f k8s/tracing.yml
+  kubectl rollout status deployment/<%= baseName.toLowerCase() %>-zipkin -n ${NAMESPACE} --timeout=120s
+<%_ } else if (distributedTracingJaeger) { _%>
+  echo "Deploying distributed tracing (Jaeger)..."
+  kubectl apply -f k8s/tracing.yml
+  kubectl rollout status deployment/<%= baseName.toLowerCase() %>-jaeger -n ${NAMESPACE} --timeout=120s
+<%_ } _%>
+
   echo "Deploying application..."
   kubectl apply -f k8s/app-deployment.yml
   kubectl apply -f k8s/app-service.yml
@@ -167,7 +182,7 @@ if [ "${ACTION}" = "apply" ]; then
   echo "Deployment complete!"
   echo ""
   echo "Access your services with port-forward:"
-  echo "  Application:  kubectl port-forward svc/<%= baseName.toLowerCase() %> 8080:8080 -n ${NAMESPACE}"
+  echo "  Application:  kubectl port-forward svc/<%= baseName.toLowerCase() %> <%= appPort %>:<%= appPort %> -n ${NAMESPACE}"
 <%_ if (devDatabaseTypePostgresql) { _%>
   echo "  PostgreSQL:   kubectl port-forward svc/<%= baseName.toLowerCase() %>-postgresql 5432:5432 -n ${NAMESPACE}"
 <%_ } else if (devDatabaseTypeMysql) { _%>
@@ -201,6 +216,9 @@ elif [ "${ACTION}" = "delete" ]; then
   kubectl delete -f k8s/app-deployment.yml --ignore-not-found
 <%_ if (monitoringPrometheus) { _%>
   kubectl delete -f k8s/monitoring.yml --ignore-not-found
+<%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+  kubectl delete -f k8s/tracing.yml --ignore-not-found
 <%_ } _%>
 <%_ if (authenticationTypeOauth2) { _%>
   kubectl delete -f k8s/keycloak-deployment.yml --ignore-not-found

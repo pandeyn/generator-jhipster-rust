@@ -11,8 +11,8 @@ Get the application URL:
   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "<%= baseName.toLowerCase() %>.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
   echo http://$SERVICE_IP:{{ .Values.service.port }}
 {{- else }}
-  kubectl port-forward svc/{{ include "<%= baseName.toLowerCase() %>.fullname" . }} 8080:{{ .Values.service.port }} --namespace {{ .Release.Namespace }}
-  echo http://localhost:8080
+  kubectl port-forward svc/{{ include "<%= baseName.toLowerCase() %>.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} --namespace {{ .Release.Namespace }}
+  echo http://localhost:{{ .Values.service.port }}
 {{- end }}
 
 Default credentials: admin/admin

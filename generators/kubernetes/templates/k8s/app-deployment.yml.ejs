@@ -22,7 +22,7 @@ spec:
 <%_ if (monitoringPrometheus) { _%>
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "<%= appPort %>"
         prometheus.io/path: "/api/metrics"
 <%_ } _%>
     spec:
@@ -32,7 +32,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: <%= appPort %>
               protocol: TCP
           envFrom:
             - configMapRef:

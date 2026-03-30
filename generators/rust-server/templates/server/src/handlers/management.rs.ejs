@@ -57,8 +57,9 @@ pub async fn info(State(state): State<AppState>) -> Json<InfoResponse> {
 <%_ } _%>
 
     Json(InfoResponse {
-        // Set to the active profile so the Angular ribbon can match and display appropriately
-        display_ribbon_on_profiles: normalized.clone(),
+        // Always "dev" — the Angular ribbon only shows when this value appears in activeProfiles.
+        // In production, activeProfiles contains "prod" (not "dev"), so no ribbon is displayed.
+        display_ribbon_on_profiles: "dev".to_string(),
         active_profiles,
     })
 }

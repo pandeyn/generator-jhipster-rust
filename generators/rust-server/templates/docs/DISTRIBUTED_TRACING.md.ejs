@@ -1,0 +1,187 @@
+# Distributed Tracing
+
+<%= baseName %> includes built-in distributed tracing support using OpenTelemetry for microservices and gateway applications.
+
+> **Note:** Distributed tracing is only available for microservice and gateway application types. Monolith applications do not include this feature.
+
+## Overview
+
+<%_ if (distributedTracingZipkin) { _%>
+The application exports trace spans to **Zipkin** via the Zipkin HTTP API. All requests are automatically instrumented through the `tracing` and `tracing-opentelemetry` integration.
+<%_ } else if (distributedTracingJaeger) { _%>
+The application exports trace spans to **Jaeger** via the OpenTelemetry Protocol (OTLP) over gRPC. All requests are automatically instrumented through the `tracing` and `tracing-opentelemetry` integration.
+<%_ } _%>
+
+Distributed tracing allows you to:
+
+- Track requests as they flow across multiple services
+- Identify latency bottlenecks in your microservices architecture
+- Visualize service dependencies and call graphs
+- Debug issues by examining individual trace spans
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TRACING_ENABLED` | Enable/disable distributed tracing | `true` |
+| `TRACING_SERVICE_NAME` | Service name reported in traces | `<%= baseName %>` |
+<%_ if (distributedTracingZipkin) { _%>
+| `TRACING_ENDPOINT` | Zipkin collector endpoint | `http://localhost:9411/api/v2/spans` |
+<%_ } else if (distributedTracingJaeger) { _%>
+| `TRACING_ENDPOINT` | Jaeger OTLP gRPC endpoint | `http://localhost:4317` |
+<%_ } _%>
+| `TRACING_SAMPLE_RATIO` | Sampling ratio (0.0 to 1.0) | `1.0` |
+
+### Example Configuration
+
+```bash
+# Enable tracing (default)
+TRACING_ENABLED=true
+TRACING_SERVICE_NAME=<%= baseName %>
+
+<%_ if (distributedTracingZipkin) { _%>
+# Zipkin endpoint
+TRACING_ENDPOINT=http://localhost:9411/api/v2/spans
+<%_ } else if (distributedTracingJaeger) { _%>
+# Jaeger OTLP endpoint
+TRACING_ENDPOINT=http://localhost:4317
+<%_ } _%>
+
+# Sample 50% of traces in production
+TRACING_SAMPLE_RATIO=0.5
+
+# Disable tracing
+TRACING_ENABLED=false
+```
+
+## Running the Tracing Backend
+
+### Using Docker Compose
+
+The project includes a Docker Compose file for the tracing backend:
+
+```bash
+# Start the tracing backend
+docker compose -f docker/tracing.yml up -d
+
+# View logs
+docker compose -f docker/tracing.yml logs -f
+
+# Stop the tracing backend
+docker compose -f docker/tracing.yml down
+```
+
+### Accessing the UI
+
+<%_ if (distributedTracingZipkin) { _%>
+| Service | URL | Description |
+|---------|-----|-------------|
+| Zipkin UI | http://localhost:9411 | Search and view traces |
+<%_ } else if (distributedTracingJaeger) { _%>
+| Service | URL | Description |
+|---------|-----|-------------|
+| Jaeger UI | http://localhost:16686 | Search and view traces |
+<%_ } _%>
+
+## Kubernetes Deployment
+
+### Raw Manifests
+
+The Kubernetes manifests automatically deploy the tracing backend:
+
+```bash
+# Apply all manifests (includes tracing)
+./k8s/kubectl-apply.sh apply
+```
+
+### Helm Charts
+
+The Helm chart includes the tracing backend as a configurable component:
+
+```bash
+# Install with tracing enabled (default when generated)
+helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %>
+
+<%_ if (distributedTracingZipkin) { _%>
+# Disable Zipkin
+helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> --set zipkin.enabled=false
+<%_ } else if (distributedTracingJaeger) { _%>
+# Disable Jaeger
+helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> --set jaeger.enabled=false
+<%_ } _%>
+```
+<%_ if (monitoringPrometheus) { _%>
+
+## Integration with Prometheus
+
+When both Prometheus monitoring and distributed tracing are enabled, you get a complete observability stack:
+
+- **Prometheus** collects metrics (request counts, latencies, error rates)
+- **Distributed tracing** provides detailed per-request traces across services
+- **Grafana** visualizes metrics dashboards
+
+Use trace IDs in your logs to correlate metrics with specific traces.
+<%_ } _%>
+
+## Sampling Strategy
+
+The `TRACING_SAMPLE_RATIO` controls what percentage of traces are exported:
+
+| Value | Behavior | Use Case |
+|-------|----------|----------|
+| `1.0` | All traces exported | Development, debugging |
+| `0.1` | 10% of traces exported | Production (moderate traffic) |
+| `0.01` | 1% of traces exported | Production (high traffic) |
+| `0.0` | No traces exported | Effectively disables tracing |
+
+For production, start with `0.1` and adjust based on your traffic volume and storage capacity.
+
+## Rust Libraries Used
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| `opentelemetry` | 0.27 | OpenTelemetry API |
+| `opentelemetry_sdk` | 0.27 | OpenTelemetry SDK with Tokio runtime |
+| `tracing-opentelemetry` | 0.28 | Bridge between `tracing` crate and OpenTelemetry |
+<%_ if (distributedTracingZipkin) { _%>
+| `opentelemetry-zipkin` | 0.27 | Zipkin span exporter |
+<%_ } else if (distributedTracingJaeger) { _%>
+| `opentelemetry-otlp` | 0.27 | OTLP span exporter (for Jaeger) |
+<%_ } _%>
+
+## Troubleshooting
+
+### Traces Not Appearing
+
+1. Verify the tracing backend is running:
+<%_ if (distributedTracingZipkin) { _%>
+   ```bash
+   curl http://localhost:9411/health
+   ```
+<%_ } else if (distributedTracingJaeger) { _%>
+   ```bash
+   curl http://localhost:16686/
+   ```
+<%_ } _%>
+
+2. Check application logs for tracing initialization errors
+
+3. Verify the `TRACING_ENDPOINT` is correct and reachable from your application
+
+4. Ensure `TRACING_ENABLED` is set to `true`
+
+5. Check that `TRACING_SAMPLE_RATIO` is greater than `0.0`
+
+### High Memory Usage
+
+If the tracing backend uses too much memory:
+
+1. Reduce the sample ratio: `TRACING_SAMPLE_RATIO=0.1`
+<%_ if (distributedTracingZipkin) { _%>
+2. Zipkin uses in-memory storage by default; for production, configure persistent storage (Elasticsearch, Cassandra, or MySQL)
+<%_ } else if (distributedTracingJaeger) { _%>
+2. Jaeger uses in-memory storage by default; for production, configure persistent storage (Elasticsearch, Cassandra, or Kafka)
+<%_ } _%>
+3. Set retention policies to limit trace data retention

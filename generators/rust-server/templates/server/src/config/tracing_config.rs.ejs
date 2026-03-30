@@ -1,0 +1,114 @@
+//! Distributed tracing configuration for <%= baseName %>
+//!
+//! This module provides configuration for OpenTelemetry distributed tracing.
+<%_ if (distributedTracingZipkin) { _%>
+//! Traces are exported to Zipkin at the configured endpoint.
+<%_ } else if (distributedTracingJaeger) { _%>
+//! Traces are exported to Jaeger via OTLP at the configured endpoint.
+<%_ } _%>
+
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_sdk::trace::{TracerProvider, Sampler};
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::Registry;
+<%_ if (distributedTracingJaeger) { _%>
+use opentelemetry_otlp::WithExportConfig;
+<%_ } _%>
+
+/// Configuration for distributed tracing
+#[derive(Debug, Clone)]
+pub struct TracingConfig {
+    /// Whether distributed tracing is enabled
+    pub enabled: bool,
+    /// The service name reported in traces
+    pub service_name: String,
+    /// The tracing backend endpoint
+    pub endpoint: String,
+    /// The sampling ratio (0.0 to 1.0)
+    pub sample_ratio: f64,
+}
+
+impl TracingConfig {
+    /// Load tracing configuration from environment variables
+    ///
+    /// Environment variables:
+    /// - `TRACING_ENABLED`: Enable/disable tracing (default: true)
+    /// - `TRACING_SERVICE_NAME`: Service name in traces (default: <%= baseName %>)
+    /// - `TRACING_ENDPOINT`: Tracing backend endpoint
+<%_ if (distributedTracingZipkin) { _%>
+    ///   (default: http://localhost:9411/api/v2/spans)
+<%_ } else if (distributedTracingJaeger) { _%>
+    ///   (default: http://localhost:4317)
+<%_ } _%>
+    /// - `TRACING_SAMPLE_RATIO`: Sampling ratio 0.0-1.0 (default: 1.0)
+    pub fn from_env() -> Self {
+        Self {
+            enabled: std::env::var("TRACING_ENABLED")
+                .map(|v| v.to_lowercase() == "true" || v == "1")
+                .unwrap_or(true),
+            service_name: std::env::var("TRACING_SERVICE_NAME")
+                .unwrap_or_else(|_| "<%= baseName %>".to_string()),
+            endpoint: std::env::var("TRACING_ENDPOINT")
+<%_ if (distributedTracingZipkin) { _%>
+                .unwrap_or_else(|_| "http://localhost:9411/api/v2/spans".to_string()),
+<%_ } else if (distributedTracingJaeger) { _%>
+                .unwrap_or_else(|_| "http://localhost:4317".to_string()),
+<%_ } _%>
+            sample_ratio: std::env::var("TRACING_SAMPLE_RATIO")
+                .ok()
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(1.0),
+        }
+    }
+
+    /// Initialize the OpenTelemetry tracer and return a tracing layer
+    ///
+    /// Returns `Some(layer)` if tracing is enabled, `None` otherwise.
+    pub fn init_tracer(&self) -> Option<OpenTelemetryLayer<Registry, opentelemetry_sdk::trace::Tracer>> {
+        if !self.enabled {
+            return None;
+        }
+
+        let sampler = if (self.sample_ratio - 1.0).abs() < f64::EPSILON {
+            Sampler::AlwaysOn
+        } else if self.sample_ratio <= 0.0 {
+            Sampler::AlwaysOff
+        } else {
+            Sampler::TraceIdRatioBased(self.sample_ratio)
+        };
+
+<%_ if (distributedTracingZipkin) { _%>
+        let exporter = opentelemetry_zipkin::new_pipeline()
+            .with_service_name(&self.service_name)
+            .with_collector_endpoint(&self.endpoint)
+            .init_exporter()
+            .expect("Failed to initialize Zipkin exporter");
+
+        let provider = TracerProvider::builder()
+            .with_sampler(sampler)
+            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+            .build();
+<%_ } else if (distributedTracingJaeger) { _%>
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(&self.endpoint)
+            .build()
+            .expect("Failed to initialize OTLP exporter");
+
+        let provider = TracerProvider::builder()
+            .with_sampler(sampler)
+            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+            .build();
+<%_ } _%>
+
+        let tracer = provider.tracer(self.service_name.clone());
+        opentelemetry::global::set_tracer_provider(provider);
+
+        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    }
+}
+
+/// Shutdown the OpenTelemetry tracer provider, flushing any pending spans
+pub fn shutdown_tracer() {
+    opentelemetry::global::shutdown_tracer_provider();
+}

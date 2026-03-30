@@ -548,4 +548,119 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       result.assertNoFile(['k8s/vault-statefulset.yml', 'k8s/vault-init-job.yml', 'k8s/vault-secret.yml']);
     });
   });
+
+  // ==================== Distributed Tracing Tests ====================
+
+  describe('microservice with Zipkin tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'zipkinK8s',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'zipkin',
+          skipClient: true,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate tracing manifest', () => {
+      result.assertFile('k8s/tracing.yml');
+    });
+
+    it('should include Zipkin deployment and service', () => {
+      result.assertFileContent('k8s/tracing.yml', 'openzipkin/zipkin');
+      result.assertFileContent('k8s/tracing.yml', 'containerPort: 9411');
+    });
+
+    it('should include tracing endpoint in configmap', () => {
+      result.assertFileContent('k8s/app-configmap.yml', 'TRACING_ENABLED');
+      result.assertFileContent('k8s/app-configmap.yml', 'TRACING_ENDPOINT');
+      result.assertFileContent('k8s/app-configmap.yml', 'zipkin:9411');
+    });
+  });
+
+  describe('microservice with Jaeger tracing', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'jaegerK8s',
+          applicationType: 'microservice',
+          serviceDiscoveryType: 'consul',
+          distributedTracing: 'jaeger',
+          skipClient: true,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should generate tracing manifest', () => {
+      result.assertFile('k8s/tracing.yml');
+    });
+
+    it('should include Jaeger deployment and service', () => {
+      result.assertFileContent('k8s/tracing.yml', 'jaegertracing/all-in-one');
+      result.assertFileContent('k8s/tracing.yml', 'containerPort: 16686');
+      result.assertFileContent('k8s/tracing.yml', 'containerPort: 4317');
+    });
+
+    it('should include tracing endpoint in configmap', () => {
+      result.assertFileContent('k8s/app-configmap.yml', 'TRACING_ENDPOINT');
+      result.assertFileContent('k8s/app-configmap.yml', 'jaeger:4317');
+    });
+  });
+
+  describe('monolith should NOT have tracing manifests even if configured', () => {
+    beforeAll(async function () {
+      await helpers
+        .run(BLUEPRINT_NAMESPACE)
+        .withJHipsterConfig({
+          baseName: 'monoTraceK8s',
+          applicationType: 'monolith',
+          distributedTracing: 'jaeger',
+          skipClient: true,
+          ...defaultK8sConfig,
+        })
+        .withOptions({
+          ignoreNeedlesError: true,
+        })
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint()
+        .withBlueprintConfig();
+    });
+
+    it('should succeed', () => {
+      expect(result.getStateSnapshot()).toMatchSnapshot();
+    });
+
+    it('should NOT generate tracing manifest', () => {
+      result.assertNoFile('k8s/tracing.yml');
+    });
+
+    it('should NOT include tracing endpoint in configmap', () => {
+      result.assertNoFileContent('k8s/app-configmap.yml', 'TRACING_ENABLED');
+      result.assertNoFileContent('k8s/app-configmap.yml', 'TRACING_ENDPOINT');
+    });
+  });
 });

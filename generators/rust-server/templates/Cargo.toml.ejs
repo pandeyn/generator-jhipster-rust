@@ -90,6 +90,20 @@ axum-prometheus = "0.7"
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.16", default-features = false, features = ["http-listener"] }
 <%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+# Distributed tracing (OpenTelemetry)
+opentelemetry = { version = "0.27", features = ["trace"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+tracing-opentelemetry = "0.28"
+<%_ if (distributedTracingZipkin) { _%>
+opentelemetry-zipkin = { version = "0.27", features = ["reqwest-client"] }
+<%_ if (!authenticationTypeOauth2 && !serviceDiscoveryConsul && !circuitBreakerEnabled) { _%>
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+<%_ } _%>
+<%_ } else if (distributedTracingJaeger) { _%>
+opentelemetry-otlp = { version = "0.27", features = ["tonic", "trace"] }
+<%_ } _%>
+<%_ } _%>
 <%_ if (circuitBreakerEnabled) { _%>
 # Circuit breaker for resilient HTTP calls
 <%_ if (!authenticationTypeOauth2 && !serviceDiscoveryConsul) { _%>

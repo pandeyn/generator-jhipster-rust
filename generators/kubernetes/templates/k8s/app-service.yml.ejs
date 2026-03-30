@@ -14,7 +14,7 @@ spec:
     app: <%= baseName.toLowerCase() %>
   ports:
     - name: http
-      port: 8080
+      port: <%= appPort %>
       targetPort: http
       protocol: TCP
 <%_ if (kubernetesServiceType === 'NodePort') { _%>

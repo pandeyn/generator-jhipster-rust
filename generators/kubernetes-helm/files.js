@@ -25,6 +25,7 @@ export const helmConditionalTemplateFiles = {
   vaultSecret: { condition: ctx => ctx.secretsManagementVault, file: 'templates/vault-secret.yaml' },
   kafka: { condition: ctx => ctx.messageBrokerKafka, file: 'templates/kafka-statefulset.yaml' },
   monitoring: { condition: ctx => ctx.monitoringPrometheus, file: 'templates/monitoring.yaml' },
+  tracing: { condition: ctx => ctx.distributedTracingAny, file: 'templates/tracing.yaml' },
 };
 
 export const helmScriptFiles = ['helm-apply.sh', 'README-helm.md'];

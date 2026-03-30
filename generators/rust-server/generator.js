@@ -335,6 +335,16 @@ export default class extends BaseApplicationGenerator {
         application.monitoringPrometheus = monitoring === 'prometheus';
         application.monitoringAny = monitoring !== 'no';
       },
+      rustDistributedTracingConfig({ application }) {
+        // Set distributed tracing flags for OpenTelemetry integration
+        // Only applicable for gateway and microservice application types
+        const isMicroservicesApp = application.applicationTypeMicroservice || application.applicationTypeGateway;
+        const distributedTracing = this.jhipsterConfig.distributedTracing || 'no';
+        application.distributedTracing = isMicroservicesApp ? distributedTracing : 'no';
+        application.distributedTracingZipkin = isMicroservicesApp && distributedTracing === 'zipkin';
+        application.distributedTracingJaeger = isMicroservicesApp && distributedTracing === 'jaeger';
+        application.distributedTracingAny = isMicroservicesApp && distributedTracing !== 'no';
+      },
       rustSecretsManagementConfig({ application }) {
         // Set secrets management flags for Vault integration
         const secretsManagement = this.jhipsterConfig.secretsManagement || 'no';

@@ -47,6 +47,12 @@ export default class extends BaseApplicationGenerator {
         application.monitoring = monitoring;
         application.monitoringPrometheus = monitoring === 'prometheus';
         application.monitoringAny = monitoring !== 'no';
+
+        // Set distributed tracing flags for docker templates (microservices/gateway only)
+        const distributedTracing = this.jhipsterConfig.distributedTracing || 'no';
+        application.distributedTracingZipkin = isMicroservicesApp && distributedTracing === 'zipkin';
+        application.distributedTracingJaeger = isMicroservicesApp && distributedTracing === 'jaeger';
+        application.distributedTracingAny = isMicroservicesApp && distributedTracing !== 'no';
       },
     });
   }
@@ -123,6 +129,12 @@ export default class extends BaseApplicationGenerator {
                   'grafana/provisioning/dashboards/dashboards.yml',
                   'grafana/provisioning/dashboards/application-dashboard.json',
                 ],
+              },
+              // Distributed tracing files (microservices/gateway only)
+              {
+                condition: ctx => ctx.distributedTracingAny,
+                path: 'docker/',
+                templates: ['tracing.yml'],
               },
             ],
             files: [{ templates: ['template-file-docker'] }],

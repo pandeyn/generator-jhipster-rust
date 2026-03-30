@@ -19,6 +19,9 @@ mod kafka_config;
 <%_ if (monitoringPrometheus) { _%>
 mod metrics_config;
 <%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+pub mod tracing_config;
+<%_ } _%>
 <%_ if (secretsManagementVault) { _%>
 mod vault_config;
 <%_ } _%>
@@ -46,6 +49,9 @@ pub use kafka_config::*;
 <%_ } _%>
 <%_ if (monitoringPrometheus) { _%>
 pub use metrics_config::*;
+<%_ } _%>
+<%_ if (distributedTracingAny) { _%>
+pub use tracing_config::*;
 <%_ } _%>
 <%_ if (secretsManagementVault) { _%>
 pub use vault_config::*;

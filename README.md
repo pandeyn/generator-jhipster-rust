@@ -15,59 +15,61 @@ The generated Rust server provides a complete REST API implementation with authe
 
 ## Implemented Features
 
-| Category                 | Feature                      | Notes                                        |
-| ------------------------ | ---------------------------- | -------------------------------------------- |
-| **Backend Framework**    | Axum web framework           | Async HTTP server with Tower middleware      |
-|                          | Tokio async runtime          | High-performance async I/O                   |
-|                          | Structured logging (tracing) | Request tracing and structured logs          |
-| **Databases**            | SQLite                       | Default option, no external server needed    |
-|                          | PostgreSQL                   | Full support with Diesel ORM                 |
-|                          | MySQL                        | Full support with Diesel ORM                 |
-|                          | MongoDB                      | Native driver with ObjectId, embedded docs   |
-| **Authentication**       | JWT (JSON Web Tokens)        | Stateless auth with configurable expiry      |
-|                          | OAuth2/OIDC (Keycloak)       | Full OIDC flow with JWKS validation          |
-|                          | Role-based access control    | ROLE_USER, ROLE_ADMIN authorities            |
-| **User Management**      | User CRUD operations         | Create, read, update, delete users           |
-|                          | Password hashing (Argon2)    | Secure password storage                      |
-|                          | Authority management         | Assign/remove user roles                     |
-| **Entity Generation**    | Basic CRUD endpoints         | GET, POST, PUT, DELETE for entities          |
-|                          | Field types & validations    | String, Integer, Boolean, Date, Blob, etc.   |
-|                          | Pagination & sorting         | Page-based results with sort params          |
-|                          | Relationships                | ManyToOne, OneToMany, OneToOne, ManyToMany   |
-| **API Documentation**    | Swagger UI                   | Interactive API explorer at /swagger-ui      |
-|                          | Scalar UI                    | Modern API docs at /scalar                   |
-|                          | OpenAPI 3.0 spec             | JSON spec at /api-docs/openapi.json          |
-| **Frontend**             | Angular                      | Full JHipster Angular client                 |
-|                          | React                        | Full JHipster React client                   |
-|                          | Vue                          | Full JHipster Vue client                     |
-| **Deployment**           | Docker support               | Multi-stage Dockerfile                       |
-|                          | Docker Compose               | Full stack with DB containers                |
-|                          | Monolithic mode              | Serve SPA from Rust backend                  |
-|                          | Gateway mode                 | Serve SPA UI + route to microservices        |
-|                          | Microservice mode            | API-only service for microservices arch      |
-|                          | Consul Service Discovery     | Service registration and discovery           |
-|                          | External Configuration       | Optional Consul KV config with hot-reload    |
-|                          | Vault Secrets Management     | HashiCorp Vault with AppRole and auto-renew  |
-| **Testing**              | Rust unit tests              | Service and handler tests                    |
-|                          | Cypress E2E tests            | End-to-end UI testing                        |
-| **Email**                | SMTP email service           | Lettre + Tera templates                      |
-|                          | Account activation           | Email verification for registration          |
-|                          | Password reset               | Forgot password flow with email              |
-| **Message Brokers**      | Apache Kafka                 | High-throughput async messaging (rdkafka)    |
-| **Monitoring**           | Prometheus metrics           | HTTP request metrics with Grafana dashboards |
-| **Resilience**           | Circuit Breaker              | Prevents cascading failures in microservices |
-| **Kubernetes**           | K8s manifest generation      | Deployment, Service, ConfigMap, Secret       |
-|                          | Helm chart generation        | Parameterized charts with values.yaml        |
-|                          | Database StatefulSets        | PostgreSQL, MySQL, MongoDB on K8s            |
-|                          | Ingress support              | NGINX and Traefik controllers                |
-|                          | Horizontal Pod Autoscaler    | HPA support via Helm charts                  |
-|                          | Infrastructure manifests     | Keycloak, Consul, Kafka, Prometheus on K8s   |
-| **CI/CD**                | GitHub Actions               | Build, test, lint, Docker publish            |
-|                          | GitLab CI                    | Build, test, lint, Docker publish            |
-|                          | Local CI with act            | Run GitHub Actions locally in Docker         |
-| **Developer Experience** | Hot reload (cargo-watch)     | Auto-rebuild on file changes                 |
-|                          | Environment config (.env)    | Flexible configuration                       |
-|                          | Health endpoints             | /api/health, /management/info                |
+| Category                 | Feature                      | Notes                                                     |
+| ------------------------ | ---------------------------- | --------------------------------------------------------- |
+| **Backend Framework**    | Axum web framework           | Async HTTP server with Tower middleware                   |
+|                          | Tokio async runtime          | High-performance async I/O                                |
+|                          | Structured logging (tracing) | Request tracing and structured logs                       |
+| **Databases**            | SQLite                       | Default option, no external server needed                 |
+|                          | PostgreSQL                   | Full support with Diesel ORM                              |
+|                          | MySQL                        | Full support with Diesel ORM                              |
+|                          | MongoDB                      | Native driver with ObjectId, embedded docs                |
+| **Authentication**       | JWT (JSON Web Tokens)        | Stateless auth with configurable expiry                   |
+|                          | OAuth2/OIDC (Keycloak)       | Full OIDC flow with JWKS validation                       |
+|                          | Role-based access control    | ROLE_USER, ROLE_ADMIN authorities                         |
+| **User Management**      | User CRUD operations         | Create, read, update, delete users                        |
+|                          | Password hashing (Argon2)    | Secure password storage                                   |
+|                          | Authority management         | Assign/remove user roles                                  |
+| **Entity Generation**    | Basic CRUD endpoints         | GET, POST, PUT, DELETE for entities                       |
+|                          | Field types & validations    | String, Integer, Boolean, Date, Blob, etc.                |
+|                          | Pagination & sorting         | Page-based results with sort params                       |
+|                          | Relationships                | ManyToOne, OneToMany, OneToOne, ManyToMany                |
+| **API Documentation**    | Swagger UI                   | Interactive API explorer at /swagger-ui                   |
+|                          | Scalar UI                    | Modern API docs at /scalar                                |
+|                          | OpenAPI 3.0 spec             | JSON spec at /api-docs/openapi.json                       |
+| **Frontend**             | Angular                      | Full JHipster Angular client                              |
+|                          | React                        | Full JHipster React client                                |
+|                          | Vue                          | Full JHipster Vue client                                  |
+| **Deployment**           | Docker support               | Multi-stage Dockerfile                                    |
+|                          | Docker Compose               | Full stack with DB containers                             |
+|                          | Monolithic mode              | Serve SPA from Rust backend                               |
+|                          | Gateway mode                 | Serve SPA UI + route to microservices                     |
+|                          | Microservice mode            | API-only service for microservices arch                   |
+|                          | Consul Service Discovery     | Service registration and discovery                        |
+|                          | External Configuration       | Optional Consul KV config with hot-reload                 |
+|                          | Vault Secrets Management     | HashiCorp Vault with AppRole and auto-renew               |
+| **Testing**              | Rust unit tests              | Service and handler tests                                 |
+|                          | Cypress E2E tests            | End-to-end UI testing                                     |
+| **Email**                | SMTP email service           | Lettre + Tera templates                                   |
+|                          | Account activation           | Email verification for registration                       |
+|                          | Password reset               | Forgot password flow with email                           |
+| **Message Brokers**      | Apache Kafka                 | High-throughput async messaging (rdkafka)                 |
+| **Monitoring**           | Prometheus metrics           | HTTP request metrics with Grafana dashboards              |
+| **Distributed Tracing**  | Zipkin                       | Lightweight tracing for microservices/gateway             |
+|                          | Jaeger                       | Full-featured tracing with Jaeger UI                      |
+| **Resilience**           | Circuit Breaker              | Prevents cascading failures in microservices              |
+| **Kubernetes**           | K8s manifest generation      | Deployment, Service, ConfigMap, Secret                    |
+|                          | Helm chart generation        | Parameterized charts with values.yaml                     |
+|                          | Database StatefulSets        | PostgreSQL, MySQL, MongoDB on K8s                         |
+|                          | Ingress support              | NGINX and Traefik controllers                             |
+|                          | Horizontal Pod Autoscaler    | HPA support via Helm charts                               |
+|                          | Infrastructure manifests     | Keycloak, Consul, Kafka, Prometheus, Zipkin/Jaeger on K8s |
+| **CI/CD**                | GitHub Actions               | Build, test, lint, Docker publish                         |
+|                          | GitLab CI                    | Build, test, lint, Docker publish                         |
+|                          | Local CI with act            | Run GitHub Actions locally in Docker                      |
+| **Developer Experience** | Hot reload (cargo-watch)     | Auto-rebuild on file changes                              |
+|                          | Environment config (.env)    | Flexible configuration                                    |
+|                          | Health endpoints             | /api/health, /management/info                             |
 
 # Prerequisites
 
@@ -161,6 +163,10 @@ jhipster --blueprints rust --skip-jhipster-dependencies
 ## Monitoring
 
 - [Prometheus Monitoring](docs/PROMETHEUS.md) - Metrics collection with Prometheus and Grafana dashboards
+
+## Distributed Tracing
+
+- [Distributed Tracing Guide](docs/DISTRIBUTED_TRACING.md) - OpenTelemetry-based tracing with Zipkin or Jaeger for microservices and gateway applications
 
 ## Resilience
 
@@ -313,7 +319,6 @@ The following features from the base JHipster generator are planned for future v
 | Feature               | Notes                                                  |
 | --------------------- | ------------------------------------------------------ |
 | Pulsar Message Broker | Apache Pulsar integration (Kafka is already supported) |
-| Distributed Tracing   | Zipkin/Jaeger integration for request tracing          |
 | Caching (Redis)       | Redis dependencies or caching layer                    |
 | Gateway Routing Logic | Dynamic route management or request forwarding         |
 

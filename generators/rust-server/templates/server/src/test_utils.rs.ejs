@@ -323,7 +323,7 @@ pub fn create_test_pool() -> DbPool {
                 format!("{}_test", base_url)
             })
         })
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/<%= baseName.toLowerCase() %>_test".to_string());
+        .unwrap_or_else(|_| "postgres://<%= baseName %>@localhost:5432/<%= baseName %>_test".to_string());
 
     // First, try to create the test database if it doesn't exist
     ensure_test_database_exists(&database_url);
@@ -552,7 +552,7 @@ pub fn create_test_config() -> AppConfig {
 <%_ } _%>
 <%_ if (devDatabaseTypePostgresql) { _%>
         database_url: std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/<%= baseName.toLowerCase() %>_test".to_string()),
+            .unwrap_or_else(|_| "postgres://<%= baseName %>@localhost:5432/<%= baseName %>_test".to_string()),
 <%_ } else if (devDatabaseTypeMysql) { _%>
         database_url: std::env::var("TEST_DATABASE_URL")
             .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>_test".to_string()),

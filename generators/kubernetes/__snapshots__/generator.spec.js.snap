@@ -1,5 +1,81 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with Jaeger tracing > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-job.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/tracing.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with Zipkin tracing > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-config-job.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+  "k8s/tracing.yml": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
 exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with consul and kafka > should succeed 1`] = `
 {
   ".yo-rc.json": {
@@ -173,6 +249,32 @@ exports[`SubGenerator kubernetes of rust JHipster blueprint > microservice with 
     "stateCleared": "modified",
   },
   "k8s/consul-statefulset.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/kubectl-apply.sh": {
+    "stateCleared": "modified",
+  },
+}
+`;
+
+exports[`SubGenerator kubernetes of rust JHipster blueprint > monolith should NOT have tracing manifests even if configured > should succeed 1`] = `
+{
+  ".yo-rc.json": {
+    "stateCleared": "modified",
+  },
+  "k8s/README-k8s.md": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-configmap.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-deployment.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-secret.yml": {
+    "stateCleared": "modified",
+  },
+  "k8s/app-service.yml": {
     "stateCleared": "modified",
   },
   "k8s/kubectl-apply.sh": {

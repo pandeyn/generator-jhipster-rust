@@ -80,6 +80,13 @@ export const kubernetesFiles = {
       templates: ['monitoring.yml'],
     },
   ],
+  tracing: [
+    {
+      condition: ctx => ctx.distributedTracingAny,
+      path: 'k8s/',
+      templates: ['tracing.yml'],
+    },
+  ],
   helpers: [
     {
       path: 'k8s/',

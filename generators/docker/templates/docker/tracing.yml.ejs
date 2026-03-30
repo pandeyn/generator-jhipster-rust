@@ -1,0 +1,40 @@
+# Distributed tracing stack for <%= baseName %>
+# This configuration is intended for development purpose, it's **your** responsibility to harden it for production
+
+name: <%= baseName.toLowerCase() %>-tracing
+services:
+<%_ if (distributedTracingZipkin) { _%>
+  zipkin:
+    image: openzipkin/zipkin:3
+    ports:
+      - 127.0.0.1:9411:9411
+    environment:
+      - STORAGE_TYPE=mem
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:9411/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tracing
+<%_ } else if (distributedTracingJaeger) { _%>
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - 127.0.0.1:16686:16686  # Jaeger UI
+      - 127.0.0.1:4317:4317    # OTLP gRPC
+      - 127.0.0.1:4318:4318    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:16686/']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tracing
+<%_ } _%>
+
+networks:
+  tracing:
+    driver: bridge

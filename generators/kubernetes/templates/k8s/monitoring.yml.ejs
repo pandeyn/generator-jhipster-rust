@@ -17,7 +17,7 @@ data:
       - job_name: '<%= baseName.toLowerCase() %>'
         metrics_path: '/api/metrics'
         static_configs:
-          - targets: ['<%= baseName.toLowerCase() %>:8080']
+          - targets: ['<%= baseName.toLowerCase() %>:<%= appPort %>']
             labels:
               application: '<%= baseName.toLowerCase() %>'
 ---

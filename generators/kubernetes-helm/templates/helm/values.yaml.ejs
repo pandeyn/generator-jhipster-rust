@@ -8,7 +8,7 @@ image:
 
 service:
   type: <%= kubernetesServiceType === 'Ingress' ? 'ClusterIP' : kubernetesServiceType %>
-  port: 8080
+  port: <%= appPort %>
 
 <%_ if (ingressEnabled) { _%>
 ingress:
@@ -53,7 +53,8 @@ autoscaling:
 config:
   RUST_LOG: "info"
   APP_HOST: "0.0.0.0"
-  APP_PORT: "8080"
+  APP_PORT: "<%= appPort %>"
+  APP_ENV: "development"
 <%_ if (devDatabaseTypePostgresql) { _%>
   DATABASE_URL: "postgres://postgres:postgres@<%= baseName.toLowerCase() %>-postgresql:5432/<%= baseName.toLowerCase() %>"
 <%_ } else if (devDatabaseTypeMysql) { _%>
@@ -71,7 +72,6 @@ config:
   CONSUL_REGISTER_SERVICE: "true"
   CONSUL_REGISTER_HOST: "<%= baseName.toLowerCase() %>"
   CONSUL_HEALTH_CHECK_INTERVAL: "10"
-  APP_ENV: "development"
 <%_ } _%>
 <%_ if (externalConfig) { _%>
   APP_PROFILE: "dev"
@@ -80,6 +80,15 @@ config:
 <%_ } _%>
 <%_ if (messageBrokerKafka) { _%>
   KAFKA_BOOTSTRAP_SERVERS: "<%= baseName.toLowerCase() %>-kafka:9092"
+<%_ } _%>
+<%_ if (distributedTracingZipkin) { _%>
+  TRACING_ENABLED: "true"
+  TRACING_SERVICE_NAME: "<%= baseName.toLowerCase() %>"
+  TRACING_ENDPOINT: "http://<%= baseName.toLowerCase() %>-zipkin:9411/api/v2/spans"
+<%_ } else if (distributedTracingJaeger) { _%>
+  TRACING_ENABLED: "true"
+  TRACING_SERVICE_NAME: "<%= baseName.toLowerCase() %>"
+  TRACING_ENDPOINT: "http://<%= baseName.toLowerCase() %>-jaeger:4317"
 <%_ } _%>
 
 secrets:
@@ -132,4 +141,12 @@ grafana:
   enabled: true
   adminUser: admin
   adminPassword: admin
+<%_ } _%>
+<%_ if (distributedTracingZipkin) { _%>
+zipkin:
+  enabled: true
+<%_ } _%>
+<%_ if (distributedTracingJaeger) { _%>
+jaeger:
+  enabled: true
 <%_ } _%>

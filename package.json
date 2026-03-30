@@ -1,6 +1,6 @@
 {
   "name": "generator-jhipster-rust",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "A JHipster blueprint to generate Rust applications (monoliths and microservices) using Axum and Tokio.",
   "keywords": [
     "yeoman-generator",

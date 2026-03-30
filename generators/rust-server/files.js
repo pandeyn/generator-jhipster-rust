@@ -153,6 +153,12 @@ export const serverFiles = {
       templates: ['src/config/metrics_config.rs'],
     },
     {
+      // Distributed tracing files (microservices/gateway only)
+      condition: generator => generator.distributedTracingAny,
+      path: SERVER_RUST_DIR,
+      templates: ['src/config/tracing_config.rs'],
+    },
+    {
       // Circuit breaker files
       condition: generator => generator.circuitBreakerEnabled,
       path: SERVER_RUST_DIR,
@@ -255,6 +261,11 @@ export const serverFiles = {
       // Prometheus monitoring documentation
       condition: generator => generator.monitoringPrometheus,
       templates: ['docs/PROMETHEUS.md'],
+    },
+    {
+      // Distributed tracing documentation (microservices/gateway only)
+      condition: generator => generator.distributedTracingAny,
+      templates: ['docs/DISTRIBUTED_TRACING.md'],
     },
     {
       // Circuit breaker documentation
