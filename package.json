@@ -1,11 +1,11 @@
 {
   "name": "generator-jhipster-rust",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "A JHipster blueprint to generate Rust applications (monoliths and microservices) using Axum and Tokio.",
   "keywords": [
     "yeoman-generator",
     "jhipster-blueprint",
-    "jhipster-8",
+    "jhipster-9",
     "rust",
     "axum",
     "tokio",
@@ -51,7 +51,7 @@
     "vitest": "vitest"
   },
   "dependencies": {
-    "generator-jhipster": "8.11.0"
+    "generator-jhipster": "^9.0.0"
   },
   "devDependencies": {
     "ejs-lint": "2.0.1",
@@ -67,7 +67,7 @@
     "yeoman-test": ">=8.2.0"
   },
   "engines": {
-    "generator-jhipster": "8.11.0",
-    "node": "^18.19.0 || >= 20.6.1"
+    "generator-jhipster": "9.0.0",
+    "node": "^22.18.0 || >= 24.11.0"
   }
 }

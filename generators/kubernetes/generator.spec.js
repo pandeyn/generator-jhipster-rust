@@ -19,11 +19,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
     beforeAll(async function () {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
-        .withJHipsterConfig({
-          baseName: 'myApp',
-          skipClient: true,
-          ...defaultK8sConfig,
-        })
+        .withJHipsterConfig({ directoryPath: '.', baseName: 'myApp', skipClient: true, ...defaultK8sConfig })
         .withOptions({
           ignoreNeedlesError: true,
         })
@@ -63,6 +59,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'pgApp',
           applicationType: 'monolith',
           devDatabaseType: 'postgresql',
@@ -104,6 +101,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'mysqlApp',
           applicationType: 'monolith',
           devDatabaseType: 'mysql',
@@ -141,6 +139,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'mongoApp',
           applicationType: 'monolith',
           devDatabaseType: 'mongodb',
@@ -181,6 +180,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'oauthApp',
           applicationType: 'monolith',
           authenticationType: 'oauth2',
@@ -214,6 +214,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'microApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -264,6 +265,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'monitorApp',
           applicationType: 'monolith',
           monitoring: 'prometheus',
@@ -301,6 +303,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'noIngressApp',
           applicationType: 'monolith',
           skipClient: true,
@@ -329,6 +332,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'ingressApp',
           applicationType: 'monolith',
           skipClient: true,
@@ -362,6 +366,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'configApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -412,6 +417,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'vaultApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -465,6 +471,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'noVaultApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -504,6 +511,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'noExtK8s',
           applicationType: 'microservice',
           skipClient: true,
@@ -556,6 +564,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'zipkinK8s',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -596,6 +605,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'jaegerK8s',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -636,6 +646,7 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'monoTraceK8s',
           applicationType: 'monolith',
           distributedTracing: 'jaeger',

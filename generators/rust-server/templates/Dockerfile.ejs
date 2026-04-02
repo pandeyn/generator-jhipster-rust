@@ -8,13 +8,22 @@ FROM node:22-alpine AS client-builder
 
 WORKDIR /app/client
 
-# Copy package files and install dependencies
+# Copy package file and install dependencies
 COPY client/package.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --force
 
-# Copy client source and build for production
+# Copy client source and build for production.
+# Remove ESLintWebpackPlugin from webpack config — linting is done during
+# development, not needed in the production Docker image build.
 COPY client/ ./
-RUN npm run build -- --configuration=production
+RUN if [ -f webpack/webpack.common.js ]; then \
+      node -e " \
+        let f=require('fs').readFileSync('webpack/webpack.common.js','utf8'); \
+        f=f.replace(/const ESLintPlugin.*?\n/,''); \
+        f=f.replace(/new ESLintPlugin\(\{[^}]*\}\),?\s*/g,''); \
+        require('fs').writeFileSync('webpack/webpack.common.js',f);" ; \
+    fi && \
+    npm run webapp:prod
 
 <%_ } _%>
 # =============================================================================

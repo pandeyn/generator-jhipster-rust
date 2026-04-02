@@ -1,5 +1,5 @@
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
-import { SERVER_RUST_SRC_DIR } from '../generator-rust-constants.js';
+import { SERVER_RUST_SRC_DIR } from '../../../generator-rust-constants.js';
 
 export default class extends BaseApplicationGenerator {
   constructor(args, opts, features) {
@@ -51,7 +51,15 @@ export default class extends BaseApplicationGenerator {
 
   get [BaseApplicationGenerator.PREPARING_EACH_ENTITY]() {
     return this.asPreparingEachEntityTaskGroup({
-      async preparingEachEntityTemplateTask() {},
+      async enableAuthorityClient({ entity, application }) {
+        // JHipster 9 sets skipClient=true for Authority when backendType is not Spring Boot.
+        // Override this for Angular so it generates the Authority CRUD files needed by
+        // user-management-update. React/Vue Authority templates have issues with hyphenated
+        // baseNames so we only enable this for Angular.
+        if (entity.builtIn && entity.name === 'Authority' && application.clientFrameworkAngular) {
+          entity.skipClient = false;
+        }
+      },
     });
   }
 

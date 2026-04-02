@@ -17,7 +17,19 @@ export default class extends BaseApplicationGenerator {
 
   get [BaseApplicationGenerator.POST_WRITING]() {
     return this.asPostWritingTaskGroup({
-      async postWritingTemplateTask() {},
+      async addPopperDependency({ application }) {
+        // @popperjs/core is a peer dependency of @ng-bootstrap/ng-bootstrap and bootstrap.
+        // It must be explicitly listed so that npm install --legacy-peer-deps (used in
+        // the Dockerfile) resolves it correctly.
+        if (application.clientFrameworkAngular) {
+          const clientPackageJson = this.createStorage(this.destinationPath(application.clientRootDir, 'package.json'));
+          clientPackageJson.merge({
+            dependencies: {
+              '@popperjs/core': '2.11.8',
+            },
+          });
+        }
+      },
     });
   }
 }

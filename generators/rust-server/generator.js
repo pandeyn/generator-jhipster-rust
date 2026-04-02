@@ -1,5 +1,5 @@
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
-import { createNeedleCallback } from 'generator-jhipster/generators/base/support';
+import { createNeedleCallback } from 'generator-jhipster/generators/base-core/support';
 import { SERVER_RUST_SRC_DIR } from '../generator-rust-constants.js';
 import { entityFiles, serverFiles } from './files.js';
 
@@ -195,7 +195,7 @@ export default class extends BaseApplicationGenerator {
   }
 
   async beforeQueue() {
-    await this.dependsOnJHipster('bootstrap-application');
+    await this.dependsOnBootstrapApplication();
   }
 
   get [BaseApplicationGenerator.INITIALIZING]() {
@@ -216,6 +216,16 @@ export default class extends BaseApplicationGenerator {
         // Default to JWT authentication if no authentication type is specified
         if (!this.jhipsterConfig.authenticationType) {
           this.jhipsterConfig.authenticationType = 'jwt';
+        }
+        // Derive databaseType from devDatabaseType so JHipster correctly generates
+        // built-in entities (User, Authority) for the Angular client
+        const devDb = this.jhipsterConfig.devDatabaseType;
+        if (!this.jhipsterConfig.databaseType && devDb) {
+          if (['postgresql', 'mysql', 'mariadb', 'mssql', 'oracle', 'sqlite'].includes(devDb)) {
+            this.jhipsterConfig.databaseType = 'sql';
+          } else if (devDb === 'mongodb') {
+            this.jhipsterConfig.databaseType = 'mongodb';
+          }
         }
       },
     });

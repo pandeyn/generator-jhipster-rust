@@ -1,5 +1,5 @@
 import { asCommand } from 'generator-jhipster';
-import { command as jhipsterCommand } from 'generator-jhipster/generators/kubernetes-helm';
+import { command as jhipsterCommand } from 'generator-jhipster/generators/kubernetes/generators/helm';
 
 export default asCommand({
   options: {

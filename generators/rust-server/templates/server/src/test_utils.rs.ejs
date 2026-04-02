@@ -299,6 +299,7 @@ mod tests {
 <%_ } else if (devDatabaseTypePostgresql) { _%>
 //! Provides helpers for setting up test PostgreSQL database and test fixtures.
 
+use std::sync::OnceLock;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
@@ -310,39 +311,49 @@ use crate::models::NewUser;
 use crate::services::UserService;
 use crate::AppState;
 
-/// Creates a test database pool connected to a test database
+/// Stores the shared pool once migrations succeed. Using OnceLock instead of
+/// Once avoids poisoning — if the database isn't reachable on the first attempt
+/// each test will retry independently instead of cascading failures.
+static POOL: OnceLock<DbPool> = OnceLock::new();
+
+fn test_database_url() -> String {
+    std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| {
+            std::env::var("DATABASE_URL").map(|base_url| {
+                format!("{}_test", base_url)
+            })
+        })
+        .unwrap_or_else(|_| "postgres://<%= baseName %>@localhost:5432/<%= baseName %>_test".to_string())
+}
+
+/// Creates a test database pool connected to a test database.
 ///
 /// Uses the TEST_DATABASE_URL environment variable if set,
 /// otherwise falls back to DATABASE_URL with "_test" appended,
 /// or uses a default local PostgreSQL connection.
 pub fn create_test_pool() -> DbPool {
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| {
-            std::env::var("DATABASE_URL").map(|base_url| {
-                // Append _test to database name
-                format!("{}_test", base_url)
-            })
-        })
-        .unwrap_or_else(|_| "postgres://<%= baseName %>@localhost:5432/<%= baseName %>_test".to_string());
+    let pool = POOL.get_or_init(|| {
+        let database_url = test_database_url();
+        ensure_test_database_exists(&database_url);
 
-    // First, try to create the test database if it doesn't exist
-    ensure_test_database_exists(&database_url);
+        let manager = ConnectionManager::<PgConnection>::new(&database_url);
+        let pool = r2d2::Pool::builder()
+            .max_size(5)
+            .build(manager)
+            .expect("Failed to create test pool. Ensure PostgreSQL is running and accessible.");
 
-    let manager = ConnectionManager::<PgConnection>::new(&database_url);
-    let pool = r2d2::Pool::builder()
-        .max_size(5)
-        .build(manager)
-        .expect("Failed to create test pool. Ensure PostgreSQL is running and accessible.");
+        let mut conn = pool.get().expect("Failed to get connection");
+        conn.run_pending_migrations(MIGRATIONS)
+            .expect("Failed to run migrations");
 
-    // Run migrations
-    let mut conn = pool.get().expect("Failed to get connection");
-    conn.run_pending_migrations(MIGRATIONS)
-        .expect("Failed to run migrations");
+        pool
+    });
 
     // Clean up existing test data for isolation
+    let mut conn = pool.get().expect("Failed to get connection");
     clean_test_data(&mut conn);
 
-    pool
+    pool.clone()
 }
 
 /// Ensures the test database exists
@@ -396,6 +407,7 @@ fn clean_test_data(conn: &mut PgConnection) {
 <%_ } else if (devDatabaseTypeMysql) { _%>
 //! Provides helpers for setting up test MySQL database and test fixtures.
 
+use std::sync::OnceLock;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::mysql::MysqlConnection;
 use diesel::prelude::*;
@@ -407,39 +419,49 @@ use crate::models::NewUser;
 use crate::services::UserService;
 use crate::AppState;
 
+/// Stores the shared pool once migrations succeed. Using OnceLock instead of
+/// Once avoids poisoning — if the database isn't reachable on the first attempt
+/// each test will retry independently instead of cascading failures.
+static POOL: OnceLock<DbPool> = OnceLock::new();
+
+fn test_database_url() -> String {
+    std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| {
+            std::env::var("DATABASE_URL").map(|base_url| {
+                format!("{}_test", base_url)
+            })
+        })
+        .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>_test".to_string())
+}
+
 /// Creates a test database pool connected to a test database
 ///
 /// Uses the TEST_DATABASE_URL environment variable if set,
 /// otherwise falls back to DATABASE_URL with "_test" appended,
 /// or uses a default local MySQL connection.
 pub fn create_test_pool() -> DbPool {
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| {
-            std::env::var("DATABASE_URL").map(|base_url| {
-                // Append _test to database name
-                format!("{}_test", base_url)
-            })
-        })
-        .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/<%= baseName.toLowerCase() %>_test".to_string());
+    let pool = POOL.get_or_init(|| {
+        let database_url = test_database_url();
+        ensure_test_database_exists(&database_url);
 
-    // First, try to create the test database if it doesn't exist
-    ensure_test_database_exists(&database_url);
+        let manager = ConnectionManager::<MysqlConnection>::new(&database_url);
+        let pool = r2d2::Pool::builder()
+            .max_size(5)
+            .build(manager)
+            .expect("Failed to create test pool. Ensure MySQL is running and accessible.");
 
-    let manager = ConnectionManager::<MysqlConnection>::new(&database_url);
-    let pool = r2d2::Pool::builder()
-        .max_size(5)
-        .build(manager)
-        .expect("Failed to create test pool. Ensure MySQL is running and accessible.");
+        let mut conn = pool.get().expect("Failed to get connection");
+        conn.run_pending_migrations(MIGRATIONS)
+            .expect("Failed to run migrations");
 
-    // Run migrations
-    let mut conn = pool.get().expect("Failed to get connection");
-    conn.run_pending_migrations(MIGRATIONS)
-        .expect("Failed to run migrations");
+        pool
+    });
 
     // Clean up existing test data for isolation
+    let mut conn = pool.get().expect("Failed to get connection");
     clean_test_data(&mut conn);
 
-    pool
+    pool.clone()
 }
 
 /// Ensures the test database exists

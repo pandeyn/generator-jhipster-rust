@@ -93,8 +93,10 @@ config:
 
 secrets:
   JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
-<%_ if (devDatabaseTypePostgresql || devDatabaseTypeMysql) { _%>
+<%_ if (devDatabaseTypePostgresql) { _%>
   DB_PASSWORD: "postgres"
+<%_ } else if (devDatabaseTypeMysql) { _%>
+  DB_PASSWORD: "root"
 <%_ } _%>
 
 <%_ if (devDatabaseTypePostgresql) { _%>

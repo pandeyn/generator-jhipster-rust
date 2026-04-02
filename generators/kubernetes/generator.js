@@ -11,6 +11,10 @@ export default class extends KubernetesGenerator {
   }
 
   async beforeQueue() {
+    // Default directoryPath for JHipster 9 workspace model (single-app deployment)
+    if (!this.jhipsterConfig.directoryPath) {
+      this.jhipsterConfig.directoryPath = '.';
+    }
     await super.beforeQueue();
   }
 

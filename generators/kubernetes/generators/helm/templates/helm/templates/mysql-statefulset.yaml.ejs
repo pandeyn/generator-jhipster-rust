@@ -32,6 +32,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "<%= baseName.toLowerCase() %>.fullname" . }}-secret
                   key: DB_PASSWORD
+            - name: MYSQL_ROOT_HOST
+              value: "%"
             - name: MYSQL_DATABASE
               value: "<%= baseName.toLowerCase() %>"
           livenessProbe:

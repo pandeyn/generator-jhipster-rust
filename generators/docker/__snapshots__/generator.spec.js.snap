@@ -8,6 +8,9 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
   "docker/central-server-config/application-dev.yml": {
     "stateCleared": "modified",
   },
@@ -17,61 +20,31 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/central-server-config/application.yml": {
     "stateCleared": "modified",
   },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
   "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
     "stateCleared": "modified",
   },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/README.md": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/application.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/config/git2consul.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/consul.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/hazelcast-management-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/zipkin.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -88,6 +61,9 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
   "docker/central-server-config/application-dev.yml": {
     "stateCleared": "modified",
   },
@@ -97,10 +73,25 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/central-server-config/application.yml": {
     "stateCleared": "modified",
   },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
   "docker/consul.yml": {
     "stateCleared": "modified",
   },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
   "docker/services.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/sonar.yml": {
     "stateCleared": "modified",
   },
   "docker/vault-init/vault-init.sh": {
@@ -109,55 +100,10 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/vault.yml": {
     "stateCleared": "modified",
   },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/README.md": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/application.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/config/git2consul.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/consul.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/hazelcast-management-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/zipkin.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -174,61 +120,37 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
+  "docker/central-server-config/application.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
   "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
     "stateCleared": "modified",
   },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/README.md": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/application.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/config/git2consul.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/consul.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/hazelcast-management-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/zipkin.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -245,6 +167,9 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
   "docker/central-server-config/application-dev.yml": {
     "stateCleared": "modified",
   },
@@ -254,61 +179,31 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice with cons
   "docker/central-server-config/application.yml": {
     "stateCleared": "modified",
   },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
   "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
     "stateCleared": "modified",
   },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/README.md": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/application.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/config/git2consul.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/consul.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/hazelcast-management-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/zipkin.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -325,6 +220,9 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice without v
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/central-server-config/README.md": {
+    "stateCleared": "modified",
+  },
   "docker/central-server-config/application-dev.yml": {
     "stateCleared": "modified",
   },
@@ -334,61 +232,31 @@ exports[`SubGenerator docker of rust JHipster blueprint > microservice without v
   "docker/central-server-config/application.yml": {
     "stateCleared": "modified",
   },
+  "docker/config/git2consul.json": {
+    "stateCleared": "modified",
+  },
   "docker/consul.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/hazelcast-management-center.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
     "stateCleared": "modified",
   },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/zipkin.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/README.md": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/central-server-config/application.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/config/git2consul.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/consul.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/hazelcast-management-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/zipkin.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -408,43 +276,19 @@ exports[`SubGenerator docker of rust JHipster blueprint > monolith with kafka > 
   "docker/kafka.yml": {
     "stateCleared": "modified",
   },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/kafka.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -461,40 +305,19 @@ exports[`SubGenerator docker of rust JHipster blueprint > monolith without consu
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -511,40 +334,19 @@ exports[`SubGenerator docker of rust JHipster blueprint > monolith without kafka
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {
@@ -561,40 +363,19 @@ exports[`SubGenerator docker of rust JHipster blueprint > run > should succeed 1
   "docker/app.yml": {
     "stateCleared": "modified",
   },
+  "docker/postgresql.yml": {
+    "stateCleared": "modified",
+  },
+  "docker/prometheus/prometheus.yml": {
+    "stateCleared": "modified",
+  },
   "docker/services.yml": {
     "stateCleared": "modified",
   },
+  "docker/sonar.yml": {
+    "stateCleared": "modified",
+  },
   "package.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/app.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/JVM.json": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/dashboards/dashboard.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/grafana/provisioning/datasources/datasource.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/jhipster-control-center.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/monitoring.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/postgresql.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/prometheus/prometheus.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/services.yml": {
-    "stateCleared": "modified",
-  },
-  "src/main/docker/sonar.yml": {
     "stateCleared": "modified",
   },
   "template-file-docker": {

@@ -12,7 +12,7 @@ Helm is the recommended approach for Kubernetes deployments. It provides paramet
 ### Generating Helm Charts
 
 ```bash
-jhipster-rust kubernetes-helm
+jhipster-rust kubernetes:helm
 ```
 
 ### Configuration Prompts
@@ -252,7 +252,7 @@ kubectl apply -f k8s/app-ingress.yml
 
 ## Helm vs Raw Kubernetes Manifests
 
-| Feature            | `jhipster-rust kubernetes` | `jhipster-rust kubernetes-helm`    |
+| Feature            | `jhipster-rust kubernetes` | `jhipster-rust kubernetes:helm`    |
 | ------------------ | -------------------------- | ---------------------------------- |
 | Output format      | Plain YAML manifests       | Helm chart with values.yaml        |
 | Parameterization   | Hardcoded values           | `values.yaml` overrides            |

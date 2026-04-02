@@ -1,7 +1,7 @@
-import KubernetesHelmGenerator from 'generator-jhipster/generators/kubernetes-helm';
+import HelmGenerator from 'generator-jhipster/generators/kubernetes/generators/helm';
 import { helmChartFiles, helmConditionalTemplateFiles, helmScriptFiles, helmTemplateFiles } from './files.js';
 
-export default class extends KubernetesHelmGenerator {
+export default class extends HelmGenerator {
   constructor(args, opts, features) {
     super(args, opts, {
       ...features,
@@ -11,16 +11,20 @@ export default class extends KubernetesHelmGenerator {
   }
 
   async beforeQueue() {
+    // Default directoryPath for JHipster 9 workspace model (single-app deployment)
+    if (!this.jhipsterConfig.directoryPath) {
+      this.jhipsterConfig.directoryPath = '.';
+    }
     await super.beforeQueue();
   }
 
-  get [KubernetesHelmGenerator.INITIALIZING]() {
+  get [HelmGenerator.INITIALIZING]() {
     return {
       ...super.initializing,
     };
   }
 
-  get [KubernetesHelmGenerator.PROMPTING]() {
+  get [HelmGenerator.PROMPTING]() {
     return {
       async askForHelmConfig() {
         // Skip prompts if all K8s config is already set
@@ -107,19 +111,19 @@ export default class extends KubernetesHelmGenerator {
     };
   }
 
-  get [KubernetesHelmGenerator.CONFIGURING]() {
+  get [HelmGenerator.CONFIGURING]() {
     return {
       ...super.configuring,
     };
   }
 
-  get [KubernetesHelmGenerator.LOADING]() {
+  get [HelmGenerator.LOADING]() {
     return {
       ...super.loading,
     };
   }
 
-  get [KubernetesHelmGenerator.PREPARING]() {
+  get [HelmGenerator.PREPARING]() {
     return {
       ...super.preparing,
       async preparingRustHelmTask() {
@@ -174,7 +178,7 @@ export default class extends KubernetesHelmGenerator {
     };
   }
 
-  get [KubernetesHelmGenerator.WRITING]() {
+  get [HelmGenerator.WRITING]() {
     return {
       async writingRustHelmTemplates() {
         const baseName = this.jhipsterConfig.baseName || 'app';
@@ -214,7 +218,7 @@ export default class extends KubernetesHelmGenerator {
     };
   }
 
-  get [KubernetesHelmGenerator.END]() {
+  get [HelmGenerator.END]() {
     return {
       async logRustHelmSuccess() {
         const baseName = (this.jhipsterConfig.baseName || 'app').toLowerCase();

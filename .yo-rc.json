@@ -5,7 +5,7 @@
     "cli": true,
     "entities": [],
     "generators": {
-      "bootstrap-application": {
+      "base-application:bootstrap": {
         "command": false,
         "priorities": [
           "initializing",
@@ -130,10 +130,22 @@
         "written": true
       }
     },
-    "jhipsterVersion": "8.11.0",
+    "jhipsterVersion": "9.0.0",
     "localBlueprint": false,
     "packageJsonType": "module",
     "sampleWritten": true,
-    "subGenerators": ["bootstrap-application", "ci-cd", "client", "common", "cypress", "docker", "entity", "languages", "server"]
+    "subGenerators": [
+      "base-application:bootstrap",
+      "ci-cd",
+      "client",
+      "common",
+      "cypress",
+      "docker",
+      "entity",
+      "kubernetes",
+      "kubernetes:helm",
+      "languages",
+      "server"
+    ]
   }
 }

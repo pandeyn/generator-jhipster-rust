@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { defaultHelpers as helpers, result } from 'generator-jhipster/testing';
 
-const SUB_GENERATOR = 'kubernetes-helm';
+const SUB_GENERATOR = 'kubernetes:helm';
 const BLUEPRINT_NAMESPACE = `jhipster:${SUB_GENERATOR}`;
 
 const defaultHelmConfig = {
@@ -20,11 +20,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
     beforeAll(async function () {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
-        .withJHipsterConfig({
-          baseName: 'myApp',
-          skipClient: true,
-          ...defaultHelmConfig,
-        })
+        .withJHipsterConfig({ directoryPath: '.', baseName: 'myApp', skipClient: true, ...defaultHelmConfig })
         .withOptions({
           ignoreNeedlesError: true,
         })
@@ -90,6 +86,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'pgApp',
           applicationType: 'monolith',
           devDatabaseType: 'postgresql',
@@ -127,6 +124,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'mysqlApp',
           applicationType: 'monolith',
           devDatabaseType: 'mysql',
@@ -159,6 +157,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'mongoApp',
           applicationType: 'monolith',
           devDatabaseType: 'mongodb',
@@ -195,6 +194,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'oauthApp',
           applicationType: 'monolith',
           authenticationType: 'oauth2',
@@ -227,6 +227,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'microApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -267,6 +268,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'monitorApp',
           applicationType: 'monolith',
           monitoring: 'prometheus',
@@ -304,6 +306,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'ingressApp',
           applicationType: 'monolith',
           skipClient: true,
@@ -339,6 +342,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'hpaApp',
           applicationType: 'monolith',
           skipClient: true,
@@ -372,6 +376,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'configApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -420,6 +425,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'vaultApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -473,6 +479,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'noVaultApp',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -516,6 +523,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'noExtHelm',
           applicationType: 'microservice',
           skipClient: true,
@@ -572,6 +580,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'zipkinHelm',
           applicationType: 'microservice',
           serviceDiscoveryType: 'consul',
@@ -617,6 +626,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'jaegerHelm',
           applicationType: 'gateway',
           serviceDiscoveryType: 'consul',
@@ -661,6 +671,7 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       await helpers
         .run(BLUEPRINT_NAMESPACE)
         .withJHipsterConfig({
+          directoryPath: '.',
           baseName: 'monoTraceHelm',
           applicationType: 'monolith',
           distributedTracing: 'jaeger',

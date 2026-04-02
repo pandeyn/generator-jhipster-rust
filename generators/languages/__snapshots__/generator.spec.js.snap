@@ -5,38 +5,5 @@ exports[`SubGenerator languages of rust JHipster blueprint > run > should succee
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
-  "client/src/i18n/en/activate.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/error.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/global.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/home.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/login.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/password.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/register.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/reset.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/sessions.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/settings.json": {
-    "stateCleared": "modified",
-  },
-  "client/src/i18n/en/user-management.json": {
-    "stateCleared": "modified",
-  },
 }
 `;

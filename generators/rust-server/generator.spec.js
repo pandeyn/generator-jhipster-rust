@@ -18,8 +18,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -117,8 +117,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -182,8 +182,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -219,8 +219,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -261,8 +261,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -297,8 +297,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -381,8 +381,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -429,8 +429,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -513,8 +513,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -557,8 +557,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -602,8 +602,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -638,8 +638,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -678,8 +678,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -726,8 +726,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -784,8 +784,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -833,8 +833,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -924,8 +924,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -968,8 +968,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1039,8 +1039,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1082,8 +1082,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1184,8 +1184,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1232,8 +1232,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1288,8 +1288,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1331,8 +1331,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1410,8 +1410,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1470,8 +1470,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1527,8 +1527,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {
@@ -1574,8 +1574,8 @@ describe('SubGenerator rust-server of rust JHipster blueprint', () => {
           ignoreNeedlesError: true,
           blueprint: ['rust'],
         })
-        .withJHipsterLookup()
-        .withParentBlueprintLookup();
+        .withJHipsterGenerators()
+        .withConfiguredBlueprint();
     });
 
     it('should succeed', () => {

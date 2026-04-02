@@ -21,6 +21,11 @@ export const serverFiles = {
       condition: generator => !generator.devDatabaseTypeMongodb,
       templates: ['diesel.toml'],
     },
+    {
+      // Serialize tests for shared-database backends
+      condition: generator => generator.devDatabaseTypePostgresql || generator.devDatabaseTypeMysql,
+      templates: ['.cargo/config.toml'],
+    },
   ],
   docker: [
     {

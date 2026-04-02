@@ -219,7 +219,10 @@ impl CircuitBreakerService {
         }
 
         let mut breakers = self.breakers.write().await;
-        if let Some(breaker) = breakers.get_mut(service_name) {
+        let breaker = breakers
+            .entry(service_name.to_string())
+            .or_insert_with(CircuitBreakerState::new);
+        {
             breaker.metrics.record_success();
 <%_ if (monitoringPrometheus) { _%>
             cb_metrics::record_success(service_name);
@@ -649,11 +652,13 @@ mod tests {
             service.record_failure("test-service").await;
         }
 
-        // First request transitions to half-open
+        // First request transitions from OPEN to HALF_OPEN (does not count against limit)
         assert!(service.is_request_allowed("test-service").await.is_ok());
-        // Second request allowed (within limit)
+        // Second request allowed (half_open_calls: 0 -> 1, within limit)
         assert!(service.is_request_allowed("test-service").await.is_ok());
-        // Third request should be rejected (exceeds limit)
+        // Third request allowed (half_open_calls: 1 -> 2, within limit)
+        assert!(service.is_request_allowed("test-service").await.is_ok());
+        // Fourth request should be rejected (exceeds limit)
         let result = service.is_request_allowed("test-service").await;
         assert!(matches!(result, Err(CircuitBreakerError::HalfOpenRejected(_))));
     }
