@@ -1,0 +1,3 @@
+-- Add <%= columnName %> column to <%= entityTableName %> for <%= relationshipName %> relationship
+ALTER TABLE <%= entityTableName %> ADD COLUMN <%= columnName %> INTEGER REFERENCES <%= otherEntityTableName %>(id);
+CREATE INDEX idx_<%= entityTableName %>_<%= columnName %> ON <%= entityTableName %>(<%= columnName %>);

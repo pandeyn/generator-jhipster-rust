@@ -53,6 +53,9 @@ exports[`SubGenerator client of rust JHipster blueprint > run > should succeed 1
   "client/proxy.config.mjs": {
     "stateCleared": "modified",
   },
+  "client/scripts/copy-swagger-ui-assets.cjs": {
+    "stateCleared": "modified",
+  },
   "client/src/404.html": {
     "stateCleared": "modified",
   },
@@ -783,6 +786,9 @@ exports[`SubGenerator client of rust JHipster blueprint > run > should succeed 1
     "stateCleared": "modified",
   },
   "client/src/robots.txt": {
+    "stateCleared": "modified",
+  },
+  "client/src/swagger-ui/.gitignore": {
     "stateCleared": "modified",
   },
   "client/src/swagger-ui/index.html": {

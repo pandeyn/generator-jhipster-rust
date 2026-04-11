@@ -8,7 +8,7 @@ export default asCommand({
         type: String,
       },
       prompt: {
-        type: 'list',
+        type: 'select',
         message: `Which ${chalk.yellow('*authentication type*')} would you like to use?`,
       },
       choices: [
@@ -23,7 +23,7 @@ export default asCommand({
         description: 'Service discovery type for microservices architecture',
       },
       prompt: generator => ({
-        type: 'list',
+        type: 'select',
         message: `Which ${chalk.yellow('*service discovery*')} would you like to use?`,
         when: ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType),
       }),
@@ -53,7 +53,7 @@ export default asCommand({
         type: String,
       },
       prompt: {
-        type: 'list',
+        type: 'select',
         message: `Which ${chalk.yellow('*database*')} would you like to use?`,
       },
       choices: [
@@ -93,7 +93,7 @@ export default asCommand({
         description: 'Message broker for asynchronous messaging',
       },
       prompt: {
-        type: 'list',
+        type: 'select',
         message: `Would you like to use a ${chalk.yellow('*message broker*')} for asynchronous messaging?`,
       },
       choices: [
@@ -108,7 +108,7 @@ export default asCommand({
         description: 'Monitoring solution for metrics collection',
       },
       prompt: {
-        type: 'list',
+        type: 'select',
         message: `Would you like to enable ${chalk.yellow('*monitoring*')} for your application?`,
       },
       choices: [
@@ -123,7 +123,7 @@ export default asCommand({
         description: 'Distributed tracing solution for microservices',
       },
       prompt: generator => ({
-        type: 'list',
+        type: 'select',
         message: `Would you like to enable ${chalk.yellow('*distributed tracing*')} for your application?`,
         when: ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType),
       }),
@@ -140,7 +140,7 @@ export default asCommand({
         description: 'Secrets management solution for secure credentials storage',
       },
       prompt: generator => ({
-        type: 'list',
+        type: 'select',
         message: `Would you like to use a ${chalk.yellow('*secrets management*')} solution?`,
         when:
           ['gateway', 'microservice'].includes(generator.jhipsterConfigWithDefaults.applicationType) &&

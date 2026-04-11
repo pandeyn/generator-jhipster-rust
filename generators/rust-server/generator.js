@@ -1,6 +1,15 @@
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
 import { createNeedleCallback } from 'generator-jhipster/generators/base-core/support';
-import { SERVER_RUST_SRC_DIR } from '../generator-rust-constants.js';
+
+import {
+  SERVER_RUST_SRC_DIR,
+  backfillRelationshipForRust,
+  bumpMigrationTimestamp,
+  fixBlueprintPackagePath,
+  runDieselMigrations,
+  rustEntityFileName,
+} from '../generator-rust-constants.js';
+
 import { entityFiles, serverFiles } from './files.js';
 
 const rustFieldTypes = {
@@ -192,10 +201,17 @@ function toSnakeCase(str) {
 export default class extends BaseApplicationGenerator {
   constructor(args, opts, features) {
     super(args, opts, { ...features, queueCommandTasks: true });
+    fixBlueprintPackagePath(this);
   }
 
   async beforeQueue() {
     await this.dependsOnBootstrapApplication();
+    // Server bootstrap populates entity properties (persistClass, entityClass,
+    // entityTableName, joinTable, otherEntityTableName, etc.) that our entity
+    // templates depend on. Without this, those properties are undefined when the
+    // rust-server generator is invoked outside the full app composition chain
+    // (e.g. via test helpers or with skipClient/clientFramework: 'no').
+    await this.dependsOnBootstrap('server');
   }
 
   get [BaseApplicationGenerator.INITIALIZING]() {
@@ -484,6 +500,14 @@ pub use ${rustModuleName}_dto::*;`,
     });
   }
 
+  get [BaseApplicationGenerator.PREPARING_EACH_ENTITY_RELATIONSHIP]() {
+    return this.asPreparingEachEntityRelationshipTaskGroup({
+      async preparingEachEntityRelationshipTask({ entity, relationship }) {
+        backfillRelationshipForRust(entity, relationship);
+      },
+    });
+  }
+
   get [BaseApplicationGenerator.PREPARING_EACH_ENTITY_FIELD]() {
     return this.asPreparingEachEntityFieldTaskGroup({
       async preparingEachEntityFieldTask({ application, field }) {
@@ -576,7 +600,13 @@ pub use ${rustModuleName}_dto::*;`,
   get [BaseApplicationGenerator.WRITING_ENTITIES]() {
     return this.asWritingEntitiesTaskGroup({
       async writingEntitiesTemplateTask({ application, entities }) {
-        for (const entity of entities.filter(entity => !entity.skipServer && !entity.builtIn)) {
+        if (application.devDatabaseTypeMongodb) {
+          // MongoDB has no SQL migrations; only generate the entity files via writeFiles below.
+        }
+        const entityList = entities.filter(entity => !entity.skipServer && !entity.builtIn);
+
+        // First pass: write the entity source files and their CREATE TABLE migrations.
+        for (const entity of entityList) {
           // Use entity's changelogDate for migration timestamp to ensure consistency across regenerations
           // This prevents duplicate migrations when regenerating entities
           entity.migrationTimestamp = entity.changelogDate;
@@ -585,6 +615,8 @@ pub use ${rustModuleName}_dto::*;`,
             sections: entityFiles,
             context: { ...application, ...entity },
           });
+
+          if (application.devDatabaseTypeMongodb) continue;
 
           // Generate entity migration only if it doesn't already exist
           const migrationDir = `migrations/${entity.migrationTimestamp}_create_${entity.entityTableName}`;
@@ -601,6 +633,40 @@ pub use ${rustModuleName}_dto::*;`,
             this.log.info(`Migration for ${entity.entityClass} already exists, skipping...`);
           }
         }
+
+        if (application.devDatabaseTypeMongodb) return;
+
+        // Second pass: write join-table migrations for many-to-many relationships.
+        // These must run AFTER all entity CREATE TABLE migrations because the join
+        // table FKs reference both endpoint tables. We give them timestamps strictly
+        // greater than the maximum entity changelogDate so the diesel CLI applies
+        // them last regardless of how the entity timestamps interleave.
+        const maxEntityTimestamp = entityList.reduce(
+          (max, entity) => (entity.migrationTimestamp > max ? entity.migrationTimestamp : max),
+          '0',
+        );
+        let joinTableCounter = 0;
+        for (const entity of entityList) {
+          const m2mRelationships = (entity.relationships || []).filter(
+            r => r.relationshipType === 'many-to-many' && r.relationshipLeftSide,
+          );
+          for (const rel of m2mRelationships) {
+            if (!rel.joinTable?.name) continue;
+            joinTableCounter += 1;
+            const joinTimestamp = bumpMigrationTimestamp(maxEntityTimestamp, joinTableCounter);
+            const joinDir = `migrations/${joinTimestamp}_create_${rel.joinTable.name}`;
+            const joinUpPath = `${joinDir}/up.sql`;
+            if (this.existsDestination(joinUpPath)) continue;
+            const joinContext = {
+              ...application,
+              entityTableName: entity.entityTableName,
+              otherEntityTableName: rel.otherEntityTableName || rel.otherEntity?.entityTableName,
+              joinTableName: rel.joinTable.name,
+            };
+            await this.writeFile(this.templatePath('migrations/join_table/up.sql.ejs'), joinUpPath, joinContext);
+            await this.writeFile(this.templatePath('migrations/join_table/down.sql.ejs'), `${joinDir}/down.sql`, joinContext);
+          }
+        }
       },
     });
   }
@@ -609,7 +675,11 @@ pub use ${rustModuleName}_dto::*;`,
     return this.asPostWritingEntitiesTaskGroup({
       async postWritingEntitiesTemplateTask({ application, entities, source }) {
         for (const entity of entities.filter(entity => !entity.skipServer && !entity.builtIn)) {
-          const { entityFileName, entityApiUrl, entityClass } = entity;
+          // entityFileName is set by JHipster's *client* generator, so it is undefined
+          // when no client framework is selected. Resolve a snake_case file name from
+          // a property that is always populated by base entity preparation.
+          const entityFileName = rustEntityFileName(entity);
+          const { entityApiUrl, entityClass } = entity;
 
           source.addEntityToRustModels({ entityFileName });
           source.addEntityToRustHandlers({ entityFileName });
@@ -624,6 +694,16 @@ pub use ${rustModuleName}_dto::*;`,
             source.addEntityToOpenApiTags({ entityApiUrl, entityClass });
           }
         }
+      },
+    });
+  }
+
+  get [BaseApplicationGenerator.END]() {
+    return this.asEndTaskGroup({
+      async runRustDieselMigrations({ application }) {
+        // Skip for MongoDB - it doesn't use diesel migrations.
+        if (application.devDatabaseTypeMongodb) return;
+        runDieselMigrations(this);
       },
     });
   }

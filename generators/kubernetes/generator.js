@@ -1,4 +1,7 @@
 import KubernetesGenerator from 'generator-jhipster/generators/kubernetes';
+
+import { fixBlueprintPackagePath } from '../generator-rust-constants.js';
+
 import { kubernetesFiles } from './files.js';
 
 export default class extends KubernetesGenerator {
@@ -8,6 +11,7 @@ export default class extends KubernetesGenerator {
       queueCommandTasks: true,
       checkBlueprint: true,
     });
+    fixBlueprintPackagePath(this);
   }
 
   async beforeQueue() {
@@ -44,7 +48,7 @@ export default class extends KubernetesGenerator {
             default: this.jhipsterConfig.kubernetesNamespace || 'default',
           },
           {
-            type: 'list',
+            type: 'select',
             name: 'kubernetesServiceType',
             message: 'What should we use for the Kubernetes service type?',
             choices: [
@@ -57,7 +61,7 @@ export default class extends KubernetesGenerator {
           },
           {
             when: answers => answers.kubernetesServiceType === 'Ingress',
-            type: 'list',
+            type: 'select',
             name: 'ingressType',
             message: 'Which ingress controller do you want to use?',
             choices: [

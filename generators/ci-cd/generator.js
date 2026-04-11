@@ -1,5 +1,7 @@
 import CiCdGenerator from 'generator-jhipster/generators/ci-cd';
 
+import { fixBlueprintPackagePath } from '../generator-rust-constants.js';
+
 export default class extends CiCdGenerator {
   constructor(args, opts, features) {
     super(args, opts, {
@@ -9,6 +11,7 @@ export default class extends CiCdGenerator {
       // Dropped it once migration is done.
       jhipster7Migration: true,
     });
+    fixBlueprintPackagePath(this);
   }
 
   async beforeQueue() {

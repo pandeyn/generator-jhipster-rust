@@ -289,6 +289,16 @@ function toSnakeCase(str) {
     .replace(/^_/, '');
 }
 
+// Resolve a snake_case file name for the entity. Prefer JHipster's standard
+// `entityNameKebabCase` (always populated by base entity preparation), then fall
+// back to client-derived `entityFileName`, then to the entity instance/name.
+// `entityFileName` alone breaks when the client generator does not run (e.g. when
+// `clientFramework: 'no'` or `skipClient: true`).
+function resolveEntityFileName(data) {
+  const source = data.entityNameKebabCase || data.entityFileName || data.entityInstance || data.name;
+  return toSnakeCase(source);
+}
+
 export const entityFiles = {
   server: [
     {
@@ -296,7 +306,7 @@ export const entityFiles = {
       condition: generator => !generator.devDatabaseTypeMongodb,
       path: SERVER_RUST_DIR,
       renameTo: (data, filepath) => {
-        const snakeCaseName = toSnakeCase(data.entityFileName);
+        const snakeCaseName = resolveEntityFileName(data);
         // Replace _entityFileName_ pattern and ensure proper snake_case with underscores
         const result = filepath
           .replace(/_entityFileName_service/g, `${snakeCaseName}_service`)
@@ -316,7 +326,7 @@ export const entityFiles = {
       condition: generator => generator.devDatabaseTypeMongodb,
       path: SERVER_RUST_DIR,
       renameTo: (data, filepath) => {
-        const snakeCaseName = toSnakeCase(data.entityFileName);
+        const snakeCaseName = resolveEntityFileName(data);
         // Replace _entityFileName_ pattern and handle MongoDB-specific files
         const result = filepath
           .replace(/_entityFileName_service_mongodb/g, `${snakeCaseName}_service`)

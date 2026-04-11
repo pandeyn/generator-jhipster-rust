@@ -1,3 +1,301 @@
+# Release Notes - v0.9.7
+
+## Overview
+
+JHipster Rust Blueprint v0.9.7 is the **largest release since v0.9.0**. It upgrades the blueprint to **JHipster 9.0.0** (from 8.11.0), which brings a significant number of upstream breaking changes — new sub-generator namespaces, a reorganised support module layout, a workspace-oriented client layout (`client/` subfolder), the Angular 17+ Vite-based dev server, and renamed Angular component files. On top of the upgrade work, the release hardens entity generation across all four supported databases (SQLite, PostgreSQL, MySQL, MongoDB), fixes a long list of bugs that surfaced when generating sample projects with non-trivial relationships, restores the standard `npm start` / `docker build` / `cargo build && cargo run` workflows end-to-end, and lands 44 new regression tests so the same issues do not come back.
+
+Every generator in the blueprint (`rust-server`, `client`, `common`, `server`, `entity`, `docker`, `languages`, `cypress`, `ci-cd`, `kubernetes`, `kubernetes:helm`, and the new `base-application:bootstrap`) was touched during the upgrade; every test snapshot was regenerated; and both existing and new sample projects (SQLite/Angular, MySQL/React, PostgreSQL/Angular, MongoDB/Angular) were regression-tested end to end — generation, compilation, migrations, server startup, and the Angular UI.
+
+## What's New in v0.9.7
+
+### Upgrade to JHipster 9.0.0
+
+JHipster 9 is a major upstream release with a number of breaking changes that required updates across every generator in this blueprint. If you are maintaining a private fork of the blueprint or you built tooling against the v0.8.x / v0.9.x APIs, the items below are the ones you will care about.
+
+#### Dependency and engine bumps
+
+| Field                         | v0.9.6                    | v0.9.7                     |
+| ----------------------------- | ------------------------- | -------------------------- |
+| `generator-jhipster`          | `8.11.0`                  | `^9.0.0`                   |
+| `engines.generator-jhipster`  | `8.11.0`                  | `9.0.0`                    |
+| `engines.node`                | `^18.19.0 \|\| >= 20.6.1` | `^22.18.0 \|\| >= 24.11.0` |
+| `keywords`                    | `jhipster-8`              | `jhipster-9`               |
+| `.yo-rc.json` jhipsterVersion | `8.11.0`                  | `9.0.0`                    |
+
+Node 18 and Node 20 are no longer supported — Node 22.18+ or Node 24.11+ is required. This matches the baseline JHipster 9 supports.
+
+#### Sub-generator namespace restructuring
+
+JHipster 9 renamed several sub-generators and introduced the `<parent>:<child>` namespace convention. The blueprint's sub-generator directories were reorganised to match:
+
+| v0.9.6                                       | v0.9.7                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| `generators/bootstrap-application/`          | `generators/base-application/generators/bootstrap/`                             |
+| `generators/kubernetes-helm/`                | `generators/kubernetes/generators/helm/`                                        |
+| `dependsOnJHipster('bootstrap-application')` | `dependsOnBootstrapApplication()` (shorthand) or `dependsOnBootstrap('server')` |
+| `generator-jhipster/generators/base/support` | `generator-jhipster/generators/base-core/support`                               |
+| CLI: `jhipster-rust kubernetes-helm`         | CLI: `jhipster-rust kubernetes:helm`                                            |
+
+The `.yo-rc.json` `generators` block and `subGenerators` list were updated accordingly, and the `docs/KUBERNETES.md` instructions now reference the new `jhipster-rust kubernetes:helm` command form.
+
+#### New `base-application:bootstrap` sub-generator
+
+JHipster 9 requires blueprints to contribute a dedicated `base-application:bootstrap` generator instead of stashing initialisation logic in the server entry point. The blueprint now ships one at `generators/base-application/generators/bootstrap/generator.js` that runs with `sbsBlueprint: true` and sets:
+
+- `jhipsterConfig.backendType = 'Rust'` (so the base JHipster generators know this isn't a Java/Spring Boot project)
+- `jhipsterConfig.withAdminUi = false`
+- `application.clientRootDir = 'client/'`, `application.clientSrcDir = 'client/src/'`, `application.clientTestDir = 'client/test/'` (the JHipster 9 workspace model — see below)
+- `application.rustServerRootDir = 'server/'`
+- For Angular specifically, forces Authority `skipClient = false` for `builtIn` authority entity so user-management UI renders correctly
+
+#### Workspace-oriented client layout (`client/` subfolder)
+
+JHipster 9 formalises the "client as a separate npm workspace" layout. In this blueprint:
+
+- The Angular / React / Vue client lives in `client/` (not at the project root as in v0.9.6)
+- Root `package.json` declares `"workspaces": ["client"]`
+- `docker/`, `migrations/`, `server/`, and `Cargo.toml` live at the project root next to the `client/` workspace
+- Diesel schema lives at `server/src/db/schema.rs`
+
+This is a **breaking change** for projects regenerated from v0.9.6 — source file locations under `client/src/**` have moved and the webapp build output is now at `server/dist/static/` instead of `target/static/`.
+
+#### Angular component file renames
+
+JHipster 9 drops the `.component.ts` / `.component.html` / `.component.scss` / `.component.spec.ts` file suffixes for Angular components. All generated Angular files now use the shorter forms: `activate.ts` / `activate.html` / `activate.spec.ts` instead of `activate.component.{ts,html,spec.ts}`. Every snapshot test was regenerated to match.
+
+#### Angular dev server and build pipeline
+
+- **Dev server**: `ng serve` in Angular 17+ uses **Vite** under the hood. A new `client/proxy.config.mjs` proxies `/api/*`, `/management/*`, and `/v3/api-docs` to the Rust backend on port 8080.
+- **Build plugins**: A new `client/build-plugins/` directory ships two esbuild plugins (`define-esbuild.ts`, `i18n-esbuild.ts`) that were previously Webpack loaders in v0.9.6.
+- **Lint config format**: `eslint.config.mjs` → `eslint.config.ts` (TypeScript flat config).
+- **Test runner**: Jest is gone (`jest.conf.js` removed); the blueprint now uses Vitest everywhere, consistent with JHipster 9's Angular defaults.
+- **Docker build**: The `client-builder` Dockerfile stage uses `npm install --force` (instead of `--legacy-peer-deps`) and invokes `npm run webapp:prod` (instead of `ng build --configuration=production`). A small inline Node script strips `ESLintWebpackPlugin` from any legacy webpack config that might still be around — linting runs during development, not during the container build.
+
+#### Kubernetes workspace-model workaround
+
+JHipster 9's kubernetes generator expects a workspace deployment model where multiple apps live under `<workspaceRoot>/<appName>/`. For single-app deployments the blueprint now sets `jhipsterConfig.directoryPath = '.'` in both `kubernetes/generator.js` and `kubernetes/generators/helm/generator.js` `beforeQueue` hooks, so the generated manifests resolve paths relative to the current project instead of a non-existent parent workspace.
+
+#### `backendType: 'Rust'` auto-inference
+
+Base JHipster 9 expects projects to declare their `backendType` so framework-specific generators (spring-boot, data-relational, etc.) can opt out. The `base-application:bootstrap` generator now sets `backendType = 'Rust'` during the configuring phase, preventing JHipster from trying to compose the Spring Boot backend generator when our blueprint is active.
+
+#### `databaseType` auto-derivation
+
+JHipster 9's server bootstrap generates built-in entities (`User`, `Authority`) only when `databaseType` is set. In v0.9.6 only `devDatabaseType` was captured from the prompt, which meant the built-in entities were skipped for React/Angular clients that needed them for user-management. The rust-server `configuring` task now derives `databaseType` from `devDatabaseType`:
+
+```js
+if (!this.jhipsterConfig.databaseType && devDb) {
+  if (['postgresql', 'mysql', 'mariadb', 'mssql', 'oracle', 'sqlite'].includes(devDb)) {
+    this.jhipsterConfig.databaseType = 'sql';
+  } else if (devDb === 'mongodb') {
+    this.jhipsterConfig.databaseType = 'mongodb';
+  }
+}
+```
+
+#### Rust-side improvements riding along with the upgrade
+
+While migrating to JHipster 9, a handful of Rust-side quality fixes were folded in:
+
+- **`.cargo/config.toml`** now forces `RUST_TEST_THREADS=1` for PostgreSQL and MySQL projects. Integration tests share a single database and are not isolated from each other, so they must run sequentially to avoid flakes on shared fixtures.
+- **`test_utils.rs`** was refactored to use `OnceLock<DbPool>` instead of `Once`. The old `Once`-based pool initialisation would poison on the first failure (e.g. DB not reachable) and cascade the failure into every subsequent test. With `OnceLock::get_or_init`, each test retries independently.
+- **Angular `@popperjs/core` dependency** is now explicitly listed in `client/package.json` for Angular projects. It's a peer dependency of `@ng-bootstrap/ng-bootstrap` and `bootstrap`, and `npm install --legacy-peer-deps` (used in the Dockerfile) wouldn't resolve it without an explicit entry.
+- **PostgreSQL and MySQL integration tests** consistent with the docker-compose credentials (`<baseName>` user with trust auth, not hardcoded `postgres:postgres`).
+
+### Multi-Database Entity Generation
+
+The blueprint now correctly generates compilable, runnable Rust code for monolith projects on **SQLite, PostgreSQL, MySQL, and MongoDB**. Previous versions had a number of latent issues that only manifested with non-default databases or non-trivial relationship topologies.
+
+#### `rust-server` now depends on the JHipster server bootstrap
+
+- **Root cause**: `rust-server` only called `dependsOnBootstrapApplication()`, which left the JHipster _server_ bootstrap unrun. Server bootstrap is what populates `entity.persistClass`, `entity.entityClass`, `relationship.otherEntityTableName`, `relationship.joinTable`, etc. Without it, every entity template that referenced one of those properties exploded.
+- **Fix**: Added `await this.dependsOnBootstrap('server')` in `rust-server/generator.js`'s `beforeQueue`. This ensures every code path that produces an entity (`jhipster-rust`, `jhipster-rust:rust-server`, `jhipster-rust:entity`) gets a fully populated entity object regardless of how it was invoked.
+
+#### Relationship property backfill (`backfillRelationshipForRust`)
+
+- **Root cause**: Even when server bootstrap runs, JHipster's `prepareRelationshipForDatabase` only sets `joinTable` for _SQL_ many-to-many relationships (`databaseTypeSql && relationshipManyToMany && ownerSide`). For MongoDB, `rel.joinTable` was undefined and the Rust MongoDB service template (which uses it as a link-collection name) crashed at `<%= rel.joinTable.name %>`. Similarly, `relationship.otherEntityTableName` was sometimes unset and produced broken SQL like `_id INTEGER NOT NULL REFERENCES (id) ON DELETE CASCADE`.
+- **Fix**: Introduced a shared `backfillRelationshipForRust(entity, relationship)` helper in `generator-rust-constants.js`. It mirrors `relationship.otherEntity.entityTableName` into `relationship.otherEntityTableName`, synthesises a `joinTable.name` for owner-side many-to-many, and normalises the join-table name to a single-underscore separator. Wired into `PREPARING_EACH_ENTITY_RELATIONSHIP` for both `rust-server` and the `entity` sub-generator. Applies uniformly to SQL **and** MongoDB.
+
+#### Rust file naming no longer depends on a client property
+
+- **Root cause**: `rust-server/files.js` and `postWritingEntitiesTemplateTask` derived `snake_case` file names from `entity.entityFileName`, which is set by JHipster's **client** generator (`client/entity.js:36`). With `clientFramework: 'no'` or `skipClient: true`, that property was undefined and `toSnakeCase(undefined)` crashed.
+- **Fix**: Added a shared `rustEntityFileName(entity)` helper that falls back to `entityNameKebabCase` (always populated by base entity preparation) → `entityFileName` → `entityInstance` → `name`. Wired into both `files.js` and `generator.js`'s POST_WRITING_ENTITIES task.
+
+### SQL Migration Generation
+
+#### Many-to-many join tables now live in their own migration files
+
+- **Root cause**: Join-table `CREATE TABLE` statements used to be inlined into the per-entity migration template (`migrations/entity/up.sql.ejs`). For a `Store ↔ Product` many-to-many, the Store migration tried to create `rel_store_products` with FKs to `store(id)` AND `product(id)`. Because Store's `changelogDate` is earlier than Product's, the FK to `product(id)` was evaluated before the `product` table existed:
+  - **PostgreSQL / MySQL**: silently refused the FK constraint, the join table was never created, and `cargo build` then failed because the model imports `crate::db::schema::rel_store_products` and `print-schema` skipped the missing table
+  - **SQLite**: tolerated it because FK enforcement is off by default — the bug was masked
+- **Fix**: New `migrations/join_table/up.sql.ejs` and `down.sql.ejs` templates. Each owner-side many-to-many emits its own migration directory with a deterministic timestamp computed as `bumpMigrationTimestamp(maxEntityChangelogDate, n)` — strictly greater than every entity's changelogDate, so the join-table migration always runs after both endpoint tables exist on every database. The entity templates no longer contain inline join-table SQL.
+
+#### ALTER TABLE migrations for new foreign-key columns on existing entities
+
+- **Root cause**: When a new entity was added that introduced a back-reference to an existing entity (e.g. adding `Order` with a one-to-many to `Product`, which gives `Product` a many-to-one back-reference and a new `order_id` column), the entity sub-generator regenerated the existing entity's model file with the new field but did NOT generate a migration to add the column to the existing table. The next `cargo build` failed with `cannot find type 'order_id' in module 'crate::db::schema::product'`.
+- **Fix**: The entity sub-generator's `WRITING_ENTITIES` task now scans existing migrations for FK columns of every many-to-one / owner-side one-to-one relationship. For each missing column it emits an `ALTER TABLE … ADD COLUMN … REFERENCES …` migration via the new `migrations/alter_add_column/up.sql.ejs` template, with a unique timestamp.
+
+#### `diesel migration run` now runs automatically in the END phase
+
+- **Root cause**: After writing entity migrations, the user had to manually run `diesel migration run` to update `server/src/db/schema.rs` before `cargo build` would succeed. Only the entity sub-generator did this — the rust-server full-generation flow left it as a manual step.
+- **Fix**: Extracted the migration runner into a shared `runDieselMigrations(generator)` helper and added an END task to `rust-server/generator.js` that invokes it. Mongo backends are automatically skipped. Fresh project generation now produces a project that compiles with a single `cargo build` (assuming a reachable database for PG/MySQL).
+
+### Diesel & DTO Improvements
+
+#### Diesel queries now use `Selectable::as_select()` for column-name matching
+
+- **Root cause**: The Diesel service template emitted `.load::<Entity>(conn)` and `.first::<Entity>(conn)` which use `Queryable`'s positional column matching. After an `ALTER TABLE ADD COLUMN` appended a new FK column to the end of an existing table, the model and schema fell out of position-order alignment and every query failed to compile with `the trait bound (...): CompatibleType<...>` errors.
+- **Fix**: All Diesel query sites in `services/_entityFileName_service.rs.ejs` now emit `.select(Entity::as_select()).load(conn)` / `.select(Entity::as_select()).first(conn)`. The `Selectable` derive matches columns by _name_ instead of position, so column ordering between the model struct and the actual table no longer matters. MongoDB service template is unaffected (it doesn't use Diesel).
+
+#### DTO fields with `snake_case` JHipster names now serialise correctly
+
+- **Root cause**: Every generated DTO struct had `#[serde(rename_all = "camelCase")]`, which converts a Rust field name like `customer_name` into the JSON key `customerName`. But when a user named a JHipster field `customer_name` (which JHipster preserves as-is), the React/Angular form sends `customer_name` in the request body and the Rust deserializer rejected it with `missing field 'customerName'`.
+- **Fix**: All three DTO structs (`<Entity>Dto`, `Create<Entity>Dto`, `Update<Entity>Dto`) now emit an explicit `#[serde(rename = "<jhipster_fieldName>")]` for fields whose JHipster name doesn't match what `rename_all = "camelCase"` would produce. CamelCase fields are unchanged (no redundant rename).
+
+#### `RelationshipId` deserializer now accepts string-encoded integer IDs
+
+- **Root cause**: React multi-selects emit `{id: "1"}` because HTML form values are always strings. The Rust `RelationshipId` deserializer was an untagged enum with only `Id(i32)` and `Object { id: i32 }` variants, so the string-typed `id` field was rejected with `data did not match any variant of untagged enum IdOrObject at line 1 column 69`. This affected all React-generated UIs trying to set many-to-many relationships.
+- **Fix**: Rewrote `RelationshipId::deserialize` and `deserialize_optional_relationship` in `dto/common.rs.ejs` to use a `parse_i32_value` helper that accepts both numeric (`1`) and string-encoded (`"1"`) integers via `serde_json::Value`. Works for React, Angular, and Vue clients without any frontend changes.
+
+### Client / Developer Experience
+
+#### Workspace-root `npm start` / `build` / `test` / `lint` scripts
+
+- **Root cause**: The blueprint puts the client in a `client/` workspace subfolder, but JHipster's base layout assumes the client lives at the project root. Users running `npm start` from the project root got `npm error Missing script: "start"` and had to `cd client && npm start` instead.
+- **Fix**: A new `addRootClientWorkspaceScripts` task in `client/generator.js`'s POST_WRITING phase forwards `start`, `build`, `test`, and `lint` from the workspace root to the `client/` workspace via `npm run -w client/ <script>`. Existing root scripts are not clobbered.
+
+#### React workspace overrides for `react-redux-loading-bar`
+
+- **Root cause**: Base JHipster's React generator wrote `"overrides": { "react-redux-loading-bar": { "react": "$react", "react-dom": "$react-dom" } }` to the **root** `package.json`. The `$react` self-reference only resolves when the same `package.json` declares `react` as a dependency, but in our workspace layout `react` lives in `client/package.json` — so npm install printed a long wall of `ERESOLVE overriding peer dependency` warnings about every package that pulled in React.
+- **Fix**: New `fixWorkspaceOverrides` task in `client/generator.js`'s `POST_WRITING_ENTITIES` phase reads the actual react / react-dom version from `client/package.json` and rewrites the root override entries with explicit version strings via `Storage.merge()`. Runs after the React generator's `clientBundler` task but before mem-fs commits to disk, so no overwrite-conflict prompt is triggered.
+
+#### Swagger UI dev-mode assets (Angular only)
+
+- **Root cause**: The Vite-based Angular dev server (Angular 17+) does not honor `angular.json` `assets` glob entries that source files from `node_modules/`. So when running `npm start`, the swagger UI iframe's required runtime files (`swagger-ui-bundle.js`, `swagger-ui-standalone-preset.js`, `swagger-ui.css`, `axios.min.js`) all returned 404 and the iframe at `/admin/docs` was blank around the Angular page chrome. Production builds were unaffected because the build pipeline copies the assets correctly.
+- **Fix**: A new `fixSwaggerUiDevAssets` task generates `client/scripts/copy-swagger-ui-assets.cjs` — a small helper that resolves `swagger-ui-dist/` and `axios/` via `require.resolve('<pkg>/package.json')` (works around the modern `exports` field that blocks direct `./dist/` subpath resolves) and copies the runtime files into `client/src/swagger-ui/` where the dev server happily serves them as plain static assets. The task adds `prestart` and `postinstall` lifecycle hooks to `client/package.json` to invoke the helper, plus a `client/src/swagger-ui/.gitignore` entry so the auto-copied files don't pollute `git status`. The fix is gated on `clientFrameworkAngular` — React/Vue projects are unaffected.
+
+#### Dockerfile fix for the swagger-ui postinstall hook
+
+- **Root cause**: The `client-builder` Dockerfile stage copies only `client/package.json` first (for layer caching), then runs `npm install --force`, then copies the rest of `client/`. The new postinstall hook referenced `scripts/copy-swagger-ui-assets.cjs` which didn't exist in the build context yet, aborting `docker build` with `Cannot find module '/app/client/scripts/copy-swagger-ui-assets.cjs'`.
+- **Fix**: The `Dockerfile.ejs` template now copies `client/scripts/` into the build context **before** `npm install`, gated on `clientFrameworkAngular`. React/Vue projects don't get the extra COPY layer.
+
+### Generator Hygiene
+
+#### "Could not retrieve version of blueprint" warnings silenced
+
+- **Root cause**: Yeoman sets `_meta.packagePath` to the package **directory**, but JHipster's `storeBlueprintVersion` feature does `readFileSync(this._meta.packagePath, 'utf8')` and expects a file path to `package.json`. The feature is enabled by default in `BaseApplicationGenerator` so every blueprint generator emitted `Could not retrieve version of blueprint 'jhipster-rust:<name>'` at startup.
+- **Fix**: `fixBlueprintPackagePath(generator)` helper in `generator-rust-constants.js` registers a `before:queueOwnTasks` listener (via `prependOnceListener` so it runs before JHipster's own handler) that appends `/package.json` to `_meta.packagePath` when it's a directory. Wired into the constructor of every generator in the blueprint.
+
+#### `list` → `select` prompt deprecation
+
+- **Root cause**: Inquirer's `list` prompt type is deprecated in favor of `select`, producing console noise like `` `list` prompt is deprecated. Use `select` prompt instead. ``
+- **Fix**: Updated all 11 prompt definitions across `rust-server/command.js`, `kubernetes/generator.js`, `kubernetes/generators/helm/generator.js`, and `.blueprint/generate-sample/command.mjs`.
+
+### Test Coverage
+
+44 new regression tests added across three new spec files (389 → **433 total**):
+
+| Test File                                          | New Tests | Coverage                                                                                                                                                                                             |
+| -------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generators/rust-server/entity-generation.spec.js` | **31**    | Cross-database entity generation matrix (sqlite, postgresql, mysql, mongodb): models, DTOs, migrations, join-table ordering, RelationshipId, Selectable, `snake_case` rename, MongoDB-specific paths |
+| `generators/client/dev-experience.spec.js`         | **8**     | Angular & React workspace scripts, swagger-ui dev helper, `.gitignore`, Dockerfile `COPY client/scripts` ordering, React workspace overrides, non-Angular gating                                     |
+| `generators/entity/regression.spec.js`             | **5**     | `jhipster-rust:entity` sub-generator paths: relationship backfill, join-table migration timestamps, `snake_case` DTO rename across all three DTO structs                                             |
+
+Each test maps directly to a session bug and includes an inline comment describing the original symptom — so a future regression of the same shape fails the build with a clear breadcrumb instead of producing broken sample projects.
+
+## Upgrade Notes
+
+### Breaking changes at a glance
+
+This is a **non-backward-compatible** release due to the JHipster 9 upstream upgrade. The blueprint itself cannot be consumed from a JHipster 8 host; existing projects generated by v0.9.6 or earlier will need to be regenerated against JHipster 9.
+
+Before you run `jhipster-rust` against a v0.9.6 project, verify your host environment:
+
+```bash
+node --version        # must be >= 22.18.0 or >= 24.11.0
+jhipster --version    # must report 9.0.0
+```
+
+If you were running the blueprint in a CI environment pinned to Node 18/20, you'll need to bump your CI image to Node 22+ as well.
+
+### Migrating an existing v0.9.6 project
+
+Because of the client-layout move (root → `client/` workspace) and the Angular component file renames, the safest path is a clean regeneration rather than an in-place upgrade:
+
+```bash
+# From your project root
+rm -rf client/ server/src/app/ target/static/ client-src/
+jhipster-rust --force
+```
+
+JHipster 9 writes generated files to the new workspace layout automatically, but stale files from the old layout will linger if you don't clean them up. Your `.yo-rc.json` will be updated in place; your `.jhipster/*.json` entity descriptors are preserved.
+
+If you were using `jhipster-rust kubernetes-helm`, update any automation to the new command name:
+
+```diff
+- jhipster-rust kubernetes-helm
++ jhipster-rust kubernetes:helm
+```
+
+### Sample project regeneration
+
+Existing projects generated by v0.9.6 should be regenerated with `jhipster-rust --force` to pick up both the JHipster 9 layout changes and the stability fixes landed in v0.9.7 (SQL migration restructuring, Selectable query rewrite, DTO `snake_case` rename behavior, etc.). After regeneration:
+
+```bash
+# SQLite — fully self-contained
+cargo build && cargo run
+
+# PostgreSQL / MySQL — start the bundled docker compose first
+docker compose -f docker/postgresql.yml up -d   # or mysql.yml
+cargo build && cargo run
+
+# MongoDB — same idea
+docker compose -f docker/mongodb.yml up -d
+cargo build && cargo run
+```
+
+`diesel migration run` is now invoked automatically in the END phase for SQL backends, so re-running `jhipster-rust --force` against an existing project will refresh `server/src/db/schema.rs` for you.
+
+### Existing many-to-many entities
+
+If your project already had many-to-many relationships generated with v0.9.6, the join-table SQL was inlined in the entity migration. After upgrading to v0.9.7 the entity migration template no longer emits inline join-tables, so you may want to:
+
+1. Drop the existing project's database (or `diesel migration revert --all`)
+2. Regenerate with `jhipster-rust --force`
+3. Run `diesel migration run` (or simply re-run `jhipster-rust --force` and let the END phase do it)
+
+For PostgreSQL / MySQL projects this also fixes the latent FK constraint that was silently dropped on the old layout.
+
+### Running the dev server (Angular)
+
+The `npm start` command now works from the project root (it forwards to the `client/` workspace). After `npm install` from the root, in two terminals:
+
+```bash
+# Terminal 1
+cargo run
+
+# Terminal 2
+npm start
+```
+
+The Angular dev server proxies `/api/*`, `/management/*`, and `/v3/api-docs` to the Rust backend on port 8080, and the swagger UI at `/admin/docs` now renders correctly thanks to the postinstall asset copy.
+
+### Running the Docker container
+
+The container is built and run in **production** mode by default (`APP_ENV=production`). In production, the dev ribbon and the API menu item are intentionally hidden — both are gated on the `dev` / `api-docs` JHipster profiles for security reasons (matching base JHipster Spring Boot behavior).
+
+To run the container with the dev ribbon and API menu item visible:
+
+```bash
+docker run -e APP_ENV=development -p 8181:8080 <image>:latest
+# or
+docker run -e APP_PROFILE=dev -p 8181:8080 <image>:latest
+```
+
+No rebuild is needed — `APP_ENV` / `APP_PROFILE` are read at runtime by `/management/info`.
+
+---
+
 # Release Notes - v0.9.6
 
 ## Overview

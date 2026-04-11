@@ -1,0 +1,24 @@
+<%_ if (devDatabaseTypePostgresql) { _%>
+-- Create join table for <%= entityTableName %> to <%= otherEntityTableName %> many-to-many relationship
+CREATE TABLE <%= joinTableName %> (
+    <%= entityTableName %>_id INTEGER NOT NULL REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
+    <%= otherEntityTableName %>_id INTEGER NOT NULL REFERENCES <%= otherEntityTableName %>(id) ON DELETE CASCADE,
+    PRIMARY KEY (<%= entityTableName %>_id, <%= otherEntityTableName %>_id)
+);
+<%_ } else if (devDatabaseTypeMysql) { _%>
+-- Create join table for <%= entityTableName %> to <%= otherEntityTableName %> many-to-many relationship
+CREATE TABLE <%= joinTableName %> (
+    <%= entityTableName %>_id INTEGER NOT NULL,
+    <%= otherEntityTableName %>_id INTEGER NOT NULL,
+    PRIMARY KEY (<%= entityTableName %>_id, <%= otherEntityTableName %>_id),
+    FOREIGN KEY (<%= entityTableName %>_id) REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
+    FOREIGN KEY (<%= otherEntityTableName %>_id) REFERENCES <%= otherEntityTableName %>(id) ON DELETE CASCADE
+);
+<%_ } else { _%>
+-- Create join table for <%= entityTableName %> to <%= otherEntityTableName %> many-to-many relationship
+CREATE TABLE <%= joinTableName %> (
+    <%= entityTableName %>_id INTEGER NOT NULL REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
+    <%= otherEntityTableName %>_id INTEGER NOT NULL REFERENCES <%= otherEntityTableName %>(id) ON DELETE CASCADE,
+    PRIMARY KEY (<%= entityTableName %>_id, <%= otherEntityTableName %>_id)
+);
+<%_ } _%>

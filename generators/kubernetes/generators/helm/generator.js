@@ -1,4 +1,7 @@
 import HelmGenerator from 'generator-jhipster/generators/kubernetes/generators/helm';
+
+import { fixBlueprintPackagePath } from '../../../generator-rust-constants.js';
+
 import { helmChartFiles, helmConditionalTemplateFiles, helmScriptFiles, helmTemplateFiles } from './files.js';
 
 export default class extends HelmGenerator {
@@ -8,6 +11,7 @@ export default class extends HelmGenerator {
       queueCommandTasks: true,
       checkBlueprint: true,
     });
+    fixBlueprintPackagePath(this);
   }
 
   async beforeQueue() {
@@ -45,7 +49,7 @@ export default class extends HelmGenerator {
             default: this.jhipsterConfig.kubernetesNamespace || 'default',
           },
           {
-            type: 'list',
+            type: 'select',
             name: 'kubernetesServiceType',
             message: 'What should we use for the Kubernetes service type?',
             choices: [
@@ -58,7 +62,7 @@ export default class extends HelmGenerator {
           },
           {
             when: answers => answers.kubernetesServiceType === 'Ingress',
-            type: 'list',
+            type: 'select',
             name: 'ingressType',
             message: 'Which ingress controller do you want to use?',
             choices: [

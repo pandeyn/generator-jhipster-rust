@@ -104,6 +104,12 @@ pub struct <%= entityClass %>Dto {
     pub id: i32,
 <%_ } _%>
 <%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ // If the JHipster fieldName uses snake_case (or anything other than camelCase), _%>
+    <%_ // override `rename_all = "camelCase"` so the JSON key matches what the React UI sends. _%>
+    <%_ const needsExplicitRename = field.fieldName !== field.fieldNameUnderscored.replace(/_(.)/g, (_, c) => c.toUpperCase()); _%>
+    <%_ if (needsExplicitRename) { _%>
+    #[serde(rename = "<%= field.fieldName %>")]
+    <%_ } _%>
     <%_ if (!field.fieldValidationRequired) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     <%_ } _%>
@@ -241,6 +247,10 @@ impl <%= entityClass %>Dto {
 #[serde(rename_all = "camelCase")]
 pub struct Create<%= entityClass %>Dto {
 <%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ const needsExplicitRename = field.fieldName !== field.fieldNameUnderscored.replace(/_(.)/g, (_, c) => c.toUpperCase()); _%>
+    <%_ if (needsExplicitRename) { _%>
+    #[serde(rename = "<%= field.fieldName %>")]
+    <%_ } _%>
     <%_ const isStringType = ['String', 'TextBlob'].includes(field.fieldType); _%>
     <%_ const isNumericType = ['Integer', 'Long', 'Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
     <%_ const isDateTimeType = ['Instant', 'ZonedDateTime'].includes(field.fieldType); _%>
@@ -323,6 +333,10 @@ impl Create<%= entityClass %>Dto {
 #[serde(rename_all = "camelCase")]
 pub struct Update<%= entityClass %>Dto {
 <%_ for (const field of fields.filter(f => !f.id)) { _%>
+    <%_ const needsExplicitRename = field.fieldName !== field.fieldNameUnderscored.replace(/_(.)/g, (_, c) => c.toUpperCase()); _%>
+    <%_ if (needsExplicitRename) { _%>
+    #[serde(rename = "<%= field.fieldName %>")]
+    <%_ } _%>
     <%_ const isStringType = ['String', 'TextBlob'].includes(field.fieldType); _%>
     <%_ const isNumericType = ['Integer', 'Long', 'Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
     <%_ const isDateTimeType = ['Instant', 'ZonedDateTime'].includes(field.fieldType); _%>

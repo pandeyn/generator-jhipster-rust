@@ -45,7 +45,7 @@ const command = {
       },
       prompt: gen => ({
         when: !gen.all && !gen.sampleName,
-        type: 'list',
+        type: 'select',
         message: 'which sample group do you want to lookup?',
         choices: async () => getGithubSamplesGroups(gen.templatePath(gen.samplesFolder ?? '')),
         default: DEFAULT_SAMPLES_GROUP,
@@ -58,7 +58,7 @@ const command = {
     sampleName: {
       prompt: gen => ({
         when: !gen.all,
-        type: 'list',
+        type: 'select',
         message: 'which sample do you want to generate?',
         choices: async answers => {
           const samples = await getGithubSamplesGroup(gen.templatePath(), answers.samplesGroup ?? gen.samplesGroup);

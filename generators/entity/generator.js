@@ -1,7 +1,15 @@
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import EntityGenerator from 'generator-jhipster/generators/entity';
+
+import {
+  backfillRelationshipForRust,
+  bumpMigrationTimestamp,
+  fixBlueprintPackagePath,
+  runDieselMigrations,
+} from '../generator-rust-constants.js';
 import { entityFiles } from '../rust-server/files.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -65,6 +73,54 @@ const sqliteColumnTypes = {
   ImageBlob: 'BLOB',
 };
 
+/**
+ * Convert a string to snake_case.
+ */
+function toSnakeCase(str) {
+  return str
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+}
+
+/**
+ * Check whether a column has already been created or added by any prior migration
+ * for the given entity table. Used to avoid emitting duplicate ALTER TABLE migrations
+ * when an existing entity is regenerated.
+ */
+function columnExistsInMigrations(migrationsDir, entityTableName, columnName) {
+  if (!existsSync(migrationsDir)) return false;
+  const migrationDirs = readdirSync(migrationsDir);
+  // Match the column as a whole word followed by whitespace (column definition)
+  const columnRegex = new RegExp(`\\b${columnName}\\b\\s+`);
+  for (const dir of migrationDirs) {
+    const upPath = join(migrationsDir, dir, 'up.sql');
+    if (!existsSync(upPath)) continue;
+    const sql = readFileSync(upPath, 'utf8');
+    if (!sql.toLowerCase().includes(entityTableName.toLowerCase())) continue;
+    if (columnRegex.test(sql)) return true;
+  }
+  return false;
+}
+
+/**
+ * Generate a migration timestamp using the current time. The counter parameter is
+ * appended (modulo seconds) so multiple ALTER migrations created in a single run
+ * are guaranteed to sort after each other and after the entity's create migration.
+ */
+function nextAlterMigrationTimestamp(counter) {
+  const now = new Date(Date.now() + counter * 1000);
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+  return (
+    `${now.getUTCFullYear()}` +
+    `${pad(now.getUTCMonth() + 1)}` +
+    `${pad(now.getUTCDate())}` +
+    `${pad(now.getUTCHours())}` +
+    `${pad(now.getUTCMinutes())}` +
+    `${pad(now.getUTCSeconds())}`
+  );
+}
+
 export default class extends EntityGenerator {
   constructor(args, opts, features) {
     super(args, opts, {
@@ -73,6 +129,7 @@ export default class extends EntityGenerator {
       checkBlueprint: true,
       jhipster7Migration: true,
     });
+    fixBlueprintPackagePath(this);
   }
 
   async beforeQueue() {
@@ -178,12 +235,11 @@ export default class extends EntityGenerator {
   get [EntityGenerator.PREPARING_EACH_ENTITY_RELATIONSHIP]() {
     return this.asPreparingEachEntityRelationshipTaskGroup({
       ...super.preparingEachEntityRelationship,
-      async preparingEachEntityRelationshipTemplateTask({ relationship }) {
-        // Fix join table naming to use single underscore instead of double underscore
-        // This avoids Rust's snake_case warning for module names like "rel_store__product"
-        if (relationship.joinTable && relationship.joinTable.name) {
-          relationship.joinTable.name = relationship.joinTable.name.replace('__', '_');
-        }
+      async preparingEachEntityRelationshipTemplateTask({ entity, relationship }) {
+        // Backfill the relationship properties our Rust templates depend on but
+        // that JHipster's server bootstrap may leave unset (joinTable for MongoDB
+        // many-to-many, otherEntityTableName when server bootstrap doesn't run).
+        backfillRelationshipForRust(entity, relationship);
       },
     });
   }
@@ -213,6 +269,10 @@ export default class extends EntityGenerator {
   get [EntityGenerator.WRITING_ENTITIES]() {
     return this.asWritingEntitiesTaskGroup({
       async writingEntitiesTask({ application, entities }) {
+        const migrationsDir = join(this.destinationPath(), 'migrations');
+        // Counter to keep ALTER migration timestamps unique across one generator run
+        let alterMigrationCounter = 0;
+
         for (const entity of entities.filter(e => !e.skipServer && !e.builtIn)) {
           // Write entity files (model, handler, service, dto)
           await this.writeFiles({
@@ -221,16 +281,13 @@ export default class extends EntityGenerator {
             rootTemplatesPath: RUST_SERVER_TEMPLATES_PATH,
           });
 
-          // Check if a migration for this entity already exists
-          const migrationsDir = join(this.destinationPath(), 'migrations');
+          // Check if a create migration for this entity already exists
           let migrationExists = false;
-
           if (existsSync(migrationsDir)) {
             const existingMigrations = readdirSync(migrationsDir);
             migrationExists = existingMigrations.some(m => m.includes(`_create_${entity.entityTableName}`));
           }
 
-          // Only generate migration if it doesn't exist
           if (!migrationExists) {
             // Use entity's changelogDate for migration timestamp to ensure consistency
             // This prevents duplicate migrations when regenerating entities
@@ -248,6 +305,84 @@ export default class extends EntityGenerator {
             this.log.info(`Created migration for ${entity.entityClass}`);
           } else {
             this.log.info(`Migration for ${entity.entityClass} already exists, skipping...`);
+
+            // For existing entities, detect new foreign-key columns introduced by new
+            // many-to-one or owner-side one-to-one relationships (typically created as
+            // back-references when a new entity is added) and emit ALTER TABLE migrations
+            // for any columns that are not yet present in any existing migration.
+            const fkRelationships = (entity.relationships || []).filter(
+              r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.relationshipLeftSide),
+            );
+            for (const rel of fkRelationships) {
+              const columnName = `${toSnakeCase(rel.relationshipName)}_id`;
+              const otherEntityTableName = rel.otherEntityTableName || rel.otherEntity?.entityTableName;
+              if (!otherEntityTableName) continue;
+              if (columnExistsInMigrations(migrationsDir, entity.entityTableName, columnName)) continue;
+
+              alterMigrationCounter += 1;
+              const alterTimestamp = nextAlterMigrationTimestamp(alterMigrationCounter);
+              const alterDir = `migrations/${alterTimestamp}_alter_${entity.entityTableName}_add_${columnName}`;
+              const context = {
+                entityTableName: entity.entityTableName,
+                columnName,
+                otherEntityTableName,
+                relationshipName: rel.relationshipName,
+              };
+              await this.writeFile(
+                join(RUST_SERVER_TEMPLATES_PATH, 'migrations/alter_add_column/up.sql.ejs'),
+                `${alterDir}/up.sql`,
+                context,
+              );
+              await this.writeFile(
+                join(RUST_SERVER_TEMPLATES_PATH, 'migrations/alter_add_column/down.sql.ejs'),
+                `${alterDir}/down.sql`,
+                context,
+              );
+              this.log.info(`Created alter migration to add ${columnName} to ${entity.entityTableName}`);
+            }
+          }
+        }
+
+        if (application.devDatabaseTypeMongodb) return;
+
+        // Write join-table migrations for many-to-many relationships in a separate
+        // migration file with a timestamp strictly greater than every entity's
+        // changelogDate. The join table FKs reference both endpoint tables, so the
+        // join migration must run AFTER both entity tables exist (otherwise strict
+        // FK enforcement on Postgres/MySQL rejects it).
+        const entityList = entities.filter(e => !e.skipServer && !e.builtIn);
+        const maxEntityTimestamp = entityList.reduce(
+          (max, e) => ((e.migrationTimestamp || e.changelogDate || '0') > max ? e.migrationTimestamp || e.changelogDate : max),
+          '0',
+        );
+        let joinTableCounter = 0;
+        for (const entity of entityList) {
+          const m2mRelationships = (entity.relationships || []).filter(
+            r => r.relationshipType === 'many-to-many' && r.relationshipLeftSide,
+          );
+          for (const rel of m2mRelationships) {
+            if (!rel.joinTable?.name) continue;
+            joinTableCounter += 1;
+            const joinTimestamp = bumpMigrationTimestamp(maxEntityTimestamp, joinTableCounter);
+            const joinDir = `migrations/${joinTimestamp}_create_${rel.joinTable.name}`;
+            const joinUpPath = `${joinDir}/up.sql`;
+            // Skip if a join-table migration for this relationship already exists.
+            const existingJoinMigration =
+              existsSync(migrationsDir) && readdirSync(migrationsDir).some(m => m.endsWith(`_create_${rel.joinTable.name}`));
+            if (existingJoinMigration) continue;
+            const joinContext = {
+              ...application,
+              entityTableName: entity.entityTableName,
+              otherEntityTableName: rel.otherEntityTableName || rel.otherEntity?.entityTableName,
+              joinTableName: rel.joinTable.name,
+            };
+            await this.writeFile(join(RUST_SERVER_TEMPLATES_PATH, 'migrations/join_table/up.sql.ejs'), joinUpPath, joinContext);
+            await this.writeFile(
+              join(RUST_SERVER_TEMPLATES_PATH, 'migrations/join_table/down.sql.ejs'),
+              `${joinDir}/down.sql`,
+              joinContext,
+            );
+            this.log.info(`Created join-table migration ${rel.joinTable.name}`);
           }
         }
       },
@@ -295,40 +430,10 @@ export default class extends EntityGenerator {
   get [EntityGenerator.END]() {
     return this.asEndTaskGroup({
       ...super.end,
-      async runDieselMigrations() {
-        // Run diesel migrations to update schema.rs after entity creation
-        // This ensures the schema includes the new entity table
-        const migrationsDir = this.destinationPath('migrations');
-        if (existsSync(migrationsDir)) {
-          this.log.info('Running diesel migrations to update schema.rs...');
-          try {
-            // Ensure the database directory exists
-            const dbDir = this.destinationPath('target/db');
-            if (!existsSync(dbDir)) {
-              const { mkdirSync } = await import('node:fs');
-              mkdirSync(dbDir, { recursive: true });
-            }
-
-            const { spawnSync } = await import('node:child_process');
-            const result = spawnSync('diesel', ['migration', 'run'], {
-              cwd: this.destinationPath(),
-              stdio: 'pipe',
-              encoding: 'utf-8',
-            });
-
-            if (result.status === 0) {
-              this.log.ok('Diesel migrations completed successfully. schema.rs has been updated.');
-            } else {
-              this.log.warn('Diesel migration failed. You may need to run "diesel migration run" manually.');
-              if (result.stderr) {
-                this.log.warn(result.stderr);
-              }
-            }
-          } catch (error) {
-            this.log.warn('Could not run diesel migrations automatically. Please run "diesel migration run" manually.');
-            this.log.warn(error.message);
-          }
-        }
+      async runRustDieselMigrations({ application }) {
+        // Skip for MongoDB - it doesn't use diesel migrations.
+        if (application?.devDatabaseTypeMongodb) return;
+        runDieselMigrations(this);
       },
     });
   }

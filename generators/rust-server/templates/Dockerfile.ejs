@@ -8,8 +8,16 @@ FROM node:22-alpine AS client-builder
 
 WORKDIR /app/client
 
-# Copy package file and install dependencies
+# Copy package file before installing dependencies (cached layer).
 COPY client/package.json ./
+<%_ if (clientFrameworkAngular) { _%>
+# Angular projects ship a client/scripts/copy-swagger-ui-assets.cjs helper that
+# is invoked by the `postinstall` hook in client/package.json (it vendors the
+# swagger-ui-dist runtime files into client/src/swagger-ui/ so the Vite-based
+# Angular dev server can serve them in dev mode). The helper file must exist
+# at install time, otherwise `npm install` aborts with `Cannot find module`.
+COPY client/scripts ./scripts
+<%_ } _%>
 RUN npm install --force
 
 # Copy client source and build for production.

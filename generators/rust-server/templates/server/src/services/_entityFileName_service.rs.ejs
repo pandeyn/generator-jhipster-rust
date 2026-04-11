@@ -52,13 +52,13 @@ impl <%= entityClass %>Service {
                         .order(<%= entityTableName %>::<%= field.fieldNameUnderscored %>.desc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 } else {
                     <%= entityTableName %>::table
                         .order(<%= entityTableName %>::<%= field.fieldNameUnderscored %>.asc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 }
             }
 <%_ } _%>
@@ -68,13 +68,13 @@ impl <%= entityClass %>Service {
                         .order(<%= entityTableName %>::created_date.desc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 } else {
                     <%= entityTableName %>::table
                         .order(<%= entityTableName %>::created_date.asc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 }
             }
             "lastModifiedDate" | "last_modified_date" => {
@@ -83,13 +83,13 @@ impl <%= entityClass %>Service {
                         .order(<%= entityTableName %>::last_modified_date.desc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 } else {
                     <%= entityTableName %>::table
                         .order(<%= entityTableName %>::last_modified_date.asc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 }
             }
             _ => {
@@ -99,13 +99,13 @@ impl <%= entityClass %>Service {
                         .order(<%= entityTableName %>::id.desc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 } else {
                     <%= entityTableName %>::table
                         .order(<%= entityTableName %>::id.asc())
                         .limit(size)
                         .offset(offset)
-                        .load::<<%= persistClass %>>(conn)
+                        .select(<%= persistClass %>::as_select()).load(conn)
                 }
             }
         }
@@ -118,7 +118,7 @@ impl <%= entityClass %>Service {
     pub fn find_by_id(conn: &mut DbConnection, id: i32) -> Result<<%= persistClass %>, AppError> {
         <%= entityTableName %>::table
             .find(id)
-            .first::<<%= persistClass %>>(conn)
+            .select(<%= persistClass %>::as_select()).first(conn)
             .map_err(|e| match e {
                 diesel::result::Error::NotFound => {
                     AppError::NotFound(format!("<%= entityClass %> {} not found", id))
@@ -224,7 +224,7 @@ impl <%= entityClass %>Service {
     pub fn find_<%= rel.relationshipFieldName %>_by_id(conn: &mut DbConnection, id: i32) -> Result<Option<<%= rel.otherEntity.persistClass %>>, AppError> {
         <%= rel.otherEntityTableName %>::table
             .find(id)
-            .first::<<%= rel.otherEntity.persistClass %>>(conn)
+            .select(<%= rel.otherEntity.persistClass %>::as_select()).first(conn)
             .optional()
             .map_err(|e| AppError::Internal(e.to_string()))
     }
@@ -280,7 +280,7 @@ impl <%= entityClass %>Service {
 
         <%= rel.otherEntityTableName %>::table
             .filter(<%= rel.otherEntityTableName %>::id.eq_any(<%= rel.otherEntityTableName %>_ids))
-            .load::<<%= rel.otherEntity.persistClass %>>(conn)
+            .select(<%= rel.otherEntity.persistClass %>::as_select()).load(conn)
             .map_err(|e| AppError::Internal(e.to_string()))
     }
 

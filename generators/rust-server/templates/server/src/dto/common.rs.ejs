@@ -12,9 +12,23 @@ use chrono::NaiveDateTime;
 <%_ } _%>
 
 <%_ if (!devDatabaseTypeMongodb) { _%>
+/// Parse an i32 from a serde_json::Value, accepting either a number or a string-encoded
+/// integer. React frontends send `{"id": "1"}` (string) for multi-select form values,
+/// while Angular sends `{"id": 1}` (number). The backend must accept both.
+fn parse_i32_value<E: serde::de::Error>(value: &serde_json::Value) -> Result<i32, E> {
+    match value {
+        serde_json::Value::Number(n) => n
+            .as_i64()
+            .and_then(|n| i32::try_from(n).ok())
+            .ok_or_else(|| E::custom("id is not a valid i32")),
+        serde_json::Value::String(s) => s.parse::<i32>().map_err(E::custom),
+        _ => Err(E::custom("id must be a number or string")),
+    }
+}
+
 /// Helper struct to deserialize relationship references that can be either:
-/// - A plain integer ID: 1
-/// - An object with an id field: {"id": 1, "name": "..."}
+/// - A plain integer ID: 1 or "1"
+/// - An object with an id field: {"id": 1, "name": "..."} or {"id": "1", ...}
 #[derive(Debug, Clone<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
 pub struct RelationshipId(pub i32);
 
@@ -23,40 +37,39 @@ impl<'de> Deserialize<'de> for RelationshipId {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum IdOrObject {
-            Id(i32),
-            Object { id: i32 },
-        }
-
-        match IdOrObject::deserialize(deserializer)? {
-            IdOrObject::Id(id) => Ok(RelationshipId(id)),
-            IdOrObject::Object { id } => Ok(RelationshipId(id)),
-        }
+        use serde::de::Error;
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let id = match &value {
+            serde_json::Value::Object(map) => {
+                let id_value = map
+                    .get("id")
+                    .ok_or_else(|| D::Error::custom("missing id field"))?;
+                parse_i32_value::<D::Error>(id_value)?
+            }
+            _ => parse_i32_value::<D::Error>(&value)?,
+        };
+        Ok(RelationshipId(id))
     }
 }
 
 /// Custom deserializer for optional relationship fields
-/// Handles: null, plain integer ID, or object with id field from JHipster Angular frontend
+/// Handles: null, plain integer/string ID, or object with id field (number or string)
 pub fn deserialize_optional_relationship<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum IdOrObject {
-        Null,
-        Id(i32),
-        Object { id: i32 },
-    }
-
-    let opt: Option<IdOrObject> = Option::deserialize(deserializer)?;
+    use serde::de::Error;
+    let opt: Option<serde_json::Value> = Option::deserialize(deserializer)?;
     match opt {
         None => Ok(None),
-        Some(IdOrObject::Null) => Ok(None),
-        Some(IdOrObject::Id(id)) => Ok(Some(id)),
-        Some(IdOrObject::Object { id }) => Ok(Some(id)),
+        Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Object(map)) => {
+            let id_value = map
+                .get("id")
+                .ok_or_else(|| D::Error::custom("missing id field"))?;
+            Ok(Some(parse_i32_value::<D::Error>(id_value)?))
+        }
+        Some(value) => Ok(Some(parse_i32_value::<D::Error>(&value)?)),
     }
 }
 

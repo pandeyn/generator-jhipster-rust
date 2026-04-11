@@ -18,15 +18,6 @@ CREATE INDEX idx_<%= entityTableName %>_<%= field.fieldNameUnderscored %> ON <%=
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
 CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %>_id ON <%= entityTableName %>(<%= relationship.relationshipFieldName %>_id);
 <%_ } _%>
-
-<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
--- Create join table for <%= relationship.relationshipName %> many-to-many relationship
-CREATE TABLE <%= relationship.joinTable.name %> (
-    <%= entityTableName %>_id INTEGER NOT NULL REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
-    <%= relationship.otherEntityTableName %>_id INTEGER NOT NULL REFERENCES <%= relationship.otherEntityTableName %>(id) ON DELETE CASCADE,
-    PRIMARY KEY (<%= entityTableName %>_id, <%= relationship.otherEntityTableName %>_id)
-);
-<%_ } _%>
 <%_ } else if (devDatabaseTypeMysql) { _%>
 -- Create <%= entityTableName %> table
 CREATE TABLE <%= entityTableName %> (
@@ -47,17 +38,6 @@ CREATE INDEX idx_<%= entityTableName %>_<%= field.fieldNameUnderscored %> ON <%=
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
 CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %>_id ON <%= entityTableName %>(<%= relationship.relationshipFieldName %>_id);
 <%_ } _%>
-
-<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
--- Create join table for <%= relationship.relationshipName %> many-to-many relationship
-CREATE TABLE <%= relationship.joinTable.name %> (
-    <%= entityTableName %>_id INTEGER NOT NULL,
-    <%= relationship.otherEntityTableName %>_id INTEGER NOT NULL,
-    PRIMARY KEY (<%= entityTableName %>_id, <%= relationship.otherEntityTableName %>_id),
-    FOREIGN KEY (<%= entityTableName %>_id) REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
-    FOREIGN KEY (<%= relationship.otherEntityTableName %>_id) REFERENCES <%= relationship.otherEntityTableName %>(id) ON DELETE CASCADE
-);
-<%_ } _%>
 <%_ } else { _%>
 -- Create <%= entityTableName %> table
 CREATE TABLE <%= entityTableName %> (
@@ -77,14 +57,5 @@ CREATE INDEX idx_<%= entityTableName %>_<%= field.fieldNameUnderscored %> ON <%=
 <%_ } _%>
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
 CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %>_id ON <%= entityTableName %>(<%= relationship.relationshipFieldName %>_id);
-<%_ } _%>
-
-<%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide)) { _%>
--- Create join table for <%= relationship.relationshipName %> many-to-many relationship
-CREATE TABLE <%= relationship.joinTable.name %> (
-    <%= entityTableName %>_id INTEGER NOT NULL REFERENCES <%= entityTableName %>(id) ON DELETE CASCADE,
-    <%= relationship.otherEntityTableName %>_id INTEGER NOT NULL REFERENCES <%= relationship.otherEntityTableName %>(id) ON DELETE CASCADE,
-    PRIMARY KEY (<%= entityTableName %>_id, <%= relationship.otherEntityTableName %>_id)
-);
 <%_ } _%>
 <%_ } _%>

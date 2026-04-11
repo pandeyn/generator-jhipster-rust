@@ -1,5 +1,6 @@
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
-import { SERVER_RUST_SRC_DIR } from '../../../generator-rust-constants.js';
+
+import { SERVER_RUST_SRC_DIR, fixBlueprintPackagePath } from '../../../generator-rust-constants.js';
 
 export default class extends BaseApplicationGenerator {
   constructor(args, opts, features) {
@@ -8,6 +9,7 @@ export default class extends BaseApplicationGenerator {
       queueCommandTasks: true,
       sbsBlueprint: true,
     });
+    fixBlueprintPackagePath(this);
   }
 
   get [BaseApplicationGenerator.INITIALIZING]() {
