@@ -41,6 +41,9 @@ exports[`SubGenerator server of rust JHipster blueprint > run > should succeed 1
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -114,6 +117,9 @@ exports[`SubGenerator server of rust JHipster blueprint > run > should succeed 1
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {

@@ -30,6 +30,19 @@ spec:
         - name: <%= baseName.toLowerCase() %>
           image: <%= dockerImageName %>:latest
           imagePullPolicy: IfNotPresent
+          # Defense-in-depth: enforce non-root + drop all caps + read-only rootfs
+          # where possible. UID 1001 must match the Dockerfile's USER directive.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+<%_ if (devDatabaseTypeSqlite) { _%>
+            readOnlyRootFilesystem: false  # SQLite default writes to /app/target/db
+<%_ } else { _%>
+            readOnlyRootFilesystem: true
+<%_ } _%>
+            capabilities:
+              drop: [ALL]
           ports:
             - name: http
               containerPort: <%= appPort %>
@@ -74,6 +87,15 @@ spec:
         - name: sqlite-data
           persistentVolumeClaim:
             claimName: <%= baseName.toLowerCase() %>-sqlite-pvc
+<%_ } else { _%>
+          # /tmp is required writable by tokio/rustls/panic-dump even when the
+          # rest of the rootfs is read-only. emptyDir is per-pod and ephemeral.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 <%_ } _%>
 ---
 <%_ if (devDatabaseTypeSqlite) { _%>

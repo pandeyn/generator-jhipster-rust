@@ -117,11 +117,6 @@ COPY --from=builder /app/target/release/<%= rustCrateName %> /app/<%= rustCrateN
 COPY --from=builder /app/migrations /app/migrations
 <%_ } _%>
 
-<%_ if (devDatabaseTypeSqlite) { _%>
-# Create directory for SQLite database
-RUN mkdir -p /app/target/db
-<%_ } _%>
-
 <%_ if (enableStaticHosting && !skipClient) { _%>
 # Copy the built client for serving SPA UI from Rust backend
 COPY --from=client-builder /app/server/dist/static/ ./static/
@@ -136,16 +131,18 @@ ENV APP_PORT=8081
 ENV APP_PORT=8080
 <%_ } _%>
 ENV APP_HOST=0.0.0.0
-<%_ if (devDatabaseTypePostgresql) { _%>
-ENV DATABASE_URL=postgres://postgres:postgres@db:5432/<%= rustCrateName %>
-<%_ } else if (devDatabaseTypeMysql) { _%>
-ENV DATABASE_URL=mysql://root:root@db:3306/<%= rustCrateName %>
-<%_ } else if (devDatabaseTypeMongodb) { _%>
-ENV MONGODB_URI=mongodb://mongodb:27017
+<%_ if (devDatabaseTypeMongodb) { _%>
 ENV MONGODB_DATABASE=<%= baseName.toLowerCase() %>
-<%_ } else { _%>
-ENV DATABASE_URL=sqlite:///app/target/db/<%= rustCrateName %>.db
 <%_ } _%>
+
+# DATABASE_URL / MONGODB_URI are NOT baked into the image. The application
+# refuses to start without them so operators are forced to make a deliberate
+# choice rather than inherit a known-default credential from the template.
+# Examples:
+#   docker run -e DATABASE_URL=postgres://user:pass@host:5432/db ...
+#   docker run -e MONGODB_URI=mongodb://user:pass@host:27017 ...
+#   docker run -e DATABASE_URL=sqlite:///app/target/db/<%= rustCrateName %>.db -v <vol>:/app/target/db ...
+# See RELEASE_NOTES.md for migration guidance.
 
 <%_ if (authenticationTypeJwt) { _%>
 # JWT configuration
@@ -163,6 +160,17 @@ ENV STATIC_FILES_DIR=./static
 
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Run as a non-root user for defense-in-depth (closes /cso Finding #8).
+# UID 1001 must match the K8s Deployment's securityContext.runAsUser.
+RUN useradd --system --uid 1001 --no-create-home appuser
+<%_ if (devDatabaseTypeSqlite) { _%>
+# SQLite default writes to /app/target/db; ensure the dir exists and is writable by uid 1001.
+RUN mkdir -p /app/target/db && chown -R 1001:1001 /app
+<%_ } else { _%>
+RUN chown -R 1001:1001 /app
+<%_ } _%>
+USER 1001
 
 <%_ if (applicationTypeMicroservice) { _%>
 EXPOSE 8081

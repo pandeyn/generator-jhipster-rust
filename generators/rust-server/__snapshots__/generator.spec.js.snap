@@ -17,6 +17,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with Jaeg
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -135,6 +138,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with Jaeg
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/config/tracing_config.rs": {
@@ -253,6 +259,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with circ
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -365,6 +374,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with circ
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -480,6 +492,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -592,6 +607,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -707,6 +725,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -807,6 +828,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -920,6 +944,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -1045,6 +1072,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/config/tracing_config.rs": {
     "stateCleared": "modified",
   },
@@ -1156,6 +1186,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -1303,6 +1336,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/config/tracing_config.rs": {
@@ -1421,6 +1457,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -1536,6 +1575,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -1648,6 +1690,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -1765,6 +1810,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/db/connection.rs": {
     "stateCleared": "modified",
   },
@@ -1873,6 +1921,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -2016,6 +2067,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/db/connection.rs": {
     "stateCleared": "modified",
   },
@@ -2129,6 +2183,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -2214,6 +2271,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -2323,6 +2383,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -2408,6 +2471,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -2517,6 +2583,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -2628,6 +2697,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/db/connection.rs": {
     "stateCleared": "modified",
   },
@@ -2730,6 +2802,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -2847,6 +2922,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -2959,6 +3037,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -3076,6 +3157,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/db/connection.rs": {
     "stateCleared": "modified",
   },
@@ -3184,6 +3268,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -3309,6 +3396,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/config/vault_config.rs": {
     "stateCleared": "modified",
   },
@@ -3425,6 +3515,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -3528,6 +3621,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -3640,6 +3736,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -3755,6 +3854,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -3867,6 +3969,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -3984,6 +4089,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/db/connection.rs": {
     "stateCleared": "modified",
   },
@@ -4094,6 +4202,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -4197,6 +4308,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -4307,6 +4421,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -4427,6 +4544,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/remote_config.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -4542,6 +4662,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -4627,6 +4750,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -4734,6 +4860,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "diesel.toml": {
+    "stateCleared": "modified",
+  },
+  "docker-entrypoint.sh": {
     "stateCleared": "modified",
   },
   "docker/app.yml": {
@@ -4853,6 +4982,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "server/src/config/remote_config.rs": {
     "stateCleared": "modified",
   },
+  "server/src/config/sentinels.rs": {
+    "stateCleared": "modified",
+  },
   "server/src/db/connection.rs": {
     "stateCleared": "modified",
   },
@@ -4963,6 +5095,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should N
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -5036,6 +5171,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should N
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -5142,6 +5280,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should n
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -5215,6 +5356,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should n
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -5321,6 +5465,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith with kaf
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -5403,6 +5550,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith with kaf
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -5518,6 +5668,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -5591,6 +5744,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -5697,6 +5853,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -5770,6 +5929,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {
@@ -5876,6 +6038,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succ
   "diesel.toml": {
     "stateCleared": "modified",
   },
+  "docker-entrypoint.sh": {
+    "stateCleared": "modified",
+  },
   "docker/app.yml": {
     "stateCleared": "modified",
   },
@@ -5949,6 +6114,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succ
     "stateCleared": "modified",
   },
   "server/src/config/mod.rs": {
+    "stateCleared": "modified",
+  },
+  "server/src/config/sentinels.rs": {
     "stateCleared": "modified",
   },
   "server/src/db/connection.rs": {

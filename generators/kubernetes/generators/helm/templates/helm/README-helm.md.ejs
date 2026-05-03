@@ -1,5 +1,30 @@
 # Helm Chart for <%= baseName %>
 
+## Secret handling
+
+`templates/secret.yaml` uses a **lookup-or-generate** pattern for `JWT_SECRET`:
+
+1. **First install**: if no in-cluster Secret exists yet AND `--set secrets.JWT_SECRET=...`
+   wasn't passed, the chart generates a 32-char random alphanumeric value.
+2. **`helm upgrade`**: the chart looks up the existing Secret and reuses its
+   `JWT_SECRET`. This preserves token validity across rolling deployments —
+   without this, every upgrade would rotate the signing key and invalidate all
+   in-flight tokens.
+3. **Operator override**: `helm install ... --set secrets.JWT_SECRET="$(openssl rand -hex 32)"`
+   pins a specific value (also preserved across upgrades thereafter).
+
+To rotate the JWT signing key (invalidates all existing tokens):
+```bash
+kubectl delete secret <%= baseName.toLowerCase() %>-secret -n <%= kubernetesNamespace %>
+helm upgrade <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> -n <%= kubernetesNamespace %>
+```
+
+DB passwords (`DB_PASSWORD`) ship empty in `values.yaml`. Supply them at install time:
+```bash
+helm install <%= baseName.toLowerCase() %> ./helm/<%= baseName.toLowerCase() %> \
+  --set secrets.DB_PASSWORD="$(openssl rand -base64 24)"
+```
+
 ## Prerequisites
 
 - Helm 3.x installed
