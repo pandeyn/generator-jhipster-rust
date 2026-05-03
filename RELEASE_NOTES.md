@@ -1,3 +1,128 @@
+# Release Notes - v0.9.8
+
+## Overview
+
+JHipster Rust Blueprint v0.9.8 is a **security-focused release** that hardens the templates the blueprint emits. An audit conducted before this release identified 14 issues spanning authentication defaults, container privilege, K8s secret handling, CORS configuration, and CI supply-chain. This release closes these issues without forcing existing 0.9.7 deployments to change their workflow.
+
+The spine of the release is a runtime entrypoint script (`docker-entrypoint.sh`) that generates a random per-container `JWT_SECRET` when the operator hasn't supplied one, and refuses to start when the value matches a known-default sentinel string. A Rust startup-time check duplicates the sentinel rejection so the K8s static-manifest path (where `envFrom: secretRef` injects the value before the entrypoint sees it) is also covered. The same single source of truth (`server/src/config/sentinels.rs`) is shared between the shell and the Rust code.
+
+OAuth2 deployments get proper CSRF state validation — the state parameter is now generated from `OsRng`, stored in an HttpOnly cookie before redirect, and constant-time compared on the callback (`subtle::ConstantTimeEq`). Token cookies gain a `Secure` flag when the app serves over HTTPS. CORS becomes environment-aware: development keeps the permissive default so local frontends work without operator config, but production reads `CORS_ALLOWED_ORIGINS` from the environment and refuses to start when that variable is missing or empty. Containers run as a non-root user (UID 1001) in both Dockerfile and K8s deployment manifests; non-SQLite paths add a writable `/tmp` `emptyDir` so `readOnlyRootFilesystem: true` doesn't crash the app on first temp-file write.
+
+CI and dependency hygiene round out the release. Third-party actions in `.github/workflows/samples.yml` are pinned to commit SHAs, a new `.github/dependabot.yml` keeps them current, and a `shellcheck` step lints the generated entrypoint on every sample-matrix run. `npm audit` reports zero vulnerabilities — down from 24 — via a combination of `npm audit fix`, npm overrides on transitive packages, and an eslint bump.
+
+Generation across SQLite/PostgreSQL/MySQL/MongoDB and the existing JHipster sample shapes (basic monolith, microservice with circuit breaker, gateway with circuit breaker) was regression-tested end to end. The full vitest suite passes (358 tests) and a new spec (`generators/rust-server/entrypoint.spec.js`, 6 cases) exercises the entrypoint behavior matrix directly.
+
+## What's New in v0.9.8
+
+### JWT_SECRET handling
+
+Three coordinated fixes replace the prior single point of failure.
+
+**Scaffold-time default.** `env.ejs` previously emitted `JWT_SECRET=<baseName>-jwt-secret-key-change-in-production-<timestamp>`. The timestamp made the value brute-forceable for anyone who knew approximately when the project was scaffolded. v0.9.8 calls `crypto.randomBytes(32).toString('hex')` from `node:crypto` at scaffold time, producing a unique 64-character hex value per generation. The field that drives this is `application.jwtSecretDefault`, set in `generators/rust-server/generator.js` during the PREPARING priority.
+
+**Runtime default.** The Dockerfile no longer sets `ENV JWT_SECRET=...`. A new `docker-entrypoint.sh.ejs` template ships an entrypoint script that:
+
+1. Generates a 32-byte CSPRNG hex value via `head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'` when `JWT_SECRET` is unset, exporting it for the child process. Logs `WARNING: JWT_SECRET unset; generated random per-container value.`
+2. Refuses to start (exit 1, `FATAL` log) when `JWT_SECRET` matches a known-default sentinel string. Two exact matches and one wildcard pattern are checked.
+3. Logs `INFO: JWT_SECRET supplied by operator.` for any other value.
+
+Then `exec "$@"` hands off to the configured CMD. The script is POSIX `sh`, depends on no extra packages, lints clean under `shellcheck`, and runs in CI on every sample-matrix run.
+
+**Defense-in-depth check in the Rust binary.** A new module `server/src/config/sentinels.rs` exports `is_sentinel(&str) -> bool`. `main.rs` calls it after `AppConfig::from_env()` and before `axum::serve`, exiting with a `FATAL` log if the value matches. This catches the K8s static-manifest path: when `envFrom: secretRef` injects the JWT_SECRET from an unmodified `app-secret.yml` (which used to ship the literal `your-super-secret-jwt-key-change-in-production`), the entrypoint sees the variable as "set" and would otherwise pass the value through. The Rust check sees the same sentinel and blocks startup.
+
+### OAuth2 CSRF state validation
+
+Previously the OAuth2 `state` parameter was a hex-formatted timestamp from `SystemTime::now().as_nanos()`, and the `callback()` handler never validated it. v0.9.8 fixes both: `generate_random_state()` now reads 32 bytes from `OsRng` and hex-encodes them inline. The `authorize()` handler stores the value in an `HttpOnly` (and `Secure` when `app_https`) cookie via a hand-rolled `Response::builder()` (`Redirect::temporary` doesn't compose with cookies cleanly). On the callback, `extract_cookie(&headers, "oauth_state")` reads the stored value and `subtle::ConstantTimeEq::ct_eq` compares it to `params.state`. Missing cookie, missing query param, and mismatched values all return a 400-ish error redirect to the frontend. The cookie is cleared on the success path with the same Path/Secure attributes so browsers invalidate it cleanly.
+
+### Cookie hardening (Secure flag)
+
+Access-token and id-token cookies now append `; Secure` when `state.config.app_https` is true. The behaviour is gated on `enableStaticHosting` in EJS — microservices without static hosting (which don't have an `app_https` field on `AppConfig`) keep the unchanged behaviour. **`HttpOnly` on these cookies is intentionally deferred** to a future release because adding it requires a frontend SPA refactor (the SPA currently reads the access token via `document.cookie`).
+
+### CORS becomes environment-aware
+
+`main.rs` previously built `CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any)` unconditionally. v0.9.8 splits this on `config.is_production()`:
+
+- **Development** (`APP_ENV=development`, the default): unchanged. `Any` origin, `Any` methods, `Any` headers, so local frontends on arbitrary ports keep working without operator config.
+- **Production** (`APP_ENV=production`): reads `CORS_ALLOWED_ORIGINS` from the env (comma-separated). Methods restricted to `GET, POST, PUT, DELETE, OPTIONS`. Headers restricted to `AUTHORIZATION, CONTENT_TYPE`. The app refuses to start with `FATAL: CORS_ALLOWED_ORIGINS must be set in production.` when the variable is absent or empty.
+
+### Container privilege
+
+The Dockerfile's runtime stage now creates a system user with `useradd --system --uid 1001 --no-create-home appuser`, runs `chown -R 1001:1001 /app`, switches to `USER 1001` before `ENTRYPOINT/CMD`. For SQLite the chown is preceded by `mkdir -p /app/target/db` so the default DB directory exists with the right ownership.
+
+The K8s `Deployment` (`generators/kubernetes/templates/k8s/app-deployment.yml.ejs`) gains a `securityContext` block: `runAsNonRoot: true`, `runAsUser: 1001`, `allowPrivilegeEscalation: false`, `capabilities: { drop: [ALL] }`, and `readOnlyRootFilesystem` toggled by DB choice (true for Postgres/MySQL/Mongo, false for SQLite). Non-SQLite deployments add a writable `/tmp` `emptyDir` because Tokio scratch space, Rustls cert caching, and panic dumps all need it.
+
+### K8s secret handling
+
+The static `app-secret.yml.ejs` no longer ships hardcoded plaintext defaults. The rendered manifest has `stringData: {}` and a comment block explaining three operator approaches: edit the file inline, use `kubectl create secret generic ... --from-literal=...`, or use the Helm chart.
+
+The Helm path uses a **lookup-or-generate** template in `templates/secret.yaml`. On first install, no in-cluster Secret exists yet, so `randAlphaNum 32` generates a fresh value. On subsequent `helm upgrade` runs, `lookup "v1" "Secret" .Release.Namespace $secretName` returns the existing Secret and the chart reuses the prior `JWT_SECRET` (`b64dec | quote`). This preserves token validity across rolling deployments — without it, every upgrade would rotate the signing key and invalidate every in-flight session. Operators can override via `helm install --set secrets.JWT_SECRET="$(openssl rand -hex 32)"`. `README-helm.md` documents the rotation procedure.
+
+### Dockerfile DB credentials
+
+The runtime stage previously set `ENV DATABASE_URL=postgres://postgres:postgres@db:5432/...` (and `mysql://root:root@db:3306/...`, and the SQLite/Mongo equivalents). v0.9.8 removes those defaults entirely. The runtime app already calls `env::var("DATABASE_URL").expect(...)`, so the failure mode flips from "silently use bad creds" to "fail loud at startup with operator action required." The `MONGODB_DATABASE` env var (which is just a database name, not a credential) stays as a default since it's app-local.
+
+### CI hardening
+
+`samples.yml` pins `dtolnay/rust-toolchain` and `Swatinem/rust-cache` to commit SHAs (with inline comments naming the branch/tag the SHA represents) so a tag-rewriting upstream supply-chain attack can't inject malicious code. A new `.github/dependabot.yml` opens weekly PRs to bump the SHAs and the npm dependency tree. A new `shellcheck docker-entrypoint.sh` step in the samples job lints the rendered entrypoint on every CI run.
+
+### npm dependency cleanup
+
+`npm audit` reported 24 vulnerabilities at v0.9.7 (2 low, 11 moderate, 11 high), most of them in transitive dependencies of `generator-jhipster` that the Rust blueprint never invokes at runtime. v0.9.8 brings this to zero via:
+
+- `npm audit fix` (non-breaking) for 11 of them.
+- `overrides` in `package.json` pinning `fast-xml-parser ^5.7.2`, `lodash ^4.17.24`, `lodash-es ^4.18.1`, `yaml ^2.8.4` for the remaining transitive HIGH-severity items.
+- `eslint` bumped from exact `9.26.0` to exact `9.39.4` (latest 9.x with the patched `@eslint/plugin-kit`). Stayed on the v9 line because v10 changes config-file loading in a way that breaks the existing `eslint.config.js` setup.
+
+### Tests
+
+`generators/rust-server/entrypoint.spec.js` is new. It scaffolds a JWT-auth sample via the existing JHipster test helpers, reads the rendered entrypoint out of the in-memory FS, materialises it to a real tmp file, and spawns `bash` against it with various `JWT_SECRET` values. Six cases cover unset → WARNING + generated, exact-sentinel → FATAL, wildcard-sentinel → FATAL, legitimate value → INFO + preserved, and `exec "$@"` pass-through. Existing snapshot tests were regenerated for the templates that changed.
+
+Full suite: 358 tests across rust-server, kubernetes, and helm specs. All pass.
+
+## Upgrade Notes
+
+### Backwards compatibility
+
+Existing 0.9.7-generated apps are untouched on disk. The generator runs at scaffold time, so v0.9.8 only affects projects you regenerate with it. Most existing dev workflows continue to work unchanged after regeneration: `admin/admin` login, `cargo run`, `npm start`, `docker compose up` for local dev. The JHipster mental model is preserved.
+
+### What changes for `docker run`
+
+The runtime image no longer ships `ENV DATABASE_URL=...` or `ENV MONGODB_URI=...`. If you previously ran `docker run my-jhipster-rust-app` with no environment overrides expecting the bundled defaults, you now need to supply them:
+
+```bash
+# Postgres example
+docker run \
+  -e DATABASE_URL=postgres://user:pass@host:5432/db \
+  -e JWT_SECRET="$(openssl rand -hex 32)" \
+  my-jhipster-rust-app
+```
+
+`JWT_SECRET` is generated by the entrypoint on each container start when unset, so omitting it isn't fatal — but every container restart rotates the signing key, which invalidates existing tokens. Pin it explicitly when you care about session continuity.
+
+### What changes for `kubectl apply -f k8s/`
+
+The static `app-secret.yml` manifest now ships with `stringData: {}` (empty). `kubectl apply -f` of the unmodified file creates an empty Secret, and the Rust app's startup-time check then exits with `FATAL: ...JWT_SECRET...` (it sees the env var as effectively unset / empty). Three options:
+
+1. **Edit the manifest:** uncomment the example block in the file and supply real values inline.
+2. **Use kubectl create:** skip applying the manifest and run `kubectl create secret generic <app>-secret --from-literal=JWT_SECRET="$(openssl rand -hex 32)" --from-literal=POSTGRES_PASSWORD=...`.
+3. **Use the Helm chart:** `helm install ./helm/<app>` auto-generates `JWT_SECRET` on first install and preserves it across upgrades. See `README-helm.md`.
+
+If you previously deployed via the unmodified static manifest and it worked, you were running with publicly-known credentials — that's exactly what this release closes.
+
+### What changes for production CORS
+
+`APP_ENV=production` now requires `CORS_ALLOWED_ORIGINS` to be set to a comma-separated list of origins. Empty or missing → the app refuses to start with a clear error. Development deployments (`APP_ENV=development`, the default) are unchanged.
+
+### What changes for container UID
+
+The container runs as UID 1001. K8s deployments enforce this with `securityContext.runAsUser: 1001`. If you have external volumes mounted into the pod with restrictive ownership, you may need to set `fsGroup: 1001` on the pod's `securityContext` or pre-chown the volume contents.
+
+### Generator-jhipster pin
+
+`package.json` still pins `^9.0.0`. The npm `overrides` field forces transitive deps to known-fixed versions. Future Dependabot PRs will keep them current.
+
+---
+
 # Release Notes - v0.9.7
 
 ## Overview
