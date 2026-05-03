@@ -22,7 +22,8 @@ case "${JWT_SECRET:-}" in
         echo "INFO: JWT_SECRET not provided, generating a random 256-bit hex for Vault seed."
         JWT_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
         ;;
-    "change-me-in-production-use-a-secure-random-string" \
+    "change-me-in-production" \
+        | "change-me-in-production-use-a-secure-random-string" \
         | "your-super-secret-jwt-key-change-in-production" \
         | *-jwt-secret-key-change-in-production-* )
         echo "WARNING: JWT_SECRET matches a known-default sentinel; substituting a random 256-bit hex."

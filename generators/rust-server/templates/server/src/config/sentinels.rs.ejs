@@ -15,6 +15,7 @@
 
 /// Exact-match sentinels (legacy default values from older scaffolds).
 const EXACT_SENTINELS: &[&str] = &[
+    "change-me-in-production",
     "change-me-in-production-use-a-secure-random-string",
     "your-super-secret-jwt-key-change-in-production",
 ];
@@ -25,8 +26,12 @@ const EXACT_SENTINELS: &[&str] = &[
 const PATTERN_MARKER: &str = "-jwt-secret-key-change-in-production-";
 
 /// Returns true if the value matches a known-default sentinel and the application
-/// must refuse to start.
+/// must refuse to start. Empty values are also rejected: signing JWTs with a
+/// zero-byte HMAC key produces forgable tokens.
 pub fn is_sentinel(value: &str) -> bool {
+    if value.is_empty() {
+        return true;
+    }
     if EXACT_SENTINELS.iter().any(|s| *s == value) {
         return true;
     }
@@ -43,6 +48,20 @@ mod tests {
     #[test]
     fn rejects_exact_sentinel_change_me() {
         assert!(is_sentinel("change-me-in-production-use-a-secure-random-string"));
+    }
+
+    #[test]
+    fn rejects_bare_change_me_in_production() {
+        // The shorter form historically shipped in K8s/Helm/Consul templates.
+        // Without this entry, defense-in-depth would let it through.
+        assert!(is_sentinel("change-me-in-production"));
+    }
+
+    #[test]
+    fn rejects_empty_string() {
+        // An empty JWT_SECRET signs every token with a zero-byte HMAC key —
+        // trivially forgable. Refuse to start.
+        assert!(is_sentinel(""));
     }
 
     #[test]
@@ -67,7 +86,6 @@ mod tests {
     #[test]
     fn accepts_arbitrary_operator_value() {
         assert!(!is_sentinel("operator-supplied-real-secret"));
-        assert!(!is_sentinel(""));
         assert!(!is_sentinel("a"));
     }
 }

@@ -18,7 +18,11 @@ data:
 
 <%_ if (authenticationTypeJwt) { _%>
     jwt:
-      secret: {{ .Values.secrets.JWT_SECRET | default "change-me-in-production" }}
+      # JWT_SECRET is supplied to each service via envFrom: secretRef from the
+      # Helm-managed Secret (lookup-or-generate, see secret.yaml). It is
+      # intentionally NOT seeded into Consul KV from this ConfigMap: shipping a
+      # literal default here would make a publicly-known signing key the silent
+      # fallback when env JWT_SECRET is unset.
       expiration_hours: 24
 <%_ } _%>
 

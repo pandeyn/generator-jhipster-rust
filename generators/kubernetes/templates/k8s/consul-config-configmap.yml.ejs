@@ -19,9 +19,12 @@ data:
 
 <%_ if (authenticationTypeJwt) { _%>
     jwt:
-      # IMPORTANT: Change this secret in production!
-      # This secret should be shared across all microservices for JWT validation
-      secret: change-me-in-production
+      # JWT_SECRET is supplied to each service via envFrom: secretRef from
+      # app-secret. It is intentionally NOT seeded into Consul KV from this
+      # ConfigMap: shipping a literal default here would make a publicly-known
+      # signing key the silent fallback when an operator forgets the secretRef.
+      # Operators who want Consul KV as the source of truth can populate
+      # `config/<app>/application.jwt.secret` post-install via `consul kv put`.
       expiration_hours: 24
 <%_ } _%>
 

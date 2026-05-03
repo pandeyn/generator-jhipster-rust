@@ -16,6 +16,7 @@ gen_random() {
 
 is_sentinel() {
   case "${1:-}" in
+    change-me-in-production)                            return 0 ;;
     change-me-in-production-use-a-secure-random-string) return 0 ;;
     your-super-secret-jwt-key-change-in-production)     return 0 ;;
     *-jwt-secret-key-change-in-production-*)            return 0 ;;

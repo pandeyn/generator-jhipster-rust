@@ -45,13 +45,14 @@ spec:
               set -e
               vault secrets enable -path=secret -version=2 kv 2>/dev/null || true
 
+              # Seed application metadata. Sensitive values (JWT_SECRET,
+              # OIDC_CLIENT_SECRET) are intentionally NOT written here: shipping
+              # a literal default would make a publicly-known signing key the
+              # silent fallback. The Helm-managed Secret (lookup-or-generate)
+              # already provides JWT_SECRET to each app pod via envFrom.
+              # Operators who want Vault as the source of truth populate it
+              # post-install via `vault kv patch`.
               vault kv put secret/{{ .Release.Name | lower }} \
-<%_ if (authenticationTypeJwt) { _%>
-                JWT_SECRET="{{ .Values.secrets.JWT_SECRET | default "change-me-in-production" }}" \
-<%_ } _%>
-<%_ if (authenticationTypeOauth2) { _%>
-                OIDC_CLIENT_SECRET="web_app" \
-<%_ } _%>
                 APP_NAME="{{ .Release.Name }}"
 
               vault auth enable approle 2>/dev/null || true

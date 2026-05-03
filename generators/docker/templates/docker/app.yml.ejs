@@ -29,7 +29,9 @@ services:
       - APP_HOST=0.0.0.0
       - APP_PORT=8080
 <%_ if (authenticationTypeJwt) { _%>
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      # Forwarded from .env so the entrypoint sees the same CSPRNG hex the
+      # generator scaffolded. Empty → entrypoint generates a per-container hex.
+      - JWT_SECRET=${JWT_SECRET:-}
 <%_ } _%>
 <%_ if (hasConsul) { _%>
       # Consul service discovery configuration

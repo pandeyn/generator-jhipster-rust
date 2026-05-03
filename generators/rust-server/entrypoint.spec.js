@@ -94,6 +94,15 @@ describe('docker-entrypoint.sh behavior matrix', () => {
     expect(stderr).toContain('known-default sentinel');
   });
 
+  it('JWT_SECRET = bare "change-me-in-production" sentinel → FATAL, exit 1', () => {
+    // The shorter form historically shipped in K8s/Helm/Consul templates.
+    const { status, stderr } = runEntrypoint({
+      JWT_SECRET: 'change-me-in-production',
+    });
+    expect(status).toBe(1);
+    expect(stderr).toContain('FATAL');
+  });
+
   it('JWT_SECRET = "your-super-secret-jwt-key-..." sentinel → FATAL, exit 1', () => {
     const { status, stderr } = runEntrypoint({
       JWT_SECRET: 'your-super-secret-jwt-key-change-in-production',

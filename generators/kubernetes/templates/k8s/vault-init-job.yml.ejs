@@ -49,14 +49,13 @@ spec:
               # Enable KV v2 secrets engine
               vault secrets enable -path=secret -version=2 kv 2>/dev/null || true
 
-              # Write application secrets
+              # Seed application metadata. Sensitive values (JWT_SECRET,
+              # OIDC_CLIENT_SECRET) are intentionally NOT written here: shipping
+              # a literal default would make a publicly-known signing key the
+              # silent fallback. Operators populate them post-install via:
+              #   kubectl exec -n <%= kubernetesNamespace %> <pod> -- vault kv patch \
+              #     secret/<%= baseName.toLowerCase() %> JWT_SECRET="$(openssl rand -hex 32)"
               vault kv put secret/<%= baseName.toLowerCase() %> \
-<%_ if (authenticationTypeJwt) { _%>
-                JWT_SECRET="change-me-in-production" \
-<%_ } _%>
-<%_ if (authenticationTypeOauth2) { _%>
-                OIDC_CLIENT_SECRET="web_app" \
-<%_ } _%>
                 APP_NAME="<%= baseName %>"
 
               # Enable AppRole auth
