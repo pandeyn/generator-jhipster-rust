@@ -27,6 +27,11 @@ services:
     environment:
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=myroot
+<%_ if (authenticationTypeJwt) { _%>
+      # Forwarded from .env so vault-init seeds Vault with the same JWT_SECRET
+      # the Rust app reads from .env. Empty → vault-init generates a fresh hex.
+      - JWT_SECRET=${JWT_SECRET:-}
+<%_ } _%>
     volumes:
       - ./vault-init:/scripts
     entrypoint: ["/bin/sh", "/scripts/vault-init.sh"]
