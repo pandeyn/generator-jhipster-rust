@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Keep pinned third-party Actions current. Without this, the SHA pins in
+  # workflows go stale — operators stay safe from tag rewrites but miss real
+  # upstream fixes. Dependabot opens a PR per upstream release with the new
+  # SHA so a human reviews each bump.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(ci)'
+    labels:
+      - dependencies
+      - github-actions
+
+  # npm dependency hygiene. Auto-PR weekly for non-major bumps.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(deps)'
+    labels:
+      - dependencies
+      - npm
+    # generator-jhipster majors require manual review (breaking changes
+    # frequently coincide with major Spring Boot / Yeoman bumps that this
+    # blueprint must follow deliberately, not automatically).
+    ignore:
+      - dependency-name: generator-jhipster
+        update-types:
+          - version-update:semver-major
