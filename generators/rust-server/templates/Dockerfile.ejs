@@ -148,9 +148,10 @@ ENV DATABASE_URL=sqlite:///app/target/db/<%= rustCrateName %>.db
 <%_ } _%>
 
 <%_ if (authenticationTypeJwt) { _%>
-# JWT configuration - IMPORTANT: Override this in production with a secure secret!
-# Use: docker run -e JWT_SECRET=your-secure-secret-here ...
-ENV JWT_SECRET=change-me-in-production-use-a-secure-random-string
+# JWT configuration
+# JWT_SECRET is generated at container start by docker-entrypoint.sh when unset.
+# To pin a fixed secret across container restarts (recommended for production),
+# supply it explicitly: docker run -e JWT_SECRET="$(openssl rand -hex 32)" ...
 ENV JWT_EXPIRATION_HOURS=24
 <%_ } _%>
 
@@ -160,10 +161,14 @@ ENV SERVE_STATIC_FILES=true
 ENV STATIC_FILES_DIR=./static
 <%_ } _%>
 
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 <%_ if (applicationTypeMicroservice) { _%>
 EXPOSE 8081
 <%_ } else { _%>
 EXPOSE 8080
 <%_ } _%>
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/app/<%= rustCrateName %>"]
