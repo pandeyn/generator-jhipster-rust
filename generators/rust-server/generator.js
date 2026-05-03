@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
 import { createNeedleCallback } from 'generator-jhipster/generators/base-core/support';
 
@@ -301,6 +303,16 @@ export default class extends BaseApplicationGenerator {
         application.authenticationType = authType;
         application.authenticationTypeJwt = authType === 'jwt';
         application.authenticationTypeOauth2 = authType === 'oauth2';
+      },
+      rustJwtSecretDefault({ application }) {
+        // Generate a random JWT_SECRET default at scaffold time.
+        // 32 bytes hex-encoded = 256 bits of entropy from Node's CSPRNG.
+        // env.ejs references this as <%= jwtSecretDefault %>.
+        // Replaces the prior timestamp-based default which was brute-forceable
+        // by anyone who knew approximately when the project was scaffolded.
+        if (application.authenticationTypeJwt) {
+          application.jwtSecretDefault = randomBytes(32).toString('hex');
+        }
       },
       rustSwaggerConfig({ application }) {
         // Set Swagger/OpenAPI flag - defaults to true if not specified

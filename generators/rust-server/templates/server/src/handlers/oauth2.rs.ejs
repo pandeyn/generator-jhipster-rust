@@ -2,16 +2,34 @@
 
 use axum::{
     extract::{Query, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Json, Redirect, Response},
     routing::{get, post},
     Router,
 };
+use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use subtle::ConstantTimeEq;
 use utoipa::ToSchema;
 
 use crate::AppState;
+
+/// Extract the value of a named cookie from request headers.
+/// Returns None if the cookie header is absent or the named cookie is not present.
+fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|cookies| {
+            let prefix = format!("{}=", name);
+            cookies
+                .split(';')
+                .map(|s| s.trim())
+                .find(|s| s.starts_with(&prefix))
+                .map(|s| s.trim_start_matches(&prefix).to_string())
+        })
+}
 
 /// Get the frontend redirect URL based on configuration.
 /// When static files are served from the Rust backend, redirect to the backend URL.
@@ -189,7 +207,9 @@ pub async fn logout(
 /// GET /oauth2/authorization/oidc - Initiates OAuth2 login flow
 ///
 /// This endpoint redirects the user to the OAuth2 provider's authorization
-/// endpoint to begin the authentication flow.
+/// endpoint to begin the authentication flow. A CSPRNG state parameter is
+/// stored in an HttpOnly cookie and validated on the callback for CSRF
+/// protection (RFC 6749 §10.12).
 pub async fn authorize(State(state): State<AppState>) -> Response {
     let config = &state.oauth2_config;
 
@@ -200,8 +220,10 @@ pub async fn authorize(State(state): State<AppState>) -> Response {
     // Use localhost for redirect_uri since 0.0.0.0 is not a valid callback host
 <%_ if (enableStaticHosting) { _%>
     let protocol = if state.config.app_https { "https" } else { "http" };
+    let secure_attr = if state.config.app_https { "; Secure" } else { "" };
 <%_ } else { _%>
     let protocol = "http"; // Default to HTTP when static hosting is not enabled
+    let secure_attr = "";
 <%_ } _%>
     let callback_host = if state.config.app_host == "0.0.0.0" {
         "localhost"
@@ -223,18 +245,33 @@ pub async fn authorize(State(state): State<AppState>) -> Response {
         urlencoding::encode(&state_param)
     );
 
+    // Bind the state to this user's browser session via an HttpOnly cookie.
+    // 10-minute TTL is enough for the user to complete the round-trip with the IdP.
+    let state_cookie = format!(
+        "oauth_state={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600{}",
+        state_param,
+        secure_attr
+    );
+
     tracing::info!("Redirecting to OAuth2 provider: {}", config.authorization_endpoint);
 
-    Redirect::temporary(&auth_url).into_response()
+    Response::builder()
+        .status(StatusCode::TEMPORARY_REDIRECT)
+        .header(header::LOCATION, &auth_url)
+        .header(header::SET_COOKIE, state_cookie)
+        .body(axum::body::Body::empty())
+        .unwrap()
 }
 
 /// GET /login/oauth2/code/oidc - OAuth2 callback handler
 ///
 /// This endpoint handles the callback from the OAuth2 provider after
-/// successful authentication. It exchanges the authorization code for
-/// tokens and redirects to the frontend with the tokens.
+/// successful authentication. It validates the CSRF state parameter
+/// against the cookie set by `authorize()`, exchanges the authorization
+/// code for tokens, and redirects to the frontend with the tokens.
 pub async fn callback(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(params): Query<OAuth2Callback>,
 ) -> Response {
     let config = &state.oauth2_config;
@@ -245,8 +282,10 @@ pub async fn callback(
     // Use localhost for redirect_uri since 0.0.0.0 is not a valid callback host
 <%_ if (enableStaticHosting) { _%>
     let protocol = if state.config.app_https { "https" } else { "http" };
+    let secure_attr = if state.config.app_https { "; Secure" } else { "" };
 <%_ } else { _%>
     let protocol = "http"; // Default to HTTP when static hosting is not enabled
+    let secure_attr = "";
 <%_ } _%>
     let callback_host = if state.config.app_host == "0.0.0.0" {
         "localhost"
@@ -258,6 +297,28 @@ pub async fn callback(
         protocol,
         callback_host,
         state.config.app_port
+    );
+
+    // CSRF protection: validate that the state parameter from the IdP matches
+    // the one we stored in the oauth_state cookie when authorize() ran.
+    // Any of these conditions is a hard reject: missing cookie, missing state
+    // query param, or mismatched values (constant-time compare).
+    let cookie_state = extract_cookie(&headers, "oauth_state");
+    let valid_state = match (&cookie_state, &params.state) {
+        (Some(c), Some(s)) => c.as_bytes().ct_eq(s.as_bytes()).into(),
+        _ => false,
+    };
+    if !valid_state {
+        tracing::warn!("OAuth2 callback rejected: state validation failed (cookie present: {}, query state present: {})", cookie_state.is_some(), params.state.is_some());
+        let frontend_url = get_frontend_redirect_url(&state);
+        return error_response(&frontend_url, "Invalid state parameter (possible CSRF)");
+    }
+
+    // Mirror Path/SameSite/Secure attributes used in authorize() so the browser
+    // invalidates the same cookie. Max-Age=0 expires it immediately.
+    let clear_state_cookie = format!(
+        "oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{}",
+        secure_attr
     );
 
     // Exchange authorization code for tokens
@@ -289,13 +350,15 @@ pub async fn callback(
                     Ok(tokens) => {
                         tracing::info!("Successfully obtained tokens from OAuth2 provider");
 
-                        // Set the access token as a cookie for subsequent requests
-                        // Note: We omit Domain to let the browser use the origin that set it
-                        // SameSite=Lax allows the cookie to be sent on top-level navigation and GET requests
+                        // Set the access token as a cookie for subsequent requests.
+                        // Note: We omit Domain to let the browser use the origin that set it.
+                        // SameSite=Lax allows the cookie to be sent on top-level navigation and GET requests.
+                        // Secure flag is appended when the app is served over HTTPS.
                         let access_cookie = format!(
-                            "access_token={}; Path=/; SameSite=Lax; Max-Age={}",
+                            "access_token={}; Path=/; SameSite=Lax; Max-Age={}{}",
                             tokens.access_token,
-                            tokens.expires_in.unwrap_or(3600)
+                            tokens.expires_in.unwrap_or(3600),
+                            secure_attr
                         );
 
                         // Redirect to the frontend URL after successful authentication
@@ -304,18 +367,20 @@ pub async fn callback(
                         let frontend_url = get_frontend_redirect_url(&state);
                         tracing::info!("Redirecting to frontend: {}", frontend_url);
 
-                        // Build response with cookies
+                        // Build response with cookies (clear the state cookie + set tokens)
                         let mut response = Response::builder()
                             .status(StatusCode::FOUND)
                             .header(header::LOCATION, &frontend_url)
+                            .header(header::SET_COOKIE, &clear_state_cookie)
                             .header(header::SET_COOKIE, access_cookie);
 
                         // Also set id_token cookie if present (needed for logout)
                         if let Some(ref id_token) = tokens.id_token {
                             let id_cookie = format!(
-                                "id_token={}; Path=/; SameSite=Lax; Max-Age={}",
+                                "id_token={}; Path=/; SameSite=Lax; Max-Age={}{}",
                                 id_token,
-                                tokens.expires_in.unwrap_or(3600)
+                                tokens.expires_in.unwrap_or(3600),
+                                secure_attr
                             );
                             response = response.header(header::SET_COOKIE, id_cookie);
                         }
@@ -343,14 +408,14 @@ pub async fn callback(
     }
 }
 
-/// Generate a random state parameter for CSRF protection
+/// Generate a CSPRNG state parameter (256 bits, hex-encoded) for OAuth2 CSRF protection.
+/// Replaces the prior timestamp-based version which was predictable (RFC 6749 §10.12).
+/// Manual hex avoids pulling a new dep — `base64` is gated behind serviceDiscoveryConsul
+/// in Cargo.toml.ejs and isn't always available in OAuth2 builds.
 fn generate_random_state() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    format!("{:x}", timestamp)
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// Create an error response that redirects to the frontend with an error

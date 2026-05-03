@@ -1,5 +1,8 @@
 mod app_config;
 mod database;
+<%_ if (authenticationTypeJwt) { _%>
+pub mod sentinels;
+<%_ } _%>
 <%_ if (authenticationTypeOauth2) { _%>
 mod oauth2_config;
 <%_ } _%>

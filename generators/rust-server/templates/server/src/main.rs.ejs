@@ -1,4 +1,4 @@
-use axum::{middleware, routing::get, Router};
+use axum::{http::{header, HeaderValue, Method}, middleware, routing::get, Router};
 <%_ if (enableSwaggerCodegen) { _%>
 use axum::Json;
 <%_ } _%>
@@ -126,6 +126,21 @@ async fn main() {
     let config = AppConfig::from_consul_and_env(&consul_remote_config);
 <%_ } else { _%>
     let config = AppConfig::from_env();
+<%_ } _%>
+
+<%_ if (authenticationTypeJwt) { _%>
+    // Defense-in-depth: refuse to start if JWT_SECRET is set to a known-default
+    // sentinel value. The docker-entrypoint.sh script catches this earlier in the
+    // boot path for `docker run` workflows, but K8s static-manifest users (kubectl
+    // apply -f without modifying app-secret.yml) can still get here with the
+    // sentinel literal injected via envFrom: secretRef.
+    if <%= rustCrateName %>::config::sentinels::is_sentinel(&config.jwt_secret) {
+        eprintln!(
+            "FATAL: JWT_SECRET is set to a known-default sentinel value. \
+             Refusing to start. See RELEASE_NOTES.md for migration guidance."
+        );
+        std::process::exit(1);
+    }
 <%_ } _%>
 
 <%_ if (authenticationTypeOauth2) { _%>
@@ -390,11 +405,35 @@ async fn main() {
     };
 
 <%_ } _%>
-    // Build CORS layer
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // Build CORS layer.
+    // Development: permissive (Any) so local frontends on arbitrary ports work.
+    // Production: allowlist origins from CORS_ALLOWED_ORIGINS (comma-separated),
+    // restrict methods/headers, refuse to start if the env var is missing or empty.
+    let cors = if config.is_production() {
+        let raw = std::env::var("CORS_ALLOWED_ORIGINS").unwrap_or_else(|_| {
+            eprintln!("FATAL: CORS_ALLOWED_ORIGINS must be set in production. Refusing to start.");
+            std::process::exit(1);
+        });
+        let allowed: Vec<HeaderValue> = raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.parse::<HeaderValue>().ok())
+            .collect();
+        if allowed.is_empty() {
+            eprintln!("FATAL: CORS_ALLOWED_ORIGINS produced an empty allowlist (raw value: {:?}). Refusing to start.", raw);
+            std::process::exit(1);
+        }
+        CorsLayer::new()
+            .allow_origin(allowed)
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+            .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+    } else {
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+    };
 
     // Build application state
     let state = AppState {

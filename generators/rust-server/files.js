@@ -71,6 +71,13 @@ export const serverFiles = {
       templates: ['src/openapi.rs'],
     },
     {
+      // JWT-only: known-default sentinel rejection (consumed by main.rs startup check
+      // and shared with docker-entrypoint.sh as the source of truth for sentinels)
+      condition: generator => generator.authenticationTypeJwt,
+      path: SERVER_RUST_DIR,
+      templates: ['src/config/sentinels.rs'],
+    },
+    {
       // SQL-specific files (Diesel ORM)
       condition: generator => !generator.devDatabaseTypeMongodb,
       path: SERVER_RUST_DIR,
