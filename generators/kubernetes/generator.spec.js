@@ -87,8 +87,13 @@ describe('SubGenerator kubernetes of rust JHipster blueprint', () => {
       result.assertFileContent('k8s/postgresql-statefulset.yml', 'POSTGRES_DB');
     });
 
-    it('should reference PostgreSQL in configmap', () => {
-      result.assertFileContent('k8s/app-configmap.yml', 'postgresql:5432');
+    it('should assemble DATABASE_URL in deployment with $(POSTGRES_PASSWORD) substitution', () => {
+      // DATABASE_URL is intentionally not in the configmap — it interpolates
+      // a Secret value, so it lives in the deployment env where K8s can
+      // expand $(VAR) against envFrom-imported Secret keys.
+      result.assertFileContent('k8s/app-deployment.yml', 'postgresql:5432');
+      result.assertFileContent('k8s/app-deployment.yml', '$(POSTGRES_PASSWORD)');
+      result.assertNoFileContent('k8s/app-configmap.yml', /^\s*DATABASE_URL:/m);
     });
 
     it('should not generate other database manifests', () => {

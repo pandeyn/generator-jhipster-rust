@@ -56,6 +56,21 @@ spec:
             - secretRef:
                 name: <%= baseName.toLowerCase() %>-vault-secret
 <%_ } _%>
+<%_ if (devDatabaseTypePostgresql || devDatabaseTypeMysql) { _%>
+          # DATABASE_URL is assembled here (not in the ConfigMap) so the
+          # password lives only in app-secret. K8s expands the $(VAR) syntax
+          # against envFrom-imported Secret keys — supported since K8s 1.7.
+          # The operator must populate POSTGRES_PASSWORD or MYSQL_ROOT_PASSWORD
+          # in app-secret before applying this manifest (see app-secret.yml).
+          env:
+<%_ if (devDatabaseTypePostgresql) { _%>
+            - name: DATABASE_URL
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@<%= baseName.toLowerCase() %>-postgresql:5432/<%= baseName.toLowerCase() %>"
+<%_ } else if (devDatabaseTypeMysql) { _%>
+            - name: DATABASE_URL
+              value: "mysql://root:$(MYSQL_ROOT_PASSWORD)@<%= baseName.toLowerCase() %>-mysql:3306/<%= baseName.toLowerCase() %>"
+<%_ } _%>
+<%_ } _%>
           livenessProbe:
             httpGet:
               path: /api/health/liveness

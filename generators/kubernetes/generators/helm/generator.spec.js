@@ -109,9 +109,15 @@ describe('SubGenerator helm of rust JHipster blueprint', () => {
       result.assertFile('helm/pgapp/templates/postgresql-statefulset.yaml');
     });
 
-    it('should include PostgreSQL config in values', () => {
+    it('should include PostgreSQL config in values and assemble DATABASE_URL in deployment', () => {
+      // postgresql.enabled stays in values.yaml (chart toggle).
+      // DATABASE_URL moved out of values.yaml's `config:` block — assembling
+      // it from a Secret-sourced password requires deployment.yaml env
+      // substitution, not a plaintext ConfigMap entry.
       result.assertFileContent('helm/pgapp/values.yaml', 'postgresql:');
-      result.assertFileContent('helm/pgapp/values.yaml', 'DATABASE_URL');
+      result.assertFileContent('helm/pgapp/templates/deployment.yaml', '$(DB_PASSWORD)');
+      result.assertFileContent('helm/pgapp/templates/deployment.yaml', 'postgresql:5432');
+      result.assertNoFileContent('helm/pgapp/values.yaml', /^\s*DATABASE_URL:/m);
     });
 
     it('should not generate other database templates', () => {

@@ -13,10 +13,12 @@ data:
   APP_HOST: "0.0.0.0"
   APP_PORT: "<%= appPort %>"
   APP_ENV: "development"
-<%_ if (devDatabaseTypePostgresql) { _%>
-  DATABASE_URL: "postgres://postgres:postgres@<%= baseName.toLowerCase() %>-postgresql:5432/<%= baseName.toLowerCase() %>"
-<%_ } else if (devDatabaseTypeMysql) { _%>
-  DATABASE_URL: "mysql://root:root@<%= baseName.toLowerCase() %>-mysql:3306/<%= baseName.toLowerCase() %>"
+<%_ if (devDatabaseTypePostgresql || devDatabaseTypeMysql) { _%>
+  # DATABASE_URL is intentionally NOT in this ConfigMap — it interpolates the
+  # database password from app-secret and is therefore assembled in
+  # app-deployment.yml via $(POSTGRES_PASSWORD)/$(MYSQL_ROOT_PASSWORD) env
+  # substitution. Putting the password in a ConfigMap would store it as
+  # plaintext readable by anyone with namespace get/list rights.
 <%_ } else if (devDatabaseTypeMongodb) { _%>
   MONGODB_URI: "mongodb://<%= baseName.toLowerCase() %>-mongodb:27017/?directConnection=true"
   MONGODB_DATABASE: "<%= baseName.toLowerCase() %>"
