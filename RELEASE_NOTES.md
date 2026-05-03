@@ -4,13 +4,13 @@
 
 JHipster Rust Blueprint v0.9.8 is a **security-focused release** that hardens the templates the blueprint emits. An audit conducted before this release identified 14 issues spanning authentication defaults, container privilege, K8s secret handling, CORS configuration, and CI supply-chain. This release closes these issues without forcing existing 0.9.7 deployments to change their workflow.
 
-The spine of the release is a runtime entrypoint script (`docker-entrypoint.sh`) that generates a random per-container `JWT_SECRET` when the operator hasn't supplied one, and refuses to start when the value matches a known-default sentinel string. A Rust startup-time check duplicates the sentinel rejection so the K8s static-manifest path (where `envFrom: secretRef` injects the value before the entrypoint sees it) is also covered. The same single source of truth (`server/src/config/sentinels.rs`) is shared between the shell and the Rust code.
+The spine of the release is a runtime entrypoint script (`docker-entrypoint.sh`) that generates a random per-container `JWT_SECRET` when the operator hasn't supplied one, and refuses to start when the value matches a known-default sentinel string. A Rust startup-time check duplicates the sentinel rejection so the K8s static-manifest path (where `envFrom: secretRef` injects the value before the entrypoint sees it) is also covered. The denylist covers three legacy default forms (the bare `change-me-in-production`, the longer `change-me-in-production-use-a-secure-random-string`, and `your-super-secret-jwt-key-change-in-production`), a wildcard for the older timestamp-based pattern, and the empty string (a zero-byte HMAC key signs forgable tokens). The same denylist is enforced by the docker vault-init script before any value is written to Vault, so dev/test stacks can't seed a publicly-known signing key either. `server/src/config/sentinels.rs` is the single source of truth shared by the Rust binary; the shell scripts mirror it line-for-line.
 
 OAuth2 deployments get proper CSRF state validation — the state parameter is now generated from `OsRng`, stored in an HttpOnly cookie before redirect, and constant-time compared on the callback (`subtle::ConstantTimeEq`). Token cookies gain a `Secure` flag when the app serves over HTTPS. CORS becomes environment-aware: development keeps the permissive default so local frontends work without operator config, but production reads `CORS_ALLOWED_ORIGINS` from the environment and refuses to start when that variable is missing or empty. Containers run as a non-root user (UID 1001) in both Dockerfile and K8s deployment manifests; non-SQLite paths add a writable `/tmp` `emptyDir` so `readOnlyRootFilesystem: true` doesn't crash the app on first temp-file write.
 
 CI and dependency hygiene round out the release. Third-party actions in `.github/workflows/samples.yml` are pinned to commit SHAs, a new `.github/dependabot.yml` keeps them current, and a `shellcheck` step lints the generated entrypoint on every sample-matrix run. `npm audit` reports zero vulnerabilities — down from 24 — via a combination of `npm audit fix`, npm overrides on transitive packages, and an eslint bump.
 
-Generation across SQLite/PostgreSQL/MySQL/MongoDB and the existing JHipster sample shapes (basic monolith, microservice with circuit breaker, gateway with circuit breaker) was regression-tested end to end. The full vitest suite passes (358 tests) and a new spec (`generators/rust-server/entrypoint.spec.js`, 6 cases) exercises the entrypoint behavior matrix directly.
+Generation across SQLite/PostgreSQL/MySQL/MongoDB and the existing JHipster sample shapes (basic monolith, microservice with circuit breaker, gateway with circuit breaker) was regression-tested end to end. The full vitest suite passes (440 generator specs across rust-server, kubernetes, helm, docker, cypress, and client) and a new spec (`generators/rust-server/entrypoint.spec.js`, 7 cases) exercises the entrypoint behavior matrix directly. End-to-end deployment was verified on a local kind cluster: `helm install` brings the app and its postgres StatefulSet to Ready in roughly 17 seconds with no operator-supplied secrets, the JWT auth roundtrip succeeds, and forged tokens return 401.
 
 ## What's New in v0.9.8
 
@@ -23,7 +23,7 @@ Three coordinated fixes replace the prior single point of failure.
 **Runtime default.** The Dockerfile no longer sets `ENV JWT_SECRET=...`. A new `docker-entrypoint.sh.ejs` template ships an entrypoint script that:
 
 1. Generates a 32-byte CSPRNG hex value via `head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'` when `JWT_SECRET` is unset, exporting it for the child process. Logs `WARNING: JWT_SECRET unset; generated random per-container value.`
-2. Refuses to start (exit 1, `FATAL` log) when `JWT_SECRET` matches a known-default sentinel string. Two exact matches and one wildcard pattern are checked.
+2. Refuses to start (exit 1, `FATAL` log) when `JWT_SECRET` matches a known-default sentinel string. Three exact matches and one wildcard pattern are checked.
 3. Logs `INFO: JWT_SECRET supplied by operator.` for any other value.
 
 Then `exec "$@"` hands off to the configured CMD. The script is POSIX `sh`, depends on no extra packages, lints clean under `shellcheck`, and runs in CI on every sample-matrix run.
@@ -55,11 +55,21 @@ The K8s `Deployment` (`generators/kubernetes/templates/k8s/app-deployment.yml.ej
 
 The static `app-secret.yml.ejs` no longer ships hardcoded plaintext defaults. The rendered manifest has `stringData: {}` and a comment block explaining three operator approaches: edit the file inline, use `kubectl create secret generic ... --from-literal=...`, or use the Helm chart.
 
-The Helm path uses a **lookup-or-generate** template in `templates/secret.yaml`. On first install, no in-cluster Secret exists yet, so `randAlphaNum 32` generates a fresh value. On subsequent `helm upgrade` runs, `lookup "v1" "Secret" .Release.Namespace $secretName` returns the existing Secret and the chart reuses the prior `JWT_SECRET` (`b64dec | quote`). This preserves token validity across rolling deployments — without it, every upgrade would rotate the signing key and invalidate every in-flight session. Operators can override via `helm install --set secrets.JWT_SECRET="$(openssl rand -hex 32)"`. `README-helm.md` documents the rotation procedure.
+The Helm path uses a **lookup-or-generate** template in `templates/secret.yaml` for both `JWT_SECRET` and `DB_PASSWORD`. On first install, no in-cluster Secret exists yet, so `randAlphaNum 32` generates fresh values. On subsequent `helm upgrade` runs, `lookup "v1" "Secret" .Release.Namespace $secretName` returns the existing Secret and the chart reuses the prior values (`b64dec | quote`). This preserves token validity across rolling deployments — without it, every upgrade would rotate the JWT signing key (invalidating every in-flight session) and rotate the database password (locking the app out of its persisted volume). Operators can override either via `helm install --set secrets.JWT_SECRET="$(openssl rand -hex 32)" --set secrets.DB_PASSWORD="$(openssl rand -base64 24)"`. `README-helm.md` documents the rotation procedure.
+
+**K8s/Helm consul-config and vault-init scrub.** Four manifests previously shipped a literal `change-me-in-production` JWT seed — the K8s static `consul-config-configmap.yml`, the Helm chart's `consul-config-configmap.yaml`, and both `vault-init-job` variants. The Rust app's `from_consul_and_env` falls back to Consul KV when env `JWT_SECRET` is unset, so a missed `secretRef` would have silently picked up that publicly-known string. v0.9.8 drops the `jwt.secret` line from both consul ConfigMaps (env JWT_SECRET via Helm secret-pipeline or operator-supplied secretRef stays the source of truth) and drops the JWT_SECRET write from both vault-init Jobs (operators populate Vault post-install or via the Helm Secret). The bare `change-me-in-production` form was also added to the entrypoint and Rust denylists so any future regression is caught at startup.
 
 ### Dockerfile DB credentials
 
 The runtime stage previously set `ENV DATABASE_URL=postgres://postgres:postgres@db:5432/...` (and `mysql://root:root@db:3306/...`, and the SQLite/Mongo equivalents). v0.9.8 removes those defaults entirely. The runtime app already calls `env::var("DATABASE_URL").expect(...)`, so the failure mode flips from "silently use bad creds" to "fail loud at startup with operator action required." The `MONGODB_DATABASE` env var (which is just a database name, not a credential) stays as a default since it's app-local.
+
+### DATABASE_URL stays out of the K8s and Helm ConfigMap
+
+Both the K8s static `app-configmap.yml` and the Helm chart's `values.yaml` `config:` block previously shipped `DATABASE_URL` with the literal `postgres:postgres` (or `root:root`) credential — a plaintext password readable by anyone with namespace `get/list` rights on ConfigMaps, and out of sync with the random password the postgres/mysql StatefulSet expected from the Secret. v0.9.8 removes `DATABASE_URL` from both ConfigMaps for SQL paths. The Deployment manifest now assembles `DATABASE_URL` as an explicit `env:` entry that uses K8s `$(VAR)` substitution against the envFrom-imported Secret key (`$(DB_PASSWORD)` for Helm, `$(POSTGRES_PASSWORD)` / `$(MYSQL_ROOT_PASSWORD)` for static manifests). The password lives only in the Secret. The Helm path additionally generates `DB_PASSWORD` via the lookup-or-generate template described above, so `helm install` produces a working postgres + app pair on first run with no operator setup. `MONGODB_URI` (no password in dev) and `DATABASE_URL` for SQLite (no network credential) keep their ConfigMap entries.
+
+### Vault dev compose
+
+The dev `docker compose -f docker/vault.yml up` flow previously seeded Vault with a literal `<baseName>-vault-jwt-secret-change-in-production` placeholder via `vault-init.sh`. v0.9.8 forwards `JWT_SECRET` from the project `.env` to the vault-init container (docker compose auto-loads `.env`), seeds Vault with the same CSPRNG hex the entrypoint sees, and falls back to a fresh `head -c 32 /dev/urandom` value when `.env` is absent. The same case-statement denylist that protects the entrypoint protects vault-init: any sentinel (including the bare `change-me-in-production` form) is substituted with a fresh random hex and a `WARNING` log line.
 
 ### CI hardening
 
@@ -75,9 +85,11 @@ The runtime stage previously set `ENV DATABASE_URL=postgres://postgres:postgres@
 
 ### Tests
 
-`generators/rust-server/entrypoint.spec.js` is new. It scaffolds a JWT-auth sample via the existing JHipster test helpers, reads the rendered entrypoint out of the in-memory FS, materialises it to a real tmp file, and spawns `bash` against it with various `JWT_SECRET` values. Six cases cover unset → WARNING + generated, exact-sentinel → FATAL, wildcard-sentinel → FATAL, legitimate value → INFO + preserved, and `exec "$@"` pass-through. Existing snapshot tests were regenerated for the templates that changed.
+`generators/rust-server/entrypoint.spec.js` is new. It scaffolds a JWT-auth sample via the existing JHipster test helpers, reads the rendered entrypoint out of the in-memory FS, materialises it to a real tmp file, and spawns `bash` against it with various `JWT_SECRET` values. Seven cases cover unset → WARNING + generated, the long-form exact sentinel → FATAL, the bare `change-me-in-production` form → FATAL, the legacy timestamp-wildcard → FATAL, legitimate value → INFO + preserved, and `exec "$@"` pass-through. The Rust `sentinels.rs` unit tests cover the same matrix plus an empty-string rejection. Existing snapshot tests were regenerated for the templates that changed.
 
-Full suite: 358 tests across rust-server, kubernetes, and helm specs. All pass.
+Full suite: 440 generator specs across rust-server, kubernetes, helm, docker, cypress, and client. All pass.
+
+End-to-end on a local kind cluster: `helm install` brings postgres and the app to Ready in ~17s with no operator-supplied secrets, JWT auth roundtrip succeeds, forged tokens return 401, and sentinels are rejected at startup.
 
 ## Upgrade Notes
 
@@ -101,13 +113,23 @@ docker run \
 
 ### What changes for `kubectl apply -f k8s/`
 
-The static `app-secret.yml` manifest now ships with `stringData: {}` (empty). `kubectl apply -f` of the unmodified file creates an empty Secret, and the Rust app's startup-time check then exits with `FATAL: ...JWT_SECRET...` (it sees the env var as effectively unset / empty). Three options:
+The static `app-secret.yml` manifest now ships with `stringData: {}` (empty). `kubectl apply -f` of the unmodified file creates an empty Secret, the postgres/mysql StatefulSet exits with `CreateContainerConfigError` (it can't find `POSTGRES_PASSWORD` / `MYSQL_ROOT_PASSWORD`), and the app's startup-time check exits with `FATAL: ...JWT_SECRET...`. Three options:
 
-1. **Edit the manifest:** uncomment the example block in the file and supply real values inline.
-2. **Use kubectl create:** skip applying the manifest and run `kubectl create secret generic <app>-secret --from-literal=JWT_SECRET="$(openssl rand -hex 32)" --from-literal=POSTGRES_PASSWORD=...`.
-3. **Use the Helm chart:** `helm install ./helm/<app>` auto-generates `JWT_SECRET` on first install and preserves it across upgrades. See `README-helm.md`.
+1. **Edit the manifest:** uncomment the example block in `app-secret.yml` and supply real values inline.
+2. **Use kubectl create:** skip applying `app-secret.yml` and run `kubectl create secret generic <app>-secret --from-literal=JWT_SECRET="$(openssl rand -hex 32)" --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)"`.
+3. **Use the Helm chart:** `helm install ./helm/<app>` auto-generates both `JWT_SECRET` and `DB_PASSWORD` on first install and preserves them across upgrades. See `README-helm.md`.
 
 If you previously deployed via the unmodified static manifest and it worked, you were running with publicly-known credentials — that's exactly what this release closes.
+
+`DATABASE_URL` is no longer in `app-configmap.yml` for the SQL paths. It now lives in `app-deployment.yml` as an explicit `env:` entry that interpolates the password via K8s `$(POSTGRES_PASSWORD)` / `$(MYSQL_ROOT_PASSWORD)` substitution against the Secret. If you have CI tooling or operators reading `DATABASE_URL` out of the ConfigMap, point it at the Deployment env instead.
+
+### What changes for `helm install`
+
+The Helm chart now auto-generates random `JWT_SECRET` and `DB_PASSWORD` values on first install via the lookup-or-generate template, and preserves them across `helm upgrade` runs so existing tokens stay valid and the persisted database remains readable. `helm install <release> ./helm/<app>` works with no `--set` flags. To pin specific values, pass `--set secrets.JWT_SECRET="$(openssl rand -hex 32)" --set secrets.DB_PASSWORD="$(openssl rand -base64 24)"`. The chart's `DATABASE_URL` is assembled inside the rendered Deployment via `$(DB_PASSWORD)` env substitution against the chart-managed Secret — operators no longer need to reconcile a hardcoded password in `values.yaml` against the StatefulSet's expected key.
+
+### What changes for `docker compose -f docker/vault.yml up`
+
+The dev vault-init container now reads `JWT_SECRET` from the project's `.env` (docker compose auto-loads it from CWD) instead of writing a literal placeholder into Vault. If `.env` is absent or `JWT_SECRET` is empty, vault-init generates a fresh random hex for the dev seed. No operator action required for the default workflow.
 
 ### What changes for production CORS
 
