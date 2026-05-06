@@ -14,6 +14,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with Jaeg
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -256,6 +259,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with circ
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -487,6 +493,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -722,6 +731,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -941,6 +953,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -1183,6 +1198,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -1454,6 +1472,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -1687,6 +1708,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -1918,6 +1942,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -2180,6 +2207,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -2380,6 +2410,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -2578,6 +2611,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -2799,6 +2835,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -3034,6 +3073,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -3265,6 +3307,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -3512,6 +3557,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -3731,6 +3779,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -3966,6 +4017,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -4199,6 +4253,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -4418,6 +4475,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -4659,6 +4719,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -4857,6 +4920,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -5092,6 +5158,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should N
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -5277,6 +5346,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should n
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -5460,6 +5532,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith with kaf
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {
@@ -5665,6 +5740,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -5850,6 +5928,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "Dockerfile": {
     "stateCleared": "modified",
   },
+  "README.md": {
+    "stateCleared": "modified",
+  },
   "diesel.toml": {
     "stateCleared": "modified",
   },
@@ -6033,6 +6114,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succ
     "stateCleared": "modified",
   },
   "Dockerfile": {
+    "stateCleared": "modified",
+  },
+  "README.md": {
     "stateCleared": "modified",
   },
   "diesel.toml": {

@@ -14,7 +14,7 @@ export const serverFiles = {
         '.gitignore.jhi.rust',
         'Dockerfile',
         'docker-entrypoint.sh',
-        'README.md.jhi.rust',
+        'README.md',
       ],
     },
     {
