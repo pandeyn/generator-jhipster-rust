@@ -76,10 +76,11 @@ This application was generated using JHipster <%= jhipsterVersion %> with the Ru
    cargo run
    ```
 <%_ } else { _%>
-1. Copy environment file:
+1. Review the generated `.env` (created with working defaults including a CSPRNG-generated `JWT_SECRET`):
    ```bash
-   cp .env.example .env
+   $EDITOR .env
    ```
+   `.env.example` is the sanitized template suitable for committing to git; copying it onto `.env` will replace the working `JWT_SECRET` with a sentinel placeholder that the application refuses to start with until you set a real value.
 
 2. Create database directory:
    ```bash

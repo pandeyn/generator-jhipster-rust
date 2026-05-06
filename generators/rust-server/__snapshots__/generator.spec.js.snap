@@ -5,6 +5,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with Jaeg
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -250,6 +253,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with circ
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -484,6 +490,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with circ
 exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with consul > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -722,6 +731,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -944,6 +956,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with Zipkin distributed tracing > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -1189,6 +1204,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with both Zipkin tracing and Prometheus monitoring > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -1463,6 +1481,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -1699,6 +1720,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -1933,6 +1957,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with circuit breaker and prometheus > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -2198,6 +2225,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -2401,6 +2431,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -2602,6 +2635,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with circuit breaker explicitly disabled > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -2826,6 +2862,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with consul > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -3064,6 +3103,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -3298,6 +3340,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with consul and vault > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -3548,6 +3593,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -3770,6 +3818,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with consul but without vault > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -4008,6 +4059,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -4244,6 +4298,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -4466,6 +4523,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with microfrontend > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -4710,6 +4770,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -4911,6 +4974,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
 exports[`SubGenerator rust-server of rust JHipster blueprint > microservice without distributed tracing > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -5149,6 +5215,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should N
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -5337,6 +5406,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should n
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -5523,6 +5595,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should n
 exports[`SubGenerator rust-server of rust JHipster blueprint > monolith with kafka > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {
@@ -5731,6 +5806,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -5919,6 +5997,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   ".env": {
     "stateCleared": "modified",
   },
+  ".env.example": {
+    "stateCleared": "modified",
+  },
   ".yo-rc.json": {
     "stateCleared": "modified",
   },
@@ -6105,6 +6186,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
 exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succeed 1`] = `
 {
   ".env": {
+    "stateCleared": "modified",
+  },
+  ".env.example": {
     "stateCleared": "modified",
   },
   ".yo-rc.json": {

@@ -11,6 +11,10 @@ export const serverFiles = {
           file: 'env',
           renameTo: () => '.env',
         },
+        {
+          file: 'env.example',
+          renameTo: () => '.env.example',
+        },
         '.gitignore.jhi.rust',
         'Dockerfile',
         'docker-entrypoint.sh',
