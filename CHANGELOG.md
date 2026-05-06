@@ -6,22 +6,29 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 This file is the at-a-glance index. For long-form per-release narrative — rationale, implementation notes, gotchas, and migration commands — see [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
-## [Unreleased]
+## [0.9.9] — 2026-05-06
 
-DX papercut cleanup landing on `main` ahead of the next release. All non-breaking; nothing in `0.9.8`-generated projects changes until you regenerate.
+DX patch release. Two critical fixes (microservice scaffolds couldn't compile under `cargo check` since v0.9.4; the new cheat sheet falsely advertised `--db` and `--auth` as flags that work with `--defaults`) plus seven quality-of-life improvements. All non-breaking; nothing in `0.9.8`-generated projects changes until you regenerate.
 
 ### Fixed
 
+- **Microservice and gateway scaffolds now compile under `cargo check` on the first run.** `server/Cargo.toml.ejs` was missing a `reqwest.workspace = true` block under the `circuitBreakerEnabled` conditional, so `resilient_http_client.rs` (which uses `reqwest::Client/Response/Error`) failed to compile with three E0432/E0433 errors. The workspace `Cargo.toml.ejs` correctly declared `reqwest`; only the server crate was missing it. Latent since v0.9.4 because vitest's snapshot tests verify file content but never run `cargo check`. Affected every microservice or gateway scaffold with circuit breaker enabled (the default for both) and neither OAuth2 nor Consul. (commit `8774291`)
 - Generated `README.md` no longer duplicates content 8 times. The `.jhi.rust.ejs` extension hooked JHipster's fragment-merge mechanism without fragment guards, inserting the template at every fragment slot in the parent README. Renamed to `README.md.ejs` (standalone override). 1001 → 138 lines for a default microservice scaffold. (commit `afcaedf`)
-- Generated `.env.example` now ships alongside `.env` so the README's first setup step works. The example uses a known-default sentinel for `JWT_SECRET`, ensuring `cp .env.example .env && cargo run` FATALs at startup rather than silently signing tokens with a placeholder. (commit `44364f6`)
-- `jhipster-rust --version` and other CLI invocations no longer print `INFO! No custom commands found within blueprint` from the upstream loader. Added `cli/commands.js` exporting an empty default object to satisfy `_getBlueprintCommands`'s probe. (commit `ed6e945`)
-- `jhipster-rust app --help` now prints a Rust Blueprint quick reference between the Rust badge and JHipster's full Options block. Surfaces the four flags that actually shape a Rust scaffold (`--application-type`, `--db`, `--auth`, `--service-discovery-type`) with their valid choices, including `--db`'s missing enumeration. (commit `fd43639`)
-- Source `README.md` gains a `# What This Does in 60 Seconds` section above `# Introduction`, so a developer landing from a Google search hits the magical-moment pitch (copy-paste commands plus a dense outcome paragraph naming all three app types and frontend choices) before the feature matrix. (commit `c05a50a`)
+- Generated `.env.example` now ships alongside `.env` so the README's first setup step works. The example uses a known-default sentinel for `JWT_SECRET`, ensuring `cp .env.example .env && cargo run` FATALs at startup rather than silently signing tokens with a placeholder. The header now also names all three failure modes explicitly: JWT scaffolds FATAL on startup, OAuth2 scaffolds fail at first login (OIDC_CLIENT_SECRET placeholder), SQL/MongoDB scaffolds fail at DB connect (placeholder credentials). (commits `44364f6`, `69f5af2`)
+- `jhipster-rust --version` and other CLI invocations no longer print `INFO! No custom commands found within blueprint` from the upstream loader. Added `cli/commands.js` exporting an empty default object to satisfy `_getBlueprintCommands`'s probe. Script-friendly: `jhipster-rust --version | awk '{print $1}'` returns `0.9.9` (was `INFO!`). (commit `ed6e945`)
+- Generated `README.md` setup section is shorter and accurate: removed the redundant `mkdir -p target/db` step (runtime auto-creates via `fs::create_dir_all`) and the `diesel migration run` step (already auto-run in the generator's END phase). The diesel command stays as a note for the entity-addition workflow. Two steps now: review `.env`, then `cargo run`. (commit `69f5af2`)
+- Generated `README.md` server-URL line is now conditional on application type. Previously hard-coded `http://localhost:8080` regardless, which was wrong for every microservice scaffold (those use port 8081 per `env.ejs`). (commit `69f5af2`)
+
+### Changed
+
+- `jhipster-rust app --help` now prints a Rust Blueprint quick reference between the Rust badge and JHipster's full Options block. Enumerates supported choices for the four scaffold-shaping flags (`--application-type monolith | gateway | microservice`, `--db sqlite | postgresql | mysql | mongodb`, `--auth jwt | oauth2`, `--service-discovery-type consul | no` — the choice lists reflect what this blueprint implements, not what JHipster core advertises), with three example invocations. (commits `fd43639`, `69f5af2`)
+- The cheat sheet is honest about the `--defaults` interaction: `--db` and `--auth` are silently overridden by `--defaults` (a pre-existing JHipster CLI behavior — those flags only take full effect with `--skip-server`). The cheat sheet now annotates them as `(interactive only)` and includes an explicit Note: to pick a non-default DB or auth, omit `--defaults` and answer the prompts. (commit `b2323e8`)
+- Source `README.md` gains a `# What This Does in 60 Seconds` section above `# Introduction`, so a developer landing from a Google search hits the magical-moment pitch (copy-paste commands plus a dense outcome paragraph naming all three app types and frontend choices) before the feature matrix. The pitch's prose qualifies that the JHipster frontend ships with monolith and gateway only (microservice mode is API-only); timing claims explicitly distinguish cold versus warm cargo cache. (commits `c05a50a`, `69f5af2`)
 
 ### Documentation
 
-- New `CHANGELOG.md` (this file) at repo root indexes every release from `0.7.4` through `0.9.8` plus this `[Unreleased]` block, following the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Long-form per-release narrative stays in `RELEASE_NOTES.md`. (commit `a8004d8`)
-- Three-line shell comment added above the `[ -z ]` test in `docker-entrypoint.sh.ejs` documenting the deliberate empty-vs-unset convergence and pointing at the Rust binary's `is_sentinel("")` as the layer that catches the bare `cargo run` path. Future maintainers no longer need to grep for `is_sentinel` to understand why empty `JWT_SECRET` is allowed to generate. (commit `551c235`)
+- New `CHANGELOG.md` at repo root indexes every release from `0.7.4` through `0.9.9`, following the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Each version is dated from its git tag and grouped into Added / Changed / Fixed / Breaking / Migration as applicable. Long-form per-release narrative stays in `RELEASE_NOTES.md`. (commit `a8004d8`)
+- Three-line shell comment added above the `[ -z ]` test in `docker-entrypoint.sh.ejs` documenting the deliberate empty-vs-unset convergence (POSIX `[ -z ]` matches both empty and unset, so `JWT_SECRET=""` generates a random value here just like missing) and pointing at the Rust binary's `is_sentinel("")` as the layer that catches the bare `cargo run` path. (commit `551c235`)
 
 ## [0.9.8] — 2026-05-03
 
@@ -191,7 +198,7 @@ Initial public release.
 - Multi-stage Dockerfile and Docker Compose for full-stack local dev.
 - Frontend support: Angular, React, Vue (full JHipster clients).
 
-[Unreleased]: https://github.com/pandeyn/generator-jhipster-rust/compare/v0.9.8...HEAD
+[0.9.9]: https://github.com/pandeyn/generator-jhipster-rust/releases/tag/v0.9.9
 [0.9.8]: https://github.com/pandeyn/generator-jhipster-rust/releases/tag/v0.9.8
 [0.9.7]: https://github.com/pandeyn/generator-jhipster-rust/releases/tag/v0.9.7
 [0.9.6]: https://github.com/pandeyn/generator-jhipster-rust/releases/tag/v0.9.6
