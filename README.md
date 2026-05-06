@@ -7,6 +7,18 @@
 <!-- [![Generator][github-generator-image]][github-generator-url]
 [![Samples][github-samples-image]][github-samples-url] -->
 
+# What This Does in 60 Seconds
+
+```bash
+npm install -g generator-jhipster-rust
+mkdir myapp && cd myapp
+jhipster-rust app --base-name myapp --application-type microservice \
+                  --db sqlite --auth jwt --defaults
+cargo run
+```
+
+A production-shipping Rust + Axum REST API with JWT auth, Diesel ORM, OpenAPI 3 docs (Swagger UI + Scalar), Docker Compose stack, K8s + Helm manifests, and a JHipster frontend wired to the Rust backend. Same flow scaffolds monolith, gateway, or microservice apps with Angular, React, or Vue clients. About 30 seconds to scaffold, 30-60 seconds to first `cargo run`. The generated code compiles clean, runs the migration, and serves at `http://localhost:8080`.
+
 # Introduction
 
 This is a [JHipster](https://www.jhipster.tech/) blueprint that generates a **Rust backend** using the [Axum](https://github.com/tokio-rs/axum) web framework as an alternative to the traditional Spring Boot backend. It enables you to leverage Rust's performance, safety, and low memory footprint while keeping the familiar JHipster development experience and Angular/React/Vue frontend.
