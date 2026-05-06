@@ -88,6 +88,9 @@ reqwest.workspace = true
 opentelemetry-otlp.workspace = true
 <%_ } _%>
 <%_ } _%>
+<%_ if (circuitBreakerEnabled && !authenticationTypeOauth2 && !serviceDiscoveryConsul) { _%>
+reqwest.workspace = true
+<%_ } _%>
 
 [dev-dependencies]
 axum-test = "14"
