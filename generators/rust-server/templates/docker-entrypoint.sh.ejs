@@ -25,6 +25,9 @@ is_sentinel() {
 }
 
 <%_ if (authenticationTypeJwt) { _%>
+# `[ -z ]` matches empty AND unset, so JWT_SECRET="" generates a random
+# value here just like missing — deliberate. The Rust binary's
+# is_sentinel("") rejects empty independently for the `cargo run` path.
 if [ -z "${JWT_SECRET:-}" ]; then
   JWT_SECRET=$(gen_random)
   export JWT_SECRET
