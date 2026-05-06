@@ -15,7 +15,13 @@ DX papercut cleanup landing on `main` ahead of the next release. All non-breakin
 - Generated `README.md` no longer duplicates content 8 times. The `.jhi.rust.ejs` extension hooked JHipster's fragment-merge mechanism without fragment guards, inserting the template at every fragment slot in the parent README. Renamed to `README.md.ejs` (standalone override). 1001 → 138 lines for a default microservice scaffold. (commit `afcaedf`)
 - Generated `.env.example` now ships alongside `.env` so the README's first setup step works. The example uses a known-default sentinel for `JWT_SECRET`, ensuring `cp .env.example .env && cargo run` FATALs at startup rather than silently signing tokens with a placeholder. (commit `44364f6`)
 - `jhipster-rust --version` and other CLI invocations no longer print `INFO! No custom commands found within blueprint` from the upstream loader. Added `cli/commands.js` exporting an empty default object to satisfy `_getBlueprintCommands`'s probe. (commit `ed6e945`)
-- `jhipster-rust app --help` now prints a Rust Blueprint quick reference between the Rust badge and JHipster's full Options block. Surfaces the four flags that actually shape a Rust scaffold (`--application-type`, `--db`, `--auth`, `--service-discovery-type`) with their valid choices, including `--db`'s missing enumeration.
+- `jhipster-rust app --help` now prints a Rust Blueprint quick reference between the Rust badge and JHipster's full Options block. Surfaces the four flags that actually shape a Rust scaffold (`--application-type`, `--db`, `--auth`, `--service-discovery-type`) with their valid choices, including `--db`'s missing enumeration. (commit `fd43639`)
+- Source `README.md` gains a `# What This Does in 60 Seconds` section above `# Introduction`, so a developer landing from a Google search hits the magical-moment pitch (copy-paste commands plus a dense outcome paragraph naming all three app types and frontend choices) before the feature matrix. (commit `c05a50a`)
+
+### Documentation
+
+- New `CHANGELOG.md` (this file) at repo root indexes every release from `0.7.4` through `0.9.8` plus this `[Unreleased]` block, following the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Long-form per-release narrative stays in `RELEASE_NOTES.md`. (commit `a8004d8`)
+- Three-line shell comment added above the `[ -z ]` test in `docker-entrypoint.sh.ejs` documenting the deliberate empty-vs-unset convergence and pointing at the Rust binary's `is_sentinel("")` as the layer that catches the bare `cargo run` path. Future maintainers no longer need to grep for `is_sentinel` to understand why empty `JWT_SECRET` is allowed to generate. (commit `551c235`)
 
 ## [0.9.8] — 2026-05-03
 

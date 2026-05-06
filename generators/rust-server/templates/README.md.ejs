@@ -82,23 +82,19 @@ This application was generated using JHipster <%= jhipsterVersion %> with the Ru
    ```
    `.env.example` is the sanitized template suitable for committing to git; copying it onto `.env` will replace the working `JWT_SECRET` with a sentinel placeholder that the application refuses to start with until you set a real value.
 
-2. Create database directory:
-   ```bash
-   mkdir -p target/db
-   ```
-
-3. Run migrations:
-   ```bash
-   diesel migration run
-   ```
-
-4. Start the application:
+2. Start the application:
    ```bash
    cargo run
    ```
+
+   The runtime auto-creates the SQLite directory under `target/db/` and runs Diesel migrations on startup, so the first run needs no extra steps. After adding new entities with `jhipster-rust entity <Name>`, run `diesel migration run` from the project root to update `server/src/db/schema.rs` before the next build.
 <%_ } _%>
 
+<%_ if (applicationTypeMicroservice) { _%>
+The server will start at `http://localhost:8081`.
+<%_ } else { _%>
 The server will start at `http://localhost:8080`.
+<%_ } _%>
 
 ### Available Endpoints
 

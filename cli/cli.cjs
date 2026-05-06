@@ -52,8 +52,8 @@ const blueprint = packageFolderName.startsWith('jhipster-') ? `generator-${packa
         console.log('');
         console.log('  --application-type <type>     monolith | gateway | microservice');
         console.log('  --db <db>                     sqlite | postgresql | mysql | mongodb');
-        console.log('  --auth <type>                 jwt | oauth2 | session');
-        console.log('  --service-discovery-type <t>  consul | eureka | no');
+        console.log('  --auth <type>                 jwt | oauth2');
+        console.log('  --service-discovery-type <t>  consul | no');
         console.log('  --base-name <name>            Application name');
         console.log('  --defaults                    Skip prompts, use built-in defaults');
         console.log('  --skip-install                Skip dependency installation');

@@ -17,7 +17,7 @@ jhipster-rust app --base-name myapp --application-type microservice \
 cargo run
 ```
 
-A production-shipping Rust + Axum REST API with JWT auth, Diesel ORM, OpenAPI 3 docs (Swagger UI + Scalar), Docker Compose stack, K8s + Helm manifests, and a JHipster frontend wired to the Rust backend. Same flow scaffolds monolith, gateway, or microservice apps with Angular, React, or Vue clients. About 30 seconds to scaffold, 30-60 seconds to first `cargo run`. The generated code compiles clean, runs the migration, and serves at `http://localhost:8080`.
+A production-shipping Rust + Axum REST API with JWT auth, Diesel ORM, OpenAPI 3 docs (Swagger UI + Scalar), Docker Compose stack, K8s + Helm manifests, and a JHipster frontend (monolith / gateway only) wired to the Rust backend. Same flow scaffolds monolith, gateway, or microservice apps with Angular, React, or Vue clients. About 30 seconds to scaffold; 2-5 minutes for the first cold `cargo build`, sub-second incrementally. The generated code compiles clean, auto-creates the SQLite directory, runs migrations on startup, and serves at `http://localhost:8081` (microservice; `8080` for monolith / gateway).
 
 # Introduction
 
