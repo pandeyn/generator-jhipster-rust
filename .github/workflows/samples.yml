@@ -125,28 +125,32 @@ jobs:
           grep "CIRCUIT_BREAKER" .env || (echo "✗ Circuit breaker config not in .env" && exit 1)
           echo "✓ Circuit breaker environment variables found"
 
+      # Track 1-b.3 decision (2026-05-10): samples.yml is the fast
+      # template-correctness gate (verifies emitted code compiles + lints
+      # clean across the matrix on every PR). The deeper integration tests
+      # (cargo test against real DBs, Cypress, tarpaulin) live in the
+      # forthcoming e2e.yml from Track 1-a. Splitting concerns this way
+      # avoids running expensive DB-provisioning + test execution on every PR;
+      # nightly + pre-release e2e.yml covers that.
+      #
+      # `cargo test --release` and `cargo test circuit_breaker --release` were
+      # removed here because test_utils::create_test_pool() requires
+      # TEST_DATABASE_URL or DATABASE_URL — samples.yml does not provision a
+      # database service container. Those tests run in e2e.yml where the
+      # matrix scaffolds spin up their own DB containers.
+      #
+      # `cargo build --release` was replaced with `cargo clippy --release`
+      # because clippy already performs a full release-mode compile + adds
+      # lint checks. One step covers both compilation correctness and lint
+      # cleanliness in release mode.
+
       - name: Check Rust formatting
         working-directory: app/server
         run: cargo fmt --check
 
-      - name: Run Rust clippy
+      - name: Run Rust clippy (release mode — verifies compile + lints)
         working-directory: app/server
-        run: cargo clippy -- -D warnings
-
-      - name: Build Rust server
-        working-directory: app/server
-        run: cargo build --release
-
-      - name: Run Rust tests
-        working-directory: app/server
-        run: cargo test --release
-
-      - name: Verify circuit breaker unit tests pass (for cb samples)
-        if: contains(matrix.sample, '-cb')
-        working-directory: app/server
-        run: |
-          echo "=== Running Circuit Breaker Specific Tests ==="
-          cargo test circuit_breaker --release -- --nocapture
+        run: cargo clippy --release --all-targets -- -D warnings
 
   # Summary job to ensure all samples passed
   samples-check:
