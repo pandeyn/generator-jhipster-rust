@@ -76,6 +76,7 @@ fn preprocess_duplicate_keys(query: &str) -> String {
 }
 
 /// Rejection type for QsQuery extractor
+#[derive(Debug)]
 pub struct QsQueryRejection(String);
 
 impl IntoResponse for QsQueryRejection {
@@ -405,6 +406,197 @@ mod tests {
         fn test_has_previous_true() {
             let response: PageResponse<i32> = PageResponse::new(vec![], 100, 2, 20);
             assert!(response.has_previous());
+        }
+    }
+
+    // Track 1 Phase 1a (2026-05-11): coverage push for the remaining ~30 uncovered
+    // lines — preprocess_duplicate_keys, QsQuery extractor, QsQueryRejection
+    // IntoResponse, and the SortVisitor's visit_* methods.
+    mod preprocess_duplicate_keys_tests {
+        use super::super::preprocess_duplicate_keys;
+
+        #[test]
+        fn test_empty_query_returns_empty_string() {
+            assert_eq!(preprocess_duplicate_keys(""), "");
+        }
+
+        #[test]
+        fn test_single_pair_passes_through() {
+            // Single occurrence keeps the original key=value shape (no indexing).
+            assert_eq!(preprocess_duplicate_keys("sort=name,asc"), "sort=name,asc");
+        }
+
+        #[test]
+        fn test_duplicate_keys_become_indexed() {
+            // The whole point of this helper: serde_qs needs sort[0]=..&sort[1]=..
+            // to deserialize repeated keys into a Vec.
+            let out = preprocess_duplicate_keys("sort=name,asc&sort=id,desc");
+            assert_eq!(out, "sort[0]=name,asc&sort[1]=id,desc");
+        }
+
+        #[test]
+        fn test_mixed_single_and_duplicate_keys() {
+            let out = preprocess_duplicate_keys("page=0&sort=name,asc&sort=id,desc&size=20");
+            assert_eq!(out, "page=0&sort[0]=name,asc&sort[1]=id,desc&size=20");
+        }
+
+        #[test]
+        fn test_skips_empty_fragments() {
+            // Trailing/leading & creates empty fragments that must be skipped.
+            assert_eq!(preprocess_duplicate_keys("&page=0&"), "page=0");
+        }
+
+        #[test]
+        fn test_fragment_without_equals_passes_through() {
+            // Bare key (no =) is preserved verbatim — serde_qs may treat as flag.
+            assert_eq!(preprocess_duplicate_keys("flag&page=0"), "flag&page=0");
+        }
+
+        #[test]
+        fn test_three_duplicates_all_get_indexed() {
+            let out = preprocess_duplicate_keys("sort=a&sort=b&sort=c");
+            assert_eq!(out, "sort[0]=a&sort[1]=b&sort[2]=c");
+        }
+    }
+
+    mod qs_query_extractor_tests {
+        use super::super::{QsQuery, PageRequest};
+        use axum::extract::FromRequestParts;
+        use axum::http::Request;
+
+        async fn extract(uri: &str) -> Result<QsQuery<PageRequest>, super::super::QsQueryRejection> {
+            let req = Request::builder().uri(uri).body(()).unwrap();
+            let (mut parts, _) = req.into_parts();
+            QsQuery::<PageRequest>::from_request_parts(&mut parts, &()).await
+        }
+
+        #[tokio::test]
+        async fn test_extracts_single_sort_param() {
+            let result = extract("/?sort=name,asc").await.unwrap();
+            assert_eq!(result.0.sort, vec!["name,asc".to_string()]);
+        }
+
+        #[tokio::test]
+        async fn test_extracts_duplicate_sort_params_as_vec() {
+            // Verifies the duplicate-key preprocessing flows through to PageRequest.sort.
+            let result = extract("/?sort=name,asc&sort=id,desc").await.unwrap();
+            assert_eq!(result.0.sort, vec!["name,asc".to_string(), "id,desc".to_string()]);
+        }
+
+        #[tokio::test]
+        async fn test_extracts_page_and_size() {
+            let result = extract("/?page=3&size=50").await.unwrap();
+            assert_eq!(result.0.page, Some(3));
+            assert_eq!(result.0.size, Some(50));
+        }
+
+        #[tokio::test]
+        async fn test_empty_query_extracts_defaults() {
+            let result = extract("/").await.unwrap();
+            assert_eq!(result.0.page, None);
+            assert_eq!(result.0.size, None);
+            assert!(result.0.sort.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_invalid_query_returns_rejection() {
+            // `page` is i64; non-numeric must fail deserialization.
+            let result = extract("/?page=not-a-number").await;
+            assert!(result.is_err());
+        }
+    }
+
+    mod qs_query_rejection_tests {
+        use super::super::QsQueryRejection;
+        use axum::http::StatusCode;
+        use axum::response::IntoResponse;
+
+        #[test]
+        fn test_into_response_returns_bad_request_status() {
+            let rejection = QsQueryRejection("test failure".to_string());
+            let response = rejection.into_response();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+
+        #[tokio::test]
+        async fn test_into_response_includes_error_message_in_body() {
+            use axum::body::to_bytes;
+            let rejection = QsQueryRejection("sentinel-error-text".to_string());
+            let response = rejection.into_response();
+            let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+            let body = String::from_utf8(bytes.to_vec()).unwrap();
+            assert!(body.contains("sentinel-error-text"), "got: {}", body);
+            assert!(body.contains("Failed to deserialize"), "got: {}", body);
+        }
+    }
+
+    mod deserialize_sort_tests {
+        use super::super::PageRequest;
+
+        // deserialize_sort is private; exercise it through PageRequest's
+        // serde_json derive (which invokes the same Visitor).
+        #[test]
+        fn test_sort_as_single_string() {
+            // visit_str / visit_string path.
+            let req: PageRequest = serde_json::from_str(r#"{"sort": "name,asc"}"#).unwrap();
+            assert_eq!(req.sort, vec!["name,asc".to_string()]);
+        }
+
+        #[test]
+        fn test_sort_as_array() {
+            // visit_seq path.
+            let req: PageRequest = serde_json::from_str(r#"{"sort": ["name,asc", "id,desc"]}"#).unwrap();
+            assert_eq!(req.sort, vec!["name,asc".to_string(), "id,desc".to_string()]);
+        }
+
+        #[test]
+        fn test_sort_as_null_returns_empty_vec() {
+            // visit_none path.
+            let req: PageRequest = serde_json::from_str(r#"{"sort": null}"#).unwrap();
+            assert!(req.sort.is_empty());
+        }
+
+        #[test]
+        fn test_sort_missing_returns_empty_vec() {
+            // serde default kicks in — exercises the `#[serde(default, ...)]` path.
+            let req: PageRequest = serde_json::from_str("{}").unwrap();
+            assert!(req.sort.is_empty());
+        }
+
+        #[test]
+        fn test_sort_as_empty_array() {
+            let req: PageRequest = serde_json::from_str(r#"{"sort": []}"#).unwrap();
+            assert!(req.sort.is_empty());
+        }
+    }
+
+    mod page_request_edge_cases {
+        use super::super::PageRequest;
+
+        #[test]
+        fn test_primary_sort_with_empty_string_returns_some_with_asc_default() {
+            // An empty `sort` entry splits to [""], a 1-element vec — the
+            // 1-element branch in primary_sort defaults direction to "asc".
+            let req = PageRequest {
+                page: None,
+                size: None,
+                sort: vec!["".to_string()],
+            };
+            assert_eq!(req.primary_sort(), Some(("", "asc")));
+        }
+
+        #[test]
+        fn test_sort_params_skips_no_parts_entries() {
+            // sort_params filter-maps; entries that yield 0 parts are dropped.
+            // (split(',') on non-empty string always yields ≥1 part, so this
+            // documents the 1-part default-direction path through sort_params.)
+            let req = PageRequest {
+                page: None,
+                size: None,
+                sort: vec!["only-field".to_string()],
+            };
+            let params = req.sort_params();
+            assert_eq!(params, vec![("only-field", "asc")]);
         }
     }
 }

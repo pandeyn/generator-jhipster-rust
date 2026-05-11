@@ -132,6 +132,216 @@ where
         }
     }
 }
+
+// Track 1 Phase 1a (2026-05-11): tests target the SQL variant deserializers. These
+// are pure-Rust unit tests — no DB, no async, no fixtures. Covers the React/Angular
+// asymmetry the rationale comments document: React form values send `{"id": "1"}`
+// (string), Angular sends `{"id": 1}` (number). Both must round-trip; null and
+// malformed inputs must reject with informative errors.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct OptionalRelWrapper {
+        #[serde(deserialize_with = "deserialize_optional_relationship", default)]
+        rel: Option<i32>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct DateTimeWrapper {
+        #[serde(deserialize_with = "deserialize_naive_datetime")]
+        ts: NaiveDateTime,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct OptionalDateTimeWrapper {
+        #[serde(deserialize_with = "deserialize_option_naive_datetime", default)]
+        ts: Option<NaiveDateTime>,
+    }
+
+    #[test]
+    fn test_relationship_id_accepts_integer_form() {
+        // Angular form shape: {"id": 1}
+        let rid: RelationshipId = serde_json::from_str("1").unwrap();
+        assert_eq!(rid.0, 1);
+    }
+
+    #[test]
+    fn test_relationship_id_accepts_string_form() {
+        // React form shape: "1" — the asymmetry the comment documents.
+        let rid: RelationshipId = serde_json::from_str("\"1\"").unwrap();
+        assert_eq!(rid.0, 1);
+    }
+
+    #[test]
+    fn test_relationship_id_accepts_object_with_integer_id() {
+        // Angular full-object shape: {"id": 1, "name": "..."}
+        let rid: RelationshipId = serde_json::from_str(r#"{"id": 42, "name": "foo"}"#).unwrap();
+        assert_eq!(rid.0, 42);
+    }
+
+    #[test]
+    fn test_relationship_id_accepts_object_with_string_id() {
+        // React full-object shape: {"id": "1", ...}
+        let rid: RelationshipId = serde_json::from_str(r#"{"id": "7"}"#).unwrap();
+        assert_eq!(rid.0, 7);
+    }
+
+    #[test]
+    fn test_relationship_id_rejects_object_missing_id_field() {
+        let err = serde_json::from_str::<RelationshipId>(r#"{"name": "foo"}"#).unwrap_err();
+        assert!(err.to_string().contains("missing id field"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_relationship_id_rejects_unparseable_string() {
+        let err = serde_json::from_str::<RelationshipId>("\"not-a-number\"").unwrap_err();
+        assert!(!err.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_relationship_id_rejects_non_numeric_value() {
+        // Booleans, arrays, null are not valid relationship IDs.
+        let err = serde_json::from_str::<RelationshipId>("true").unwrap_err();
+        assert!(err.to_string().contains("id must be a number or string"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_relationship_id_rejects_overflow() {
+        // i64 too large to fit in i32 returns the i32 conversion error.
+        let err = serde_json::from_str::<RelationshipId>("9999999999").unwrap_err();
+        assert!(err.to_string().contains("id is not a valid i32"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_deserialize_optional_relationship_returns_none_for_null() {
+        let w: OptionalRelWrapper = serde_json::from_str(r#"{"rel": null}"#).unwrap();
+        assert_eq!(w.rel, None);
+    }
+
+    #[test]
+    fn test_deserialize_optional_relationship_returns_none_for_missing() {
+        let w: OptionalRelWrapper = serde_json::from_str("{}").unwrap();
+        assert_eq!(w.rel, None);
+    }
+
+    #[test]
+    fn test_deserialize_optional_relationship_handles_integer_form() {
+        let w: OptionalRelWrapper = serde_json::from_str(r#"{"rel": 5}"#).unwrap();
+        assert_eq!(w.rel, Some(5));
+    }
+
+    #[test]
+    fn test_deserialize_optional_relationship_handles_string_form() {
+        let w: OptionalRelWrapper = serde_json::from_str(r#"{"rel": "9"}"#).unwrap();
+        assert_eq!(w.rel, Some(9));
+    }
+
+    #[test]
+    fn test_deserialize_optional_relationship_handles_object_form() {
+        let w: OptionalRelWrapper = serde_json::from_str(r#"{"rel": {"id": 3, "name": "x"}}"#).unwrap();
+        assert_eq!(w.rel, Some(3));
+    }
+
+    #[test]
+    fn test_deserialize_optional_relationship_rejects_object_missing_id() {
+        let err = serde_json::from_str::<OptionalRelWrapper>(r#"{"rel": {"name": "x"}}"#).unwrap_err();
+        assert!(err.to_string().contains("missing id field"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_deserialize_naive_datetime_parses_rfc3339() {
+        let w: DateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56+00:00"}"#).unwrap();
+        assert_eq!(w.ts.to_string(), "2026-05-11 12:34:56");
+    }
+
+    #[test]
+    fn test_deserialize_naive_datetime_parses_z_suffix_with_fraction() {
+        let w: DateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56.789Z"}"#).unwrap();
+        assert_eq!(w.ts.format("%Y-%m-%d %H:%M:%S").to_string(), "2026-05-11 12:34:56");
+    }
+
+    #[test]
+    fn test_deserialize_naive_datetime_parses_naive_with_fraction() {
+        let w: DateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56.123"}"#).unwrap();
+        assert_eq!(w.ts.format("%Y-%m-%d %H:%M:%S").to_string(), "2026-05-11 12:34:56");
+    }
+
+    #[test]
+    fn test_deserialize_naive_datetime_parses_naive_no_fraction() {
+        let w: DateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56"}"#).unwrap();
+        assert_eq!(w.ts.to_string(), "2026-05-11 12:34:56");
+    }
+
+    #[test]
+    fn test_deserialize_naive_datetime_parses_space_separated() {
+        let w: DateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11 12:34:56"}"#).unwrap();
+        assert_eq!(w.ts.to_string(), "2026-05-11 12:34:56");
+    }
+
+    #[test]
+    fn test_deserialize_naive_datetime_rejects_unparseable() {
+        let err = serde_json::from_str::<DateTimeWrapper>(r#"{"ts": "not-a-date"}"#).unwrap_err();
+        assert!(err.to_string().contains("Unable to parse datetime"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_returns_none_for_null() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": null}"#).unwrap();
+        assert_eq!(w.ts, None);
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_returns_none_for_missing() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str("{}").unwrap();
+        assert_eq!(w.ts, None);
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_returns_none_for_empty_string() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": ""}"#).unwrap();
+        assert_eq!(w.ts, None);
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_parses_rfc3339() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56+00:00"}"#).unwrap();
+        assert!(w.ts.is_some());
+        assert_eq!(w.ts.unwrap().to_string(), "2026-05-11 12:34:56");
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_parses_z_suffix() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56.0Z"}"#).unwrap();
+        assert!(w.ts.is_some());
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_parses_naive_with_fraction() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56.123"}"#).unwrap();
+        assert!(w.ts.is_some());
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_parses_naive_no_fraction() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11T12:34:56"}"#).unwrap();
+        assert!(w.ts.is_some());
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_parses_space_separated() {
+        let w: OptionalDateTimeWrapper = serde_json::from_str(r#"{"ts": "2026-05-11 12:34:56"}"#).unwrap();
+        assert!(w.ts.is_some());
+    }
+
+    #[test]
+    fn test_deserialize_option_naive_datetime_rejects_unparseable() {
+        let err = serde_json::from_str::<OptionalDateTimeWrapper>(r#"{"ts": "garbage"}"#).unwrap_err();
+        assert!(err.to_string().contains("Unable to parse datetime"), "got: {}", err);
+    }
+}
 <%_ } _%>
 
 <%_ if (devDatabaseTypeMongodb) { _%>
