@@ -272,8 +272,13 @@ pub struct Create<%= entityClass %>Dto {
     #[validate(regex(path = *<%= field.fieldNameUnderscored.toUpperCase() %>_REGEX))]
     <%_ } _%>
     <%_ } _%>
-    <%_ if (isNumericType && (field.fieldValidateRulesMin !== undefined || field.fieldValidateRulesMax !== undefined)) { _%>
-    <%_ const isFloatType = ['Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
+    <%_ // Track 1-c.0 fix (2026-05-11): the `validator` crate's #[validate(range(...))] _%>
+    <%_ // macro expands to a call to `validate_range(value, min, max)` which requires _%>
+    <%_ // the field type to implement traits that bigdecimal::BigDecimal does not _%>
+    <%_ // satisfy (HasLen/Range bounds). Skip range validation for BigDecimal fields _%>
+    <%_ // — users who need range-bound BigDecimal can attach a custom validator. _%>
+    <%_ if (isNumericType && field.fieldType !== 'BigDecimal' && (field.fieldValidateRulesMin !== undefined || field.fieldValidateRulesMax !== undefined)) { _%>
+    <%_ const isFloatType = ['Float', 'Double'].includes(field.fieldType); _%>
     <%_ const minVal = field.fieldValidateRulesMin !== undefined ? (isFloatType && !String(field.fieldValidateRulesMin).includes('.') ? field.fieldValidateRulesMin + '.0' : field.fieldValidateRulesMin) : undefined; _%>
     <%_ const maxVal = field.fieldValidateRulesMax !== undefined ? (isFloatType && !String(field.fieldValidateRulesMax).includes('.') ? field.fieldValidateRulesMax + '.0' : field.fieldValidateRulesMax) : undefined; _%>
     #[validate(range(<% if (minVal !== undefined) { %>min = <%= minVal %><% } %><% if (minVal !== undefined && maxVal !== undefined) { %>, <% } %><% if (maxVal !== undefined) { %>max = <%= maxVal %><% } %>))]
@@ -362,8 +367,13 @@ pub struct Update<%= entityClass %>Dto {
     #[validate(regex(path = *<%= field.fieldNameUnderscored.toUpperCase() %>_REGEX))]
     <%_ } _%>
     <%_ } _%>
-    <%_ if (isNumericType && (field.fieldValidateRulesMin !== undefined || field.fieldValidateRulesMax !== undefined)) { _%>
-    <%_ const isFloatType = ['Float', 'Double', 'BigDecimal'].includes(field.fieldType); _%>
+    <%_ // Track 1-c.0 fix (2026-05-11): the `validator` crate's #[validate(range(...))] _%>
+    <%_ // macro expands to a call to `validate_range(value, min, max)` which requires _%>
+    <%_ // the field type to implement traits that bigdecimal::BigDecimal does not _%>
+    <%_ // satisfy (HasLen/Range bounds). Skip range validation for BigDecimal fields _%>
+    <%_ // — users who need range-bound BigDecimal can attach a custom validator. _%>
+    <%_ if (isNumericType && field.fieldType !== 'BigDecimal' && (field.fieldValidateRulesMin !== undefined || field.fieldValidateRulesMax !== undefined)) { _%>
+    <%_ const isFloatType = ['Float', 'Double'].includes(field.fieldType); _%>
     <%_ const minVal = field.fieldValidateRulesMin !== undefined ? (isFloatType && !String(field.fieldValidateRulesMin).includes('.') ? field.fieldValidateRulesMin + '.0' : field.fieldValidateRulesMin) : undefined; _%>
     <%_ const maxVal = field.fieldValidateRulesMax !== undefined ? (isFloatType && !String(field.fieldValidateRulesMax).includes('.') ? field.fieldValidateRulesMax + '.0' : field.fieldValidateRulesMax) : undefined; _%>
     #[validate(range(<% if (minVal !== undefined) { %>min = <%= minVal %><% } %><% if (minVal !== undefined && maxVal !== undefined) { %>, <% } %><% if (maxVal !== undefined) { %>max = <%= maxVal %><% } %>))]
