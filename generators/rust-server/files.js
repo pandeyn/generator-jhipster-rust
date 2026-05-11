@@ -43,6 +43,12 @@ export const serverFiles = {
       path: SERVER_RUST_DIR,
       templates: [
         'Cargo.toml',
+        // Track 1 Phase 0 (2026-05-11): tarpaulin config excluding src/main.rs.
+        // Source has no leading dot to match .env-pattern emission semantics.
+        {
+          file: 'tarpaulin.toml',
+          renameTo: () => '.tarpaulin.toml',
+        },
         'src/main.rs',
         'src/lib.rs',
         'src/config/mod.rs',
