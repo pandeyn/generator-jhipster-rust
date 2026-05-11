@@ -71,8 +71,16 @@ diesel::table! {
 diesel::joinable!(user_authorities -> users (user_id));
 diesel::joinable!(user_authorities -> authorities (authority_name));
 
+// Track 1-c.2 fix (2026-05-11): injection point for JDL-declared entity tables.
+// POST_WRITING_ENTITIES iterates entities and calls source.addEntityToRustSchema
+// for each, which injects a `diesel::table!` block here. Without these
+// injections every handler/service `use crate::db::schema::<entity>` fails
+// with E0432/E0433.
+// jhipster-needle-add-entity-schema
+
 diesel::allow_tables_to_appear_in_same_query!(
     authorities,
     users,
     user_authorities,
+    // jhipster-needle-add-allow-table
 );

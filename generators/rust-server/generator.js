@@ -507,6 +507,95 @@ pub use ${rustModuleName}_dto::*;`,
         };
 
         // Helper to add entity tag to OpenAPI
+        // Track 1-c.2 fix (2026-05-11): inject a `diesel::table!` block per
+        // JDL-declared entity at the schema.rs needle, plus add the entity
+        // table to the allow_tables_to_appear_in_same_query! list. Mirrors the
+        // SQL migration column layout: id PK, JDL fields, ManyToOne FK columns,
+        // and audit columns (gated on JDL declaration like the model/DTO
+        // templates). For MongoDB scaffolds this is a no-op — Mongo doesn't
+        // use a Diesel schema.
+        source.addEntityToRustSchema = ({ entity, application }) => {
+          if (application.devDatabaseTypeMongodb) return;
+
+          const isPg = application.devDatabaseTypePostgresql;
+          const isMysql = application.devDatabaseTypeMysql;
+          // Postgres uses Int4 for serial IDs; sqlite/mysql use Integer/Bigint.
+          const idType = isPg ? 'Int4' : isMysql ? 'Integer' : 'Integer';
+          const varcharType = isPg ? 'Varchar' : 'Text';
+
+          const hasField = name => entity.fields.some(f => f.fieldName === name);
+
+          const fieldLines = entity.fields
+            .filter(f => !f.id)
+            .map(f => {
+              const t = f.dieselColumnType || 'Text';
+              const wrapped = f.fieldValidationRequired ? t : `Nullable<${t}>`;
+              return `        ${f.fieldNameUnderscored} -> ${wrapped},`;
+            });
+
+          const relLines = (entity.relationships || [])
+            .filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))
+            .map(r => `        ${r.relationshipFieldName}_id -> Nullable<${idType}>,`);
+
+          const auditLines = [];
+          if (!hasField('createdBy')) auditLines.push(`        created_by -> Nullable<${varcharType}>,`);
+          if (!hasField('createdDate')) auditLines.push('        created_date -> Nullable<Timestamp>,');
+          if (!hasField('lastModifiedBy')) auditLines.push(`        last_modified_by -> Nullable<${varcharType}>,`);
+          if (!hasField('lastModifiedDate')) auditLines.push('        last_modified_date -> Nullable<Timestamp>,');
+
+          const allLines = [...fieldLines, ...relLines, ...auditLines].join('\n');
+          const block = `diesel::table! {
+    ${entity.entityTableName} (id) {
+        id -> ${idType},
+${allLines}
+    }
+}`;
+
+          this.editFile(
+            `${SERVER_RUST_SRC_DIR}/src/db/schema.rs`,
+            createNeedleCallback({
+              needle: 'jhipster-needle-add-entity-schema',
+              contentToAdd: block,
+            }),
+          );
+          this.editFile(
+            `${SERVER_RUST_SRC_DIR}/src/db/schema.rs`,
+            createNeedleCallback({
+              needle: 'jhipster-needle-add-allow-table',
+              contentToAdd: `    ${entity.entityTableName},`,
+            }),
+          );
+        };
+
+        // Track 1-c.2 fix (2026-05-11): inject a `diesel::table!` block for a
+        // ManyToMany join table. Join tables have a composite primary key
+        // (entity_id, other_entity_id) and no audit columns.
+        source.addJoinTableToRustSchema = ({ joinTableName, entityTableName, otherEntityTableName, application }) => {
+          if (application.devDatabaseTypeMongodb) return;
+          const isPg = application.devDatabaseTypePostgresql;
+          const idType = isPg ? 'Int4' : 'Integer';
+          const block = `diesel::table! {
+    ${joinTableName} (${entityTableName}_id, ${otherEntityTableName}_id) {
+        ${entityTableName}_id -> ${idType},
+        ${otherEntityTableName}_id -> ${idType},
+    }
+}`;
+          this.editFile(
+            `${SERVER_RUST_SRC_DIR}/src/db/schema.rs`,
+            createNeedleCallback({
+              needle: 'jhipster-needle-add-entity-schema',
+              contentToAdd: block,
+            }),
+          );
+          this.editFile(
+            `${SERVER_RUST_SRC_DIR}/src/db/schema.rs`,
+            createNeedleCallback({
+              needle: 'jhipster-needle-add-allow-table',
+              contentToAdd: `    ${joinTableName},`,
+            }),
+          );
+        };
+
         source.addEntityToOpenApiTags = ({ entityApiUrl, entityClass }) => {
           this.editFile(
             `${SERVER_RUST_SRC_DIR}/src/openapi.rs`,
@@ -716,11 +805,34 @@ pub use ${rustModuleName}_dto::*;`,
           source.addEntityToRustDto({ entityFileName });
           source.addEntityRoutesToMain({ entityFileName, entityApiUrl });
 
+          // Track 1-c.2 fix (2026-05-11): inject the entity's diesel::table!
+          // block into schema.rs so handlers/services can `use crate::db::schema::<entity>`.
+          source.addEntityToRustSchema({ entity, application });
+
           // Add entity to OpenAPI documentation (only if Swagger is enabled)
           if (application.enableSwaggerCodegen) {
             source.addEntityToOpenApiPaths({ entityFileName });
             source.addEntityToOpenApiSchemas({ entityClass });
             source.addEntityToOpenApiTags({ entityApiUrl, entityClass });
+          }
+        }
+
+        // Track 1-c.2 fix (2026-05-11): emit join-table schemas for every
+        // ManyToMany relationship across the entity set. Mirror the migration
+        // generation pattern (the existing WRITING_ENTITIES `Second pass`)
+        // which only emits join tables on the "left" side to avoid duplicates.
+        for (const entity of entities.filter(e => !e.skipServer && !e.builtIn)) {
+          const m2mRelationships = (entity.relationships || []).filter(
+            r => r.relationshipType === 'many-to-many' && r.relationshipLeftSide,
+          );
+          for (const rel of m2mRelationships) {
+            if (!rel.joinTable?.name) continue;
+            source.addJoinTableToRustSchema({
+              joinTableName: rel.joinTable.name,
+              entityTableName: entity.entityTableName,
+              otherEntityTableName: rel.otherEntityTableName || rel.otherEntity?.entityTableName,
+              application,
+            });
           }
         }
       },
