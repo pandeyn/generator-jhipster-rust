@@ -549,10 +549,35 @@ mod tests {
 
         // Create a <%= rel.otherEntity.entityInstance %>
         let <%= rel.otherEntity.entityInstance %>_dto = crate::dto::Create<%= rel.otherEntity.entityClass %>Dto {
+<%_ // Track 1-c.2 fix (2026-05-11): the related-entity's CreateDto has _%>
+<%_ // non-Optional fields for JDL `required` fields. Emit type-appropriate _%>
+<%_ // test values for required fields; None for optional. Previously this _%>
+<%_ // emitted `None` unconditionally which fails for `name String required` _%>
+<%_ // (E0308 expected String, found Option<_>). _%>
 <%_ for (let i = 0; i < rel.otherEntity.fields.filter(f => !f.id).length; i++) { _%>
 <%_ const field = rel.otherEntity.fields.filter(f => !f.id)[i]; _%>
 <%_ const isLast = i === rel.otherEntity.fields.filter(f => !f.id).length - 1; _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_   if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 1<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 1.0<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::Utc::now().naive_utc()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } _%>
+<%_ } else { _%>
             <%= field.fieldNameUnderscored %>: None<% if (!isLast) { %>,<% } %>
+<%_ } _%>
 <%_ } _%>
         };
         let <%= rel.otherEntity.entityInstance %> = crate::services::<%= rel.otherEntity.entityClass %>Service::create(&mut conn, <%= rel.otherEntity.entityInstance %>_dto, "test_user").unwrap();
@@ -578,10 +603,35 @@ mod tests {
 
         // Create a <%= rel.otherEntity.entityInstance %>
         let <%= rel.otherEntity.entityInstance %>_dto = crate::dto::Create<%= rel.otherEntity.entityClass %>Dto {
+<%_ // Track 1-c.2 fix (2026-05-11): the related-entity's CreateDto has _%>
+<%_ // non-Optional fields for JDL `required` fields. Emit type-appropriate _%>
+<%_ // test values for required fields; None for optional. Previously this _%>
+<%_ // emitted `None` unconditionally which fails for `name String required` _%>
+<%_ // (E0308 expected String, found Option<_>). _%>
 <%_ for (let i = 0; i < rel.otherEntity.fields.filter(f => !f.id).length; i++) { _%>
 <%_ const field = rel.otherEntity.fields.filter(f => !f.id)[i]; _%>
 <%_ const isLast = i === rel.otherEntity.fields.filter(f => !f.id).length - 1; _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_   if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 1<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 1.0<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::Utc::now().naive_utc()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } _%>
+<%_ } else { _%>
             <%= field.fieldNameUnderscored %>: None<% if (!isLast) { %>,<% } %>
+<%_ } _%>
 <%_ } _%>
         };
         let <%= rel.otherEntity.entityInstance %> = crate::services::<%= rel.otherEntity.entityClass %>Service::create(&mut conn, <%= rel.otherEntity.entityInstance %>_dto, "test_user").unwrap();
