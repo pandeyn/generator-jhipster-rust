@@ -54,10 +54,16 @@ jobs:
         # cli/cli.cjs computes devBlueprintPath from its own __dirname, so it
         # discovers .blueprint/generate-sample/ regardless of cwd. Tests the LOCAL
         # checkout (correct for PR-time CI), not whatever is published to npm.
+        #
+        # `--samples-folder samples` (from the original yo invocation) is dropped:
+        # the JDL files live directly at .blueprint/generate-sample/templates/samples/,
+        # and samplesGroup defaults to "samples" already. Passing samplesFolder=samples
+        # would resolve to templates/samples/samples/ (nonexistent). The flag was a
+        # latent bug masked by yo failing first.
         run: |
           mkdir -p app
           cd app
-          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.sample }} --samples-folder samples --skip-install --skip-git
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.sample }} --skip-install --skip-git
 
       - name: Check generated files
         working-directory: app
