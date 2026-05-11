@@ -142,10 +142,21 @@ impl <%= entityClass %>Service {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: dto.<%= relationship.relationshipFieldName %>_id,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // service create() — the dto field loop above already maps any _%>
+            <%_ // JDL-declared audit field (E0062 dup otherwise). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some(created_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: Some(now),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some(created_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: Some(now),
+            <%_ } _%>
         };
 
 <%_ if (devDatabaseTypePostgresql) { _%>
@@ -198,8 +209,14 @@ impl <%= entityClass %>Service {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: dto.<%= relationship.relationshipFieldName %>_id.map(Some),
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // service update() — same rationale as create() above. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some(modified_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: Some(now),
+            <%_ } _%>
         };
 
         diesel::update(<%= entityTableName %>::table.find(id))

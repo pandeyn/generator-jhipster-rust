@@ -100,10 +100,19 @@ impl <%= entityClass %>Service {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
             <%= relationship.relationshipFieldNamePlural %>: vec![],
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some(created_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: Some(now),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some(created_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: Some(now),
+            <%_ } _%>
         };
 
         let result = collection
