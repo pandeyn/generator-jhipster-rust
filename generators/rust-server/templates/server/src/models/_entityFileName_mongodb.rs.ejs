@@ -25,14 +25,25 @@ pub struct <%= persistClass %> {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub <%= relationship.relationshipFieldNamePlural %>: Vec<Embedded<%= relationship.otherEntity.persistClass %>>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): mirror the SQL entity model template's _%>
+    <%_ // audit-field gating — JDL-declared `createdDate Instant` etc. are _%>
+    <%_ // emitted by the field loop above; gate the auto-add to prevent E0124. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_date: Option<BsonDateTime>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified_date: Option<BsonDateTime>,
+    <%_ } _%>
 }
 
 /// New <%= persistClass %> for insertion (without ID)
@@ -44,10 +55,19 @@ pub struct New<%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<ObjectId>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): same gating as the main entity struct. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     pub created_date: Option<BsonDateTime>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<BsonDateTime>,
+    <%_ } _%>
 }
 
 /// <%= persistClass %> update document
@@ -61,10 +81,16 @@ pub struct Update<%= persistClass %> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub <%= relationship.relationshipFieldName %>_id: Option<Option<ObjectId>>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): Update struct has only last_modified_* _%>
+    <%_ // (created_* are immutable post-creation). Gate them. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified_date: Option<BsonDateTime>,
+    <%_ } _%>
 }
 
 impl <%= persistClass %> {
@@ -140,10 +166,20 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
             <%= relationship.relationshipFieldNamePlural %>: vec![],
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // test fixture (Mongo variant). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some("system".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: Some(BsonDateTime::now()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let cloned = entity.clone();
         assert_eq!(entity.id, cloned.id);
@@ -182,10 +218,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
             <%= relationship.relationshipFieldNamePlural %>: vec![],
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let debug_str = format!("{:?}", entity);
         assert!(debug_str.contains("<%= persistClass %>"));
@@ -220,10 +265,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some("test_user".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         assert_eq!(new_entity.created_by, Some("test_user".to_string()));
     }
@@ -267,10 +321,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
             <%= relationship.relationshipFieldNamePlural %>: vec![],
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let json = serde_json::to_string(&entity).unwrap();
         assert!(json.contains("\"_id\""));
@@ -309,10 +372,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'one-to-many' && r.otherEntity && r.otherEntity.embedded)) { _%>
             <%= relationship.relationshipFieldNamePlural %>: vec![],
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let id_str = entity.id_str();
         assert_eq!(id_str.len(), 24); // ObjectId hex string length
