@@ -24,10 +24,21 @@ pub struct <%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<i32>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): same audit-field gating as the DTO _%>
+    <%_ // template. JDL-declared fields are emitted by the loop above; gate _%>
+    <%_ // the auto-add so it doesn't redeclare them. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     pub created_date: Option<NaiveDateTime>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<NaiveDateTime>,
+    <%_ } _%>
 }
 
 /// New <%= persistClass %> for insertion
@@ -40,10 +51,21 @@ pub struct New<%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<i32>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): same audit-field gating as the DTO _%>
+    <%_ // template. JDL-declared fields are emitted by the loop above; gate _%>
+    <%_ // the auto-add so it doesn't redeclare them. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     pub created_date: Option<NaiveDateTime>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<NaiveDateTime>,
+    <%_ } _%>
 }
 
 /// <%= persistClass %> update changeset
@@ -56,8 +78,15 @@ pub struct Update<%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<Option<i32>>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): UpdateEntity struct has only the two _%>
+    <%_ // last_modified_* audit fields (created_* are immutable post-creation). _%>
+    <%_ // Gate them on JDL declaration so they don't redeclare when JDL has its own. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<NaiveDateTime>,
+    <%_ } _%>
 }
 <%_ const manyToManyRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
 <%_ for (const rel of manyToManyRels) { _%>

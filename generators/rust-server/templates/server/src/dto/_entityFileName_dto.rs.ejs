@@ -149,14 +149,27 @@ pub struct <%= entityClass %>Dto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub <%= rel.relationshipFieldNamePlural %>: Option<Vec<<%= rel.otherEntity.entityClass %>Dto>>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): JHipster audit fields are emitted _%>
+    <%_ // unconditionally below, but the field loop above already emits any _%>
+    <%_ // audit field the JDL declared (e.g., `createdDate Instant`). Without _%>
+    <%_ // gating, the same field gets declared twice (E0124). Skip the auto-add _%>
+    <%_ // when the entity declares the audit field itself. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_date: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified_date: Option<String>,
+    <%_ } _%>
 }
 
 impl From<<%= persistClass %>> for <%= entityClass %>Dto {
@@ -184,15 +197,33 @@ impl From<<%= persistClass %>> for <%= entityClass %>Dto {
 <%_ for (const rel of manyToManyOwnerRels) { _%>
             <%= rel.relationshipFieldNamePlural %>: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): mirror the struct-level gating _%>
+            <%_ // — only assign the auto-added audit fields when JDL didn't _%>
+            <%_ // declare them (the field loop above already assigned the _%>
+            <%_ // JDL-declared variant). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: entity.created_by,
+            <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: entity.created_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: entity.last_modified_by,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: entity.last_modified_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+            <%_ } _%>
 <%_ } else { _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: entity.created_date.map(|d| d.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: entity.last_modified_by,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: entity.last_modified_date.map(|d| d.to_string()),
+            <%_ } _%>
 <%_ } _%>
         }
     }
@@ -233,15 +264,33 @@ impl <%= entityClass %>Dto {
 <%_ for (const rel of manyToManyOwnerRels) { _%>
             <%= rel.relationshipFieldNamePlural %>: Some(<%= rel.relationshipFieldNamePlural %>.into_iter().map(<%= rel.otherEntity.entityClass %>Dto::from).collect()),
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): mirror the struct-level gating _%>
+            <%_ // — only assign the auto-added audit fields when JDL didn't _%>
+            <%_ // declare them (the field loop above already assigned the _%>
+            <%_ // JDL-declared variant). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: entity.created_by,
+            <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: entity.created_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: entity.last_modified_by,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: entity.last_modified_date.and_then(|d| d.try_to_rfc3339_string().ok()),
+            <%_ } _%>
 <%_ } else { _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: entity.created_date.map(|d| d.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: entity.last_modified_by,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: entity.last_modified_date.map(|d| d.to_string()),
+            <%_ } _%>
 <%_ } _%>
         }
     }
