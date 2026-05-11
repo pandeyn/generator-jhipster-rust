@@ -43,9 +43,132 @@ impl VaultConfig {
     }
 }
 
+// Track 1 Phase 1b (2026-05-11): from_env() coverage. Mutex serializes env-var
+// tests within this module; rest of the suite stays parallel. See
+// metrics_config.rs for the convention rationale.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_vault_env() {
+        for k in [
+            "VAULT_ENABLED",
+            "VAULT_ADDR",
+            "VAULT_AUTH_METHOD",
+            "VAULT_TOKEN",
+            "VAULT_ROLE_ID",
+            "VAULT_SECRET_ID",
+            "VAULT_SECRET_PATH",
+            "VAULT_AUTO_RENEW",
+        ] {
+            std::env::remove_var(k);
+        }
+    }
+
+    #[test]
+    fn test_from_env_uses_documented_defaults() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        let cfg = VaultConfig::from_env();
+        assert!(cfg.enabled);
+        assert_eq!(cfg.addr, "http://localhost:8200");
+        assert_eq!(cfg.auth_method, "token");
+        assert!(cfg.token.is_none());
+        assert!(cfg.role_id.is_none());
+        assert!(cfg.secret_id.is_none());
+        // secret_path default uses baseName — assert the prefix only so this
+        // test is portable across scaffold variants.
+        assert!(cfg.secret_path.starts_with("secret/data/"));
+        assert!(cfg.auto_renew);
+    }
+
+    #[test]
+    fn test_from_env_reads_explicit_addr_and_auth() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_ADDR", "https://vault.internal:8200");
+        std::env::set_var("VAULT_AUTH_METHOD", "approle");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert_eq!(cfg.addr, "https://vault.internal:8200");
+        assert_eq!(cfg.auth_method, "approle");
+    }
+
+    #[test]
+    fn test_from_env_token_is_some_when_set() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_TOKEN", "s.abc123");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert_eq!(cfg.token.as_deref(), Some("s.abc123"));
+    }
+
+    #[test]
+    fn test_from_env_approle_credentials_pass_through() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_ROLE_ID", "role-uuid");
+        std::env::set_var("VAULT_SECRET_ID", "secret-uuid");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert_eq!(cfg.role_id.as_deref(), Some("role-uuid"));
+        assert_eq!(cfg.secret_id.as_deref(), Some("secret-uuid"));
+    }
+
+    #[test]
+    fn test_from_env_secret_path_override() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_SECRET_PATH", "kv/data/custom-app");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert_eq!(cfg.secret_path, "kv/data/custom-app");
+    }
+
+    #[test]
+    fn test_from_env_enabled_false_via_explicit_false() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_ENABLED", "false");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert!(!cfg.enabled);
+    }
+
+    #[test]
+    fn test_from_env_enabled_is_case_insensitive_for_true() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_ENABLED", "TRUE");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert!(cfg.enabled);
+    }
+
+    #[test]
+    fn test_from_env_enabled_unknown_value_disables() {
+        // Any non-"true" string disables. Matches metrics_config semantics.
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_ENABLED", "yes");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert!(!cfg.enabled);
+    }
+
+    #[test]
+    fn test_from_env_auto_renew_disabled() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_vault_env();
+        std::env::set_var("VAULT_AUTO_RENEW", "false");
+        let cfg = VaultConfig::from_env();
+        clear_vault_env();
+        assert!(!cfg.auto_renew);
+    }
 
     #[test]
     fn test_vault_config_defaults() {

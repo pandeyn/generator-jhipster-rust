@@ -110,9 +110,199 @@ impl ConsulConfig {
     }
 }
 
+// Track 1 Phase 1b (2026-05-11): from_env() coverage. Mutex serializes
+// env-var tests; rest of the suite stays parallel.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_consul_env() {
+        for k in [
+            "CONSUL_HOST",
+            "CONSUL_PORT",
+            "CONSUL_SERVICE_NAME",
+            "CONSUL_SERVICE_ID",
+            "CONSUL_SERVICE_TAGS",
+            "CONSUL_HEALTH_CHECK_INTERVAL",
+            "CONSUL_REGISTER_SERVICE",
+            "CONSUL_ENABLE_CONFIG",
+            "CONSUL_ACL_TOKEN",
+            "CONSUL_CONFIG_KEY_PREFIX",
+            "CONSUL_HEALTH_CHECK_HOST",
+            "CONSUL_CONFIG_WATCH_ENABLED",
+            "CONSUL_CONFIG_WATCH_INTERVAL",
+            "APP_ENV",
+            "APP_PROFILE",
+        ] {
+            std::env::remove_var(k);
+        }
+    }
+
+    #[test]
+    fn test_from_env_uses_documented_defaults() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        let cfg = ConsulConfig::from_env();
+        assert_eq!(cfg.host, "localhost");
+        assert_eq!(cfg.port, 8500);
+        assert_eq!(cfg.health_check_interval, 10);
+        assert!(cfg.register_service);
+        assert!(cfg.enable_config);
+        assert!(cfg.acl_token.is_none());
+        assert_eq!(cfg.health_check_host, "localhost");
+        assert_eq!(cfg.config_profile, "dev");
+        assert!(cfg.watch_enabled);
+        assert_eq!(cfg.watch_interval, 55);
+        // service_name and config_key_prefix derive from baseName — assert
+        // shape, not exact value, for cross-scaffold portability.
+        assert!(!cfg.service_name.is_empty());
+        assert!(cfg.config_key_prefix.starts_with("config/"));
+        // service_id is auto-generated (hostname + random); just assert non-empty.
+        assert!(!cfg.service_id.is_empty());
+        // default tags include version=... and env=... — exactly two entries.
+        assert_eq!(cfg.service_tags.len(), 2);
+        assert!(cfg.service_tags.iter().any(|t| t.starts_with("version=")));
+        assert!(cfg.service_tags.iter().any(|t| t.starts_with("env=")));
+    }
+
+    #[test]
+    fn test_from_env_reads_explicit_host_and_port() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_HOST", "consul.internal");
+        std::env::set_var("CONSUL_PORT", "9999");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.host, "consul.internal");
+        assert_eq!(cfg.port, 9999);
+    }
+
+    #[test]
+    fn test_from_env_service_name_override() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_SERVICE_NAME", "my-svc");
+        std::env::set_var("CONSUL_SERVICE_ID", "my-svc-1");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.service_name, "my-svc");
+        assert_eq!(cfg.service_id, "my-svc-1");
+    }
+
+    #[test]
+    fn test_from_env_tags_split_and_trim() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_SERVICE_TAGS", "prod, v1 ,canary");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.service_tags, vec!["prod".to_string(), "v1".to_string(), "canary".to_string()]);
+    }
+
+    #[test]
+    fn test_from_env_default_tags_include_app_env() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("APP_ENV", "production");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert!(cfg.service_tags.iter().any(|t| t == "env=production"));
+    }
+
+    #[test]
+    fn test_from_env_register_service_disabled() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_REGISTER_SERVICE", "false");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert!(!cfg.register_service);
+    }
+
+    #[test]
+    fn test_from_env_enable_config_disabled() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_ENABLE_CONFIG", "false");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert!(!cfg.enable_config);
+    }
+
+    #[test]
+    fn test_from_env_register_service_case_insensitive() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_REGISTER_SERVICE", "TRUE");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert!(cfg.register_service);
+    }
+
+    #[test]
+    fn test_from_env_acl_token_some_when_set() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_ACL_TOKEN", "secret-token");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.acl_token.as_deref(), Some("secret-token"));
+    }
+
+    #[test]
+    fn test_from_env_config_key_prefix_override() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_CONFIG_KEY_PREFIX", "config/custom");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.config_key_prefix, "config/custom");
+    }
+
+    #[test]
+    fn test_from_env_health_check_host_override() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_HEALTH_CHECK_HOST", "10.0.0.5");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.health_check_host, "10.0.0.5");
+    }
+
+    #[test]
+    fn test_from_env_app_profile_reads_app_profile_var() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("APP_PROFILE", "staging");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.config_profile, "staging");
+    }
+
+    #[test]
+    fn test_from_env_watch_settings() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_CONFIG_WATCH_ENABLED", "false");
+        std::env::set_var("CONSUL_CONFIG_WATCH_INTERVAL", "30");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert!(!cfg.watch_enabled);
+        assert_eq!(cfg.watch_interval, 30);
+    }
+
+    #[test]
+    fn test_from_env_health_check_interval_custom() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_consul_env();
+        std::env::set_var("CONSUL_HEALTH_CHECK_INTERVAL", "60");
+        let cfg = ConsulConfig::from_env();
+        clear_consul_env();
+        assert_eq!(cfg.health_check_interval, 60);
+    }
 
     #[test]
     fn test_consul_url() {
