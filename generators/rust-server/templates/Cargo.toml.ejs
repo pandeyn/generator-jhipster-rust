@@ -29,8 +29,11 @@ diesel_migrations = "2.1"
 # Track 1-c.0 fix (2026-05-11): bigdecimal is required when any entity field has
 # fieldType BigDecimal on a SQL database. Diesel's `numeric` feature (added above)
 # bridges between bigdecimal::BigDecimal and the database's Numeric/Decimal column
-# type. MongoDB scaffolds map BigDecimal to f64 and skip this dep.
-bigdecimal = "0.4"
+# type. The `serde` feature is required because the DTO structs derive Serialize
+# and Deserialize, and the default bigdecimal build doesn't implement those
+# traits — without the feature you get E0277 trait bound errors at compile time.
+# MongoDB scaffolds map BigDecimal to f64 and skip this dep.
+bigdecimal = { version = "0.4", features = ["serde"] }
 <%_ } _%>
 dotenvy = "0.15"
 serde = { version = "1", features = ["derive"] }

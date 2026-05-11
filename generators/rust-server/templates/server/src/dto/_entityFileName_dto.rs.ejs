@@ -132,6 +132,12 @@ pub struct <%= entityClass %>Dto {
     pub <%= field.fieldNameUnderscored %>: Option<NaiveDateTime>,
     <%_ } _%>
     <%_ } else { _%>
+    <%_ // Track 1-c.0 fix (2026-05-11): utoipa's ToSchema doesn't auto-derive _%>
+    <%_ // for bigdecimal::BigDecimal — annotate with value_type=String/Option<String> _%>
+    <%_ // so the OpenAPI schema renders as a string. The Rust type stays BigDecimal. _%>
+    <%_ if (field.fieldType === 'BigDecimal' && !devDatabaseTypeMongodb && enableSwaggerCodegen) { _%>
+    #[schema(value_type = <%= field.fieldValidationRequired ? 'String' : 'Option<String>' %>)]
+    <%_ } _%>
     pub <%= field.fieldNameUnderscored %>: <%- devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType %>,
     <%_ } _%>
 <%_ } _%>
@@ -288,6 +294,11 @@ pub struct Create<%= entityClass %>Dto {
     <%_ } _%>
     <%_ } _%>
     <%_ // Use mongoFieldType for MongoDB to ensure type consistency with model _%>
+    <%_ // Track 1-c.0 fix (2026-05-11): utoipa schema annotation for BigDecimal _%>
+    <%_ // (Create DTO — same rationale as the main DTO above). _%>
+    <%_ if (field.fieldType === 'BigDecimal' && !devDatabaseTypeMongodb && enableSwaggerCodegen) { _%>
+    #[schema(value_type = <%= field.fieldValidationRequired ? 'String' : 'Option<String>' %>)]
+    <%_ } _%>
     pub <%= field.fieldNameUnderscored %>: <%- devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType %>,
 <%_ } _%>
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
@@ -366,6 +377,11 @@ pub struct Update<%= entityClass %>Dto {
     <%_ } _%>
     <%_ // Use mongoFieldType for MongoDB to ensure type consistency with model _%>
     <%_ const baseFieldType = devDatabaseTypeMongodb ? field.mongoFieldType : field.rustFieldType; _%>
+    <%_ // Track 1-c.0 fix (2026-05-11): utoipa schema annotation for BigDecimal _%>
+    <%_ // (Update DTO — all fields are Option<...> here, so schema is always Option<String>). _%>
+    <%_ if (field.fieldType === 'BigDecimal' && !devDatabaseTypeMongodb && enableSwaggerCodegen) { _%>
+    #[schema(value_type = Option<String>)]
+    <%_ } _%>
     pub <%= field.fieldNameUnderscored %>: Option<<%- baseFieldType.replace('Option<', '').replace('>', '') %>>,
 <%_ } _%>
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
