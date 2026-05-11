@@ -162,17 +162,140 @@ jobs:
         working-directory: app/server
         run: cargo clippy --release --all-targets -- -D warnings
 
-  # Summary job to ensure all samples passed
+      # Track 1 Phase 0 sub-task 3 (2026-05-11): the canonical scaffold's source
+      # tree is reused by the `coverage` job (defined below). We upload it as a
+      # workflow artifact rather than regenerating from scratch, saving ~2 min
+      # per CI run. Only microservice-cb is uploaded because tarpaulin runs
+      # against the canonical scaffold only — the per-file coverage gate at
+      # this stage is for the one shape that represents the most realistic
+      # production deployment (postgres + jwt + circuit breaker + consul).
+      #
+      # Excluding app/server/target keeps the artifact small (~2-5 MB instead
+      # of 200+ MB); coverage builds its own tarpaulin-instrumented target
+      # anyway (different RUSTFLAGS, different fingerprint).
+      - name: Upload canonical scaffold for coverage job
+        if: matrix.sample == 'microservice-cb' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scaffold-microservice-cb
+          path: |
+            app/Cargo.toml
+            app/diesel.toml
+            app/migrations
+            app/server
+            !app/server/target
+          retention-days: 1
+          if-no-files-found: error
+
+  # Track 1 Phase 0 sub-task 3 (2026-05-11): coverage gate.
+  #
+  # Runs `cargo tarpaulin` against the canonical microservice-cb scaffold and
+  # fails the build if coverage drops below the v1.0.0 threshold. The threshold
+  # ratchets per release: v1.0.0 = 35 (5 points below the verified 39.92%
+  # baseline, slack for measurement noise), v1.0.1 = 60, v1.0.2 = 70 as
+  # Phase 1/2/3 of the per-file coverage push lands.
+  #
+  # Architecturally separate from `samples` because tarpaulin needs:
+  #   - A postgres service container (test_utils tests need TEST_DATABASE_URL)
+  #   - Instrumented build (-C instrument-coverage) — slower than clippy
+  #   - Diesel migrations applied before tests run
+  #
+  # Keeping the canonical-scaffold focus matches the plan's Track 1-b.3 decision:
+  # samples = fast template-correctness across the matrix; coverage = deep gate
+  # on the one representative shape. e2e.yml (Track 1-a) will eventually expand
+  # both axes; for v1.0.0 this is the minimum gate that catches coverage
+  # regressions on PRs that touch templates.
+  coverage:
+    name: Coverage Gate (canonical scaffold)
+    runs-on: ubuntu-latest
+    needs: [samples]
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oldie_k8_pg_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/oldie_k8_pg_test
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/oldie_k8_pg_test
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+
+      # Tarpaulin builds with `-C instrument-coverage` — different fingerprint
+      # than the clippy build in `samples`, so use a separate cache key to
+      # avoid the two jobs fighting over the same cache. Both jobs warm their
+      # own cache on subsequent runs.
+      - name: Cache Rust dependencies (tarpaulin-instrumented)
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: app/server -> target
+          prefix-key: tarpaulin
+
+      - name: Download canonical scaffold from samples job
+        uses: actions/download-artifact@v4
+        with:
+          name: scaffold-microservice-cb
+          path: app/
+
+      # Pin tarpaulin and diesel_cli versions for reproducibility. ^0.31 was
+      # the version used to establish the 39.92% baseline locally (2026-05-11);
+      # diesel_cli ^2.3 matches the diesel = "2.1" workspace dep with some
+      # forward-compat margin.
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version "^0.31" --locked
+
+      - name: Install diesel CLI (postgres feature only)
+        run: cargo install diesel_cli --no-default-features --features postgres --version "^2.3" --locked
+
+      - name: Wait for postgres readiness
+        run: |
+          # services: declared above has its own healthcheck, but tarpaulin's
+          # test pool construction races with it on cold runners — belt and
+          # suspenders here.
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for postgres..."
+            sleep 1
+          done
+
+      - name: Apply diesel migrations to test database
+        working-directory: app
+        run: diesel migration run
+
+      - name: Run cargo tarpaulin (coverage gate)
+        working-directory: app/server
+        # `--fail-under 35` is the v1.0.0 threshold (5 points below the
+        # 39.92% baseline verified locally with .tarpaulin.toml's main.rs
+        # exclusion). Ratchets to 60 in v1.0.1 once Phase 1 lands, 70 in v1.0.2
+        # once Phase 3 lands.
+        run: cargo tarpaulin --fail-under 35
+
+  # Summary job to ensure all samples + coverage passed
   samples-check:
     name: All Samples Check
     runs-on: ubuntu-latest
-    needs: [samples]
+    needs: [samples, coverage]
     if: always()
     steps:
-      - name: Check sample results
+      - name: Check sample + coverage results
         run: |
           if [ "${{ needs.samples.result }}" != "success" ]; then
             echo "Some samples failed!"
             exit 1
           fi
-          echo "All samples passed successfully!"
+          if [ "${{ needs.coverage.result }}" != "success" ]; then
+            echo "Coverage gate failed!"
+            exit 1
+          fi
+          echo "All samples + coverage gate passed successfully!"
