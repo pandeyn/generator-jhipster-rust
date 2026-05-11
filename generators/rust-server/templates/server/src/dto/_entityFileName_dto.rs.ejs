@@ -1,5 +1,11 @@
 <%_ const fieldsWithPattern = fields.filter(f => f.fieldValidateRulesPattern); _%>
 <%_ const hasDateTimeFields = fields.some(f => ['Instant', 'ZonedDateTime'].includes(f.fieldType)); _%>
+<%_ // Track 1-c.2 fix (2026-05-11): split datetime deserializer detection by _%>
+<%_ // requiredness so we import only what's used. Without this, importing _%>
+<%_ // both `deserialize_naive_datetime` and `deserialize_option_naive_datetime` _%>
+<%_ // when only optional datetime fields exist trips clippy's unused-import lint. _%>
+<%_ const hasRequiredDateTimeFields = fields.some(f => f.fieldValidationRequired && ['Instant', 'ZonedDateTime'].includes(f.fieldType)); _%>
+<%_ const hasOptionalDateTimeFields = fields.some(f => !f.fieldValidationRequired && ['Instant', 'ZonedDateTime'].includes(f.fieldType)); _%>
 <%_ const manyToManyOwnerRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
 <%_ const manyToOneRels = relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide)); _%>
 <%_ const hasAnyRelationships = manyToManyOwnerRels.length > 0 || manyToOneRels.length > 0; _%>
@@ -21,7 +27,13 @@ use crate::dto::common::{deserialize_bson_datetime, deserialize_option_bson_date
 <%_ } _%>
 <%_ } else if (hasDateTimeFields) { _%>
 use chrono::NaiveDateTime;
+<%_ if (hasRequiredDateTimeFields && hasOptionalDateTimeFields) { _%>
 use crate::dto::common::{deserialize_naive_datetime, deserialize_option_naive_datetime};
+<%_ } else if (hasRequiredDateTimeFields) { _%>
+use crate::dto::common::deserialize_naive_datetime;
+<%_ } else { _%>
+use crate::dto::common::deserialize_option_naive_datetime;
+<%_ } _%>
 <%_ } _%>
 <%_ if (manyToOneRels.length > 0) { _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
