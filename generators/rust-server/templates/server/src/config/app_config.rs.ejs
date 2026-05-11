@@ -402,6 +402,123 @@ mod tests {
     }
 <%_ } _%>
 
+<%_ if (externalConfig) { _%>
+    // Tests for from_consul_and_env(): layered resolution (env > consul > default).
+    // Shares ENV_LOCK with from_env tests so they don't race on the same env vars.
+
+    fn consul_with<const N: usize>(entries: [(&'static str, &'static str); N]) -> std::collections::HashMap<String, String> {
+        entries.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn test_from_consul_and_env_uses_defaults_when_both_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        // Required vars (DATABASE_URL, JWT_SECRET) come from consul in this test.
+        let consul = consul_with([
+            ("database_url", "postgres://from-consul/db"),
+            ("jwt.secret", "secret-from-consul"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert!(!cfg.app_name.is_empty());
+        assert_eq!(cfg.app_env, "development");
+        assert_eq!(cfg.app_port, 8080);
+        assert_eq!(cfg.app_host, "0.0.0.0");
+<%_ if (!devDatabaseTypeMongodb) { _%>
+        assert_eq!(cfg.database_url, "postgres://from-consul/db");
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+        assert_eq!(cfg.jwt_secret, "secret-from-consul");
+        assert_eq!(cfg.jwt_expiration_hours, 24);
+<%_ } _%>
+    }
+
+    #[test]
+    fn test_from_consul_and_env_env_wins_over_consul() {
+        // Documented contract: env vars always win.
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_PORT", "7777");
+        let consul = consul_with([
+            ("app_port", "8888"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.app_port, 7777);
+    }
+
+    #[test]
+    fn test_from_consul_and_env_consul_used_when_env_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        // Required vars from consul so the helper doesn't panic.
+        let consul = consul_with([
+            ("app_name", "from-consul"),
+            ("app_env", "production"),
+            ("app_host", "10.0.0.1"),
+            ("database_url", "postgres://localhost/db"),
+            ("jwt.secret", "consul-secret"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.app_name, "from-consul");
+        assert_eq!(cfg.app_env, "production");
+        assert_eq!(cfg.app_host, "10.0.0.1");
+    }
+
+<%_ if (!devDatabaseTypeMongodb) { _%>
+    #[test]
+    fn test_from_consul_and_env_database_url_from_env_overrides_consul() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("DATABASE_URL", "postgres://env-wins/db");
+        let consul = consul_with([
+            ("database_url", "postgres://consul-loses/db"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.database_url, "postgres://env-wins/db");
+    }
+<%_ } _%>
+
+<%_ if (authenticationTypeJwt) { _%>
+    #[test]
+    fn test_from_consul_and_env_jwt_secret_from_consul_when_env_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+<%_ if (devDatabaseTypeMongodb) { _%>
+        std::env::set_var("MONGODB_URI", "mongodb://localhost:27017");
+        std::env::set_var("MONGODB_DATABASE", "test");
+<%_ } else { _%>
+        std::env::set_var("DATABASE_URL", "postgres://test/db");
+<%_ } _%>
+        // JWT_SECRET intentionally unset — must come from consul.
+        let consul = consul_with([
+            ("jwt.secret", "consul-jwt-secret"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.jwt_secret, "consul-jwt-secret");
+    }
+
+    #[test]
+    fn test_from_consul_and_env_jwt_expiration_consul_value() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let consul = consul_with([
+            ("jwt.expiration_hours", "72"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.jwt_expiration_hours, 72);
+    }
+<%_ } _%>
+
+<%_ } _%>
     #[test]
     fn test_is_production_true() {
         let config = AppConfig {
