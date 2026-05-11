@@ -165,3 +165,46 @@ pub struct HealthResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub components: Option<Vec<HealthComponent>>,
 }
+
+// Track 1 Phase 1d (2026-05-11): assert ApiDoc::openapi() produces a doc
+// with the expected paths registered and that SecurityAddon runs (its
+// side effect is adding the bearer_auth scheme to components).
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_doc_registers_known_paths() {
+        let doc = ApiDoc::openapi();
+        // Pin at least one known endpoint so this test fails loudly if the
+        // utoipa attribute macro silently drops paths during template churn.
+        assert!(
+            doc.paths.paths.contains_key("/api/health"),
+            "/api/health missing from openapi paths; found: {:?}",
+            doc.paths.paths.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_api_doc_security_addon_registers_bearer_auth_scheme() {
+        // SecurityAddon's modify() is invoked as part of ApiDoc::openapi().
+        // We verify the side effect (bearer_auth scheme present) rather than
+        // calling modify() directly, which would couple the test to internals.
+        let doc = ApiDoc::openapi();
+        let components = doc.components.as_ref().expect("components should be present");
+        assert!(
+            components.security_schemes.contains_key("bearer_auth"),
+            "bearer_auth scheme missing; found: {:?}",
+            components.security_schemes.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_api_doc_info_metadata_populated() {
+        // The info section is templated from EJS — assert non-empty so
+        // template typos that drop the macro args get caught.
+        let doc = ApiDoc::openapi();
+        assert!(!doc.info.title.is_empty());
+        assert!(!doc.info.version.is_empty());
+    }
+}
