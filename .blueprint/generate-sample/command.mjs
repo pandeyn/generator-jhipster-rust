@@ -25,7 +25,13 @@
 // node_modules/generator-jhipster/dist/generators/generate-blueprint/templates/.blueprint/generate-sample/command.mjs.ejs
 // uses the literal string 'app' in the `import:` array instead of importing the
 // constant — mirrored here.
-import { getGithubSamplesGroup, getGithubSamplesGroups } from 'generator-jhipster/testing';
+// Track 1-b.1 fix (2026-05-10): JHipster 9.0.0's `./testing` subpath no longer
+// re-exports `getGithubSamplesGroup` / `getGithubSamplesGroups` — those moved to
+// `./ci` (see node_modules/generator-jhipster/dist/lib/ci/index.js which
+// `export * from "./github-group.js"`). The canonical template still says
+// `from 'generator-jhipster/testing'` but that path is stale for the installed
+// JHipster version.
+import { getGithubSamplesGroup, getGithubSamplesGroups } from 'generator-jhipster/ci';
 
 const DEFAULT_SAMPLES_GROUP = 'samples';
 

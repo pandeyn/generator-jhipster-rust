@@ -3,7 +3,9 @@ import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
 import BaseGenerator from 'generator-jhipster/generators/base';
-import { getGithubSamplesGroup } from 'generator-jhipster/testing';
+// Track 1-b.1 fix (2026-05-10): moved from 'generator-jhipster/testing' to
+// 'generator-jhipster/ci' — same reason as command.mjs (see note there).
+import { getGithubSamplesGroup } from 'generator-jhipster/ci';
 
 export default class extends BaseGenerator {
   /** @type {string | undefined} */
