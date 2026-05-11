@@ -296,6 +296,14 @@ export default class extends BaseApplicationGenerator {
         application.devDatabaseTypeMongodb = devDbType === 'mongodb';
         // Flag for SQL-based databases (uses Diesel ORM)
         application.devDatabaseTypeSql = !application.devDatabaseTypeMongodb;
+
+        // Track 1-c.0 fix (2026-05-11): default the field-driven feature flags
+        // to false at the application level so EJS templates can reference
+        // them unconditionally without ReferenceError. PREPARING_EACH_ENTITY_FIELD
+        // flips them to true if any entity field warrants it. Initialize here
+        // even for MongoDB scaffolds (which won't flip the flag) so all
+        // scaffolds have a consistent application shape.
+        application.hasBigDecimalFields = false;
       },
       rustAuthConfig({ application }) {
         // Set Rust-specific authentication flags based on authenticationType config
