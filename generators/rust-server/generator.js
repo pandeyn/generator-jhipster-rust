@@ -723,11 +723,60 @@ ${allLines}
         }
         const entityList = entities.filter(entity => !entity.skipServer && !entity.builtIn);
 
+        // Track 1 Phase 0 sub-task 3 follow-up (2026-05-11): topologically sort entities
+        // by FK dependency before assigning migration timestamps. diesel applies migrations
+        // in lexicographic timestamp order, so an entity that references another via a
+        // many-to-one or owning one-to-one relationship MUST have a timestamp strictly
+        // greater than the referenced entity's, otherwise `CREATE TABLE child` runs before
+        // `CREATE TABLE parent` and fails with `relation "parent" does not exist`.
+        //
+        // We still prefer each entity's own `changelogDate` when it already sorts after
+        // its dependencies (preserves migration filename stability across regenerations,
+        // which the original code was solving for). Only when changelogDate is too early
+        // do we bump it forward past the latest dependency timestamp.
+        const entityByName = new Map();
+        for (const e of entityList) {
+          // Index by the canonical capitalized name used in relationship metadata.
+          const key = e.entityNameCapitalized || e.name;
+          if (key) entityByName.set(key, e);
+        }
+        const fkDeps = entity => {
+          // Owning-side FK columns are emitted by both up.sql.ejs and schema.rs.ejs,
+          // so the matching parent table must exist first.
+          return (entity.relationships || [])
+            .filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))
+            .map(r => entityByName.get(r.otherEntityNameCapitalized) || entityByName.get(r.otherEntity?.name))
+            .filter(dep => dep && dep !== entity);
+        };
+        const sorted = [];
+        const visited = new Set();
+        const visiting = new Set();
+        const visit = entity => {
+          if (visited.has(entity)) return;
+          if (visiting.has(entity)) return; // Cycle — fall back to insertion order for that arc.
+          visiting.add(entity);
+          for (const dep of fkDeps(entity)) visit(dep);
+          visiting.delete(entity);
+          visited.add(entity);
+          sorted.push(entity);
+        };
+        for (const entity of entityList) visit(entity);
+
+        const assignedTimestamp = new Map();
+
         // First pass: write the entity source files and their CREATE TABLE migrations.
-        for (const entity of entityList) {
-          // Use entity's changelogDate for migration timestamp to ensure consistency across regenerations
-          // This prevents duplicate migrations when regenerating entities
-          entity.migrationTimestamp = entity.changelogDate;
+        for (const entity of sorted) {
+          let maxDepTimestamp = '0';
+          for (const dep of fkDeps(entity)) {
+            const depTs = assignedTimestamp.get(dep);
+            if (depTs && depTs > maxDepTimestamp) maxDepTimestamp = depTs;
+          }
+          // Prefer entity.changelogDate when it already sorts after every dependency,
+          // so regenerations keep stable migration filenames. Otherwise bump past
+          // the latest dependency timestamp.
+          entity.migrationTimestamp =
+            entity.changelogDate > maxDepTimestamp ? entity.changelogDate : bumpMigrationTimestamp(maxDepTimestamp, 1);
+          assignedTimestamp.set(entity, entity.migrationTimestamp);
 
           await this.writeFiles({
             sections: entityFiles,
