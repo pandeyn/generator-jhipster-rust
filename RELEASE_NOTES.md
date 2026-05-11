@@ -1,3 +1,123 @@
+# Release Notes - v1.0.0
+
+## Overview
+
+We made it to v1.0.0. The major version bump isn't about breaking things — it's about putting a stake in the ground. Every PR from this release forward runs `cargo tarpaulin` against the canonical scaffold and fails if overall coverage drops below 50%. The threshold ratchets up each release; the floor itself is what we're promising not to walk back.
+
+If you've been generating microservices or gateways since v0.9.4 and quietly wondering why `cargo check` failed on the first run after adding an entity, this release is also for you. Five categories of latent template bugs that have been shipping for the better part of a year are now fixed. Vitest snapshot tests are happy to verify file content, but they never invoke `cargo` — so the bugs slipped through every release until we added CI that actually compiles what comes out of the generator.
+
+The API surface and the five scaffold flags work exactly the same as in v0.9.9. The major bump is a stability commitment, not a breaking change.
+
+## Coverage trajectory
+
+Here's how the coverage numbers moved over the seven PRs that landed between 2026-05-10 and 2026-05-11, measured against the canonical `microservice-cb` scaffold (Postgres + JWT + Consul + Circuit Breaker — the most production-realistic shape we test):
+
+| Milestone                                           | Coverage               | Δ from prior           |
+| --------------------------------------------------- | ---------------------- | ---------------------- |
+| v0.9.9 baseline (2026-05-10)                        | 35.67% (631/1769)      | —                      |
+| Phase 0 (`.tarpaulin.toml` adds main.rs exclusion)  | 46.54% (881/1893)      | denominator correction |
+| Phase 1a — DTO deserializers                        | 50.18% (951/1895)      | +3.64pp                |
+| Phase 1b — config `from_env` parsing                | 52.77% (1000/1895)     | +2.59pp                |
+| Phase 1c — handler routes                           | 54.56% (1034/1895)     | +1.79pp                |
+| Phase 1d — middleware + errors + openapi            | 56.52% (1071/1895)     | +1.96pp                |
+| Phase 2a — user_service sort branches + error paths | **60.11%** (1139/1895) | +3.59pp                |
+
+Eleven Tier 1 files hit 90% or better (nine of them at 100%); Tier 2's `user_service.rs` landed at 80.6%. Two Tier 1 files (`dto/common.rs` at 85%, `dto/pagination.rs` at 89%) came in just under the 90% target — the remaining uncovered lines are deep inside cascading `if let Ok(...)` datetime parsers, where cracking them means asserting against which serde visitor method handles which input shape. That's a tradeoff between coverage % and test-against-implementation-detail. We took the win and queued the polish pass for v1.0.1.
+
+## What's new in v1.0.0
+
+### The coverage gate
+
+`.github/workflows/samples.yml` gained a new `Coverage Gate (canonical scaffold)` job. It runs after the matrix samples (`sample`, `gateway-cb`, `microservice-cb`) finish, downloads the `microservice-cb` scaffold as a workflow artifact (saves about two minutes per run by not regenerating from scratch), spins up a `postgres:16` service container, installs `cargo-tarpaulin ^0.31` and `diesel_cli ^2.3`, applies the diesel migrations, and runs `cargo tarpaulin --fail-under 50 -- --test-threads=1`. If overall coverage drops below 50%, the PR fails at this step. That's the commitment.
+
+About `--test-threads=1`: the canonical scaffold's existing integration tests (`handlers::user`, `services::auth_service`, `services::user_service`) hard-code user IDs and reuse fixed test logins, so parallel execution against the shared `oldie_k8_pg_test` DB produced spurious "User 2 not found" and "duplicate key" failures. Fixing per-test isolation — transactional rollback or unique-login generation — is real work that we've queued beyond v1.0.0. Serializing test execution is the unglamorous-but-effective workaround for now.
+
+The threshold ratchets per release. v1.0.0 holds it at 50. Once Phase 2b and 2c land in v1.0.1, it bumps to 60. Phase 3 in v1.0.1 takes it to 70.
+
+### About 150 new tests in the generated scaffold
+
+All the test code lives in the EJS templates under `generators/rust-server/templates/server/src/**/*.rs.ejs`, so every scaffold you generate — regardless of which combination of flags you pass — ships with the same coverage shape. Here's the breakdown:
+
+- **DTO deserializers** (`dto/common.rs.ejs`, `dto/pagination.rs.ejs`) cover the React-vs-Angular `{"id": "1"}` vs `{"id": 1}` asymmetry that's been documented inline since v0.9.0 but never asserted in tests; the five datetime format variants (RFC 3339, Z-suffix with and without fraction, naive with and without fraction, space-separated); the `QsQuery` axum extractor; the `preprocess_duplicate_keys` query-string transform that translates `sort=a&sort=b` into the array form serde_qs needs; the `SortVisitor`; and the `QsQueryRejection` IntoResponse impl.
+- **Config `from_env` constructors** (`config/app_config.rs.ejs`, `config/vault_config.rs.ejs`, `config/consul_config.rs.ejs`, `config/metrics_config.rs.ejs`) cover defaults, explicit overrides, the boolean-truthiness contracts (`"true"`/`"TRUE"`/`"1"` accepted; anything else disables), env-wins-over-consul precedence in `from_consul_and_env`, and every conditional EJS branch (JWT, OAuth2, MongoDB, static hosting). All four files at 100% coverage after Phase 1b.
+- **Handler routes** (`handlers/health.rs.ejs`, `handlers/management.rs.ejs`) cover `GET /health`, `/liveness`, `/readiness`. They pin the Spring Boot Actuator `"UP"`/`"DOWN"` body shapes that K8s probes and JHipster clients key on — these aren't arbitrary strings, they're contract. `GET /management/info` covers `APP_PROFILE` env override, `production` → `prod` and `development` → `dev` normalization, the swagger-codegen `api-docs` profile contract, and the always-`"dev"` ribbon contract.
+- **JWT auth middleware** (`middleware/auth.rs.ejs`) exercises `auth_middleware` end-to-end: no Authorization header gives you anonymous, valid Bearer populates the user, expired returns 401, invalid returns 401, a non-Bearer Authorization header falls through to anonymous. Plus `require_auth` (rejects anonymous, accepts authenticated) and `require_role` (rejects user without role, accepts user with role, rejects anonymous).
+- **Error response mapping** (`errors/app_error.rs.ejs`) — for each of the seven `AppError` variants, the test asserts the status code, body shape, and message. The `Internal` variant gets special attention: we pin the contract that the original (potentially sensitive) error message must never appear in the response body, only in the server-side `tracing::error` log. Plus four diesel conversion tests covering `UniqueViolation` → `Conflict`, `ForeignKeyViolation` → `BadRequest`, other DB-error kinds → `Internal`, and a non-DB diesel-error catch-all.
+- **OpenAPI registry** (`openapi.rs.ejs`) — asserts `ApiDoc::openapi()` registers a known path, the `SecurityAddon` modifier adds the `bearer_auth` scheme as a side effect, info metadata is populated.
+- **User service sort branches** (`services/user_service.rs.ejs`) — 17 parametrized `rstest` cases cover the 8-way sort match in `find_all`. Each of `login`, `email`, `firstName`, `lastName`, `langKey`, `activated`, `createdDate`, `lastModifiedDate` × ascending and descending, plus the default-unknown-field fallthrough to id ASC. Plus six error-path and idempotent-contract tests that pin the actual behavior: `update` returns NotFound for nonexistent id; `delete` is idempotent (Ok(()) on zero rows); `update_password` is idempotent; `find_by_login` and `find_by_email` return specific NotFound variants; `get_authorities` returns Ok(empty_vec) for a nonexistent user_id rather than NotFound. The idempotent contracts are easy to misremember and the tests pin them so a future "make these strict" refactor produces an explicit test failure rather than a silent behavior change.
+
+### Test isolation conventions that future PRs will reuse
+
+Three patterns crystallized across Phase 1, and they're worth knowing if you're contributing tests of your own.
+
+**Module-local Mutex for env-var-touching tests.** A `static ENV_LOCK: Mutex<()> = Mutex::new(())` at module top serializes tests within that module while leaving the rest of the suite parallel. Each module has its own lock — different config modules don't block one another. For sync tests, `std::sync::Mutex` is fine. For `#[tokio::test]` cases that hold the lock across `.await` (e.g., an HTTP request), use `tokio::sync::Mutex::const_new(())` instead — the std Mutex would trip clippy's `await_holding_lock` lint because it can block a tokio worker thread.
+
+**`#[cfg_attr(test, derive(serde::Deserialize))]` on response DTOs.** Lets tests parse responses into typed structs without adding `Deserialize` to the production binary. Compile-time gated, zero runtime cost. Use it when you want typed access in tests but the DTO is a one-way `Serialize`-only type in production.
+
+**`rstest = "0.21"` for parametrized cases.** When you'd otherwise write a series of near-identical test functions that differ only in a parameter, use `rstest`'s `#[case]` annotations to compress them into one. The 17-case sort test in `user_service` is the canonical example; future parametrized tests should follow the same pattern.
+
+### Five template compilation bugs fixed
+
+These have been shipping since v0.9.4. We caught them only after wiring up Samples CI to actually run `cargo check` against the generated scaffolds.
+
+**Audit-column duplication.** If your JDL declared an entity with `createdDate`, `createdBy`, `lastModifiedDate`, or `lastModifiedBy` as an explicit field, the generator would emit the column twice — once via the JDL field iteration, once via an unconditional audit-column block. Eight Rust template sites and the SQL migration template were affected. Every audit-column site is now gated on `!fields.some(f => f.fieldName === '<jdlName>')`.
+
+**`schema.rs` shipped empty.** Every entity scaffold failed `cargo check` with `crate::db::schema::<entity>` unresolved. The fix is a new `addEntityToRustSchema` source helper that emits `diesel::table!` blocks (id, JDL fields, FK columns, audit columns gated identically) at a needle marker in `schema.rs.ejs`. Plus `addJoinTableToRustSchema` for many-to-many relationships.
+
+**`bigdecimal` crate referenced but not declared.** Entity templates emit `bigdecimal::BigDecimal` when a JDL field is typed `BigDecimal`, but neither the workspace nor server `Cargo.toml.ejs` declared the dependency. The fix adds `bigdecimal = { version = "0.4", features = ["serde"] }` and `, "numeric"` to diesel features when `hasBigDecimalFields` is true. We also addressed the trait-bound cascade: BigDecimal doesn't implement `validate::ValidateRange` (so we skip `#[validate(range(...))]` for those fields) or utoipa's `ToSchema` directly (so we add `#[schema(value_type = String)]` annotations).
+
+**Entity migration FK ordering.** Diesel applies migrations in lexicographic timestamp order. If your JDL declared `Product` before `Category` and `Product` had a many-to-one relationship to `Category`, both migrations got timestamped from each entity's `changelogDate` — Product's earlier date sorted first, then `diesel migration run` tried to FK-reference a non-existent category table. The fix is a topological sort: when an entity has an unresolved FK dependency, its migration timestamp gets bumped to one second after its latest dependency's. The original `changelogDate` is preserved when it already sorts after dependencies, so regeneration-stable filenames are maintained.
+
+**MongoDB entity template completed.** The MongoDB variant had 30 individually-gated audit-field references in its struct definitions and constructor sites that were inconsistent with the SQL variant. They all match the same `!fields.some(...)` pattern now.
+
+### Samples CI workflow itself fixed
+
+The Samples workflow that caught all the bugs above had been silently red since v0.9.4 (the day it was added). Reason: `npx --yes yo jhipster-rust:generate-sample` couldn't resolve `generator-jhipster-rust` from `node_modules`. `npx` only installs `yo` itself, and Yeoman then looks for the generator via `require.resolve`. `npm ci` doesn't create a self-link to the package under development, so the resolve fails. Fix: invoke the local CLI directly.
+
+```yaml
+- name: Generate sample application
+  run: |
+    mkdir -p app
+    cd app
+    node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.sample }} --skip-install --skip-git
+```
+
+`cli/cli.cjs` computes `devBlueprintPath` from its own `__dirname`, so it finds `.blueprint/generate-sample/` regardless of cwd. This tests the LOCAL checkout — correct for PR-time CI — not whatever's published to npm. The fix landed in PR #8 (the rolled-up `v1.0.0-ci-fix` branch) alongside the five template bugs.
+
+## Upgrade Notes
+
+### Backward compatibility
+
+Existing v0.9.9-generated apps are untouched on disk. The generator runs at scaffold time, so v1.0.0 only affects projects you regenerate with it.
+
+### What changes when you regenerate to v1.0.0
+
+You get new test modules under `server/src/**/*.rs` — every file the coverage work touched ships with its tests included. The generated `server/Cargo.toml` declares `rstest = "0.21"` and `axum-test = "14"` as dev-dependencies. Your production binary is unchanged; both are gated `[dev-dependencies]` and don't make it into release builds.
+
+There's a new `.tarpaulin.toml` at the workspace root excluding `server/src/main.rs` from coverage measurement. Runtime behavior is unchanged; the file only affects what `cargo tarpaulin` reports.
+
+And if you regenerate a microservice or gateway with JDL-declared entities, the scaffold now actually compiles under `cargo check` on first run. Audit-column duplication, schema.rs gaps, BigDecimal declarations, FK-ordered migrations — all five categories of pre-existing template bugs are addressed.
+
+### What changes for blueprint contributors
+
+Samples CI is now meaningful. Every PR runs `cargo check`, `cargo clippy --release --all-targets -- -D warnings`, and `shellcheck docker-entrypoint.sh` against three scaffolds (`sample`, `gateway-cb`, `microservice-cb`). The Coverage Gate is the fourth check, and it's the one with the durable commitment.
+
+If you're adding tests to the templates, the three conventions above (`Mutex` for env vars, `cfg_attr` for response DTOs, `rstest` for parametrized cases) are the patterns to follow. Phase 2b, 2c, and 3 PRs will reuse them.
+
+### What stays exactly the same
+
+All five scaffold dimensions (application type, frontend, database, auth, service discovery) accept the same values. The existing vitest snapshot test infrastructure passes 440/440. Every v0.9.8 security release behavior is unchanged: `docker-entrypoint.sh` still WARNs on unset `JWT_SECRET`, FATALs on the four sentinel forms, INFOs on operator-supplied. K8s and Helm sentinel handling is unchanged.
+
+### Recommended action for existing users
+
+Regenerate over your existing scaffold with `jhipster-rust --force` and run `cargo check` followed by `cargo test`. If you have a microservice or gateway with entities, the regeneration is more than just absorbing new tests — five categories of pre-existing template bugs go away. If you've been working around them, you can stop.
+
+## Deferred to v1.0.1
+
+The original v1.0.0 plan included more: Phase 2b (`handlers/account.rs` error paths via `axum-test`), Phase 2c (`services/resilient_http_client.rs` with `wiremock`), Phase 3 (consul/vault/config_watcher/tracing coverage), and Track 1-a (end-to-end integration matrix with docker-compose + Cypress + tarpaulin across 7 representative scaffolds). After Phase 2a landed and overall coverage hit 60.11%, we decided to ship rather than keep adding scope. v1.0.0 has the coverage commitment and the template fixes that have been bleeding into user-facing bugs for half a year. The remaining items are queued for v1.0.1, and the CI gate ratchets to 60 when Phase 2b+2c land and to 70 when Phase 3 lands.
+
+---
+
 # Release Notes - v0.9.9
 
 ## Overview

@@ -6,6 +6,49 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 
 This file is the at-a-glance index. For long-form per-release narrative — rationale, implementation notes, gotchas, and migration commands — see [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
+## [1.0.0] — 2026-05-11
+
+First stable release. Establishes a coverage floor (50% gate in CI, ratcheting per release) and fixes five latent template compilation bugs that broke every entity-based scaffold since v0.9.4 — `cargo check` against a Product/Category JDL now passes on first run. Non-breaking: same five scaffold dimensions, same template names, same generator API. The major version bump signals stability commitment, not breaking change.
+
+Coverage went from a measured **35.67% baseline (v0.9.9)** to **60.11%** (1139/1895 lines) on the canonical microservice-cb scaffold — a +24.4pp gain across Track 1 (Phases 0/1a/1b/1c/1d/2a). Per-file coverage on 11 Tier 1 files at ≥90% (9 of them at 100%); Tier 2's `user_service.rs` at 80.6%. CI's coverage gate hard-fails any PR that drops overall coverage below 50%.
+
+### Added
+
+- **`Samples/Coverage Gate (canonical scaffold)` CI job** in [`samples.yml`](.github/workflows/samples.yml). Spins up a postgres service container per PR, runs `cargo tarpaulin --fail-under 50 -- --test-threads=1` against the microservice-cb scaffold, reports per-file coverage in the job log. Threshold ratchets per release (50 in 1.0.0; 60 planned post-Phase 2; 70 in v1.0.1 after Phase 3).
+- **~150 new unit and integration tests** across the generated server templates, covering DTO deserializers (`common.rs`, `pagination.rs`), config `from_env` parsing (`app_config`, `vault_config`, `consul_config`, `metrics_config`), handler routes (`health.rs`, `management.rs`), the JWT auth middleware (`auth.rs`), error response mapping (`app_error.rs`), the OpenAPI registry (`openapi.rs`), and the 8-way sort match in `user_service::find_all` (17 parametrized rstest cases). Test code lives in EJS templates, so every regenerated scaffold gets the same coverage shape.
+- **`rstest = "0.21"` and `axum-test`-based handler test patterns** in the generated `server/Cargo.toml`. Both are test-only dev deps with zero runtime cost in the production binary.
+- **`.tarpaulin.toml.ejs`** in generated scaffolds, excluding `server/src/main.rs` from coverage denominator (process bootstrap not unit-testable; tests use a separate `test_utils::create_test_state` harness).
+
+### Changed
+
+- **`Samples/sample`, `Samples/gateway-cb`, `Samples/microservice-cb` CI jobs** now invoke the local CLI directly (`node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample <name>`) rather than `npx --yes yo jhipster-rust:generate-sample`. The npx path couldn't resolve `generator-jhipster-rust` from `node_modules` because `npm ci` doesn't create a self-link, leaving the Samples workflow red since the day it was added.
+- **Generated `server/Cargo.toml`** declares `bigdecimal = { version = "0.4", features = ["serde"] }` and adds `, "numeric"` to diesel features when any JDL entity has a `BigDecimal` field. Previously the dependency was referenced by emitted entity code but never declared, causing E0433 at first `cargo build`.
+- **Generated `server/src/db/schema.rs`** now contains `diesel::table!` blocks for every JDL entity, emitted via a new `addEntityToRustSchema` source helper invoked in `POST_WRITING_ENTITIES`. Previously the file shipped empty, so every entity scaffold failed at first `cargo check` with `crate::db::schema::<entity>` unresolved.
+
+### Fixed
+
+- **Generated SQL migrations no longer duplicate audit columns** (`created_by` / `created_date` / `last_modified_by` / `last_modified_date`) when the JDL declares them explicitly. Each audit column is now gated on `!fields.some(f => f.fieldName === '...')` in [`migrations/entity/up.sql.ejs`](generators/rust-server/templates/migrations/entity/up.sql.ejs); applies to postgres, mysql, and sqlite variants. Previously, a JDL field named `createdDate` would generate `CREATE TABLE product (... created_date TIMESTAMP, ..., created_date TIMESTAMP)` and fail `diesel migration run` with `column specified more than once`.
+- **Generated entity migrations are topologically ordered by FK dependency.** When entity A has a many-to-one or owning one-to-one to entity B, B's migration timestamp is now guaranteed to sort before A's (the generator bumps timestamps as needed; otherwise prefers each entity's stable `changelogDate`). Previously, JDL-declaration order leaked into migration filenames and a child-then-parent ordering produced `relation "<parent>" does not exist` at `diesel migration run`.
+- **Generated entity DTOs and services correctly handle audit-field collisions.** Same root cause as the SQL migration fix, applied to all eight Rust template sites (`_entityFileName_dto.rs.ejs`, `_entityFileName_.rs.ejs`, `_entityFileName_mongodb.rs.ejs`, `_entityFileName_service.rs.ejs`, `_entityFileName_service_mongodb.rs.ejs`, plus 3 constructor sites). BigDecimal fields now also get correct utoipa `#[schema(value_type = String)]` annotations and skip `#[validate(range(...))]` (which has trait bounds that BigDecimal doesn't satisfy).
+- **`cargo clippy --release --all-targets -- -D warnings`** is now clean across every generated scaffold variant tested in CI (`sample`, `gateway-cb`, `microservice-cb`). Was previously surfacing `items_after_test_module`, `manual_contains`, `unreachable_pattern`, and `await_holding_lock` lint violations in generated code.
+
+### Documentation
+
+- New [`samples.yml` coverage gate comment block](.github/workflows/samples.yml) documents the gate's threshold history and ratchet path so future maintainers see the baseline and trajectory at the gate config site.
+
+### Backward compatibility
+
+Non-breaking. The five scaffold dimensions (`--application-type`, `--db`, `--auth`, `--service-discovery-type`, frontend) accept the same values. Existing v0.9.9-generated apps are untouched on disk; regenerating to v1.0.0 adds the new test modules under `server/src/**/*.rs` and a new `.tarpaulin.toml` at the workspace root — both safe additions that don't alter any pre-existing file shape. The major version bump signals first stable release / coverage commitment, not breaking change.
+
+### Deferred to v1.0.1
+
+- Phase 2b — `handlers/account.rs` error-path tests via `axum-test`
+- Phase 2c — `services/resilient_http_client.rs` with `wiremock`
+- Phase 3 — `services/consul_service.rs`, `services/vault_service.rs`, `config/config_watcher.rs`, `config/tracing_config.rs` (need external-service mocks and tempfile dance; deferred from v1.0.0 scope)
+- Track 1-a — end-to-end integration matrix (separate `e2e.yml` workflow, 7 representative scaffolds, docker-compose + Cypress + tarpaulin per scaffold)
+
+CI gate ratchets to 60 once Phase 2b+2c land; to 70 once Phase 3 lands in v1.0.1.
+
 ## [0.9.9] — 2026-05-06
 
 DX patch release. Two critical fixes (microservice scaffolds couldn't compile under `cargo check` since v0.9.4; the new cheat sheet falsely advertised `--db` and `--auth` as flags that work with `--defaults`) plus seven quality-of-life improvements. All non-breaking; nothing in `0.9.8`-generated projects changes until you regenerate.
