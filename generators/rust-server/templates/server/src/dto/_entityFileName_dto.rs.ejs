@@ -557,15 +557,32 @@ mod tests {
                 <%= relationship.relationshipFieldName %>_id: Some(1),
 <%_ } _%>
 <%_ } _%>
+                <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+                <%_ // DTO test fixture. Field loop above already assigns any _%>
+                <%_ // JDL-declared audit field (E0062 dup otherwise). _%>
+                <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
                 created_by: Some("system".to_string()),
+                <%_ } _%>
 <%_ if (devDatabaseTypeMongodb) { _%>
+                <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
                 created_date: Some(BsonDateTime::now()),
+                <%_ } _%>
+                <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
                 last_modified_by: Some("admin".to_string()),
+                <%_ } _%>
+                <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
                 last_modified_date: Some(BsonDateTime::now()),
+                <%_ } _%>
 <%_ } else { _%>
+                <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
                 created_date: Some(NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()),
+                <%_ } _%>
+                <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
                 last_modified_by: Some("admin".to_string()),
+                <%_ } _%>
+                <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
                 last_modified_date: Some(NaiveDateTime::parse_from_str("2024-01-02 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap()),
+                <%_ } _%>
 <%_ } _%>
             }
         }

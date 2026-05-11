@@ -138,10 +138,21 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // test fixtures — the field loop above already assigns any _%>
+            <%_ // JDL-declared audit field (E0062 dup otherwise). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some("system".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let cloned = entity.clone();
         assert_eq!(entity.id, cloned.id);
@@ -179,10 +190,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): see note above audit-field gates. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let debug_str = format!("{:?}", entity);
         assert!(debug_str.contains("<%= persistClass %>"));
@@ -219,10 +239,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): see note above audit-field gates. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some("test_user".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         assert_eq!(new_entity.created_by, Some("test_user".to_string()));
     }
@@ -254,8 +283,14 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: Some(Some(1)),
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): Update struct only has the two _%>
+            <%_ // last_modified_* audit fields. Gate them too. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some("updater".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         assert_eq!(update.last_modified_by, Some("updater".to_string()));
     }
@@ -292,10 +327,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): see note above audit-field gates. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let json = serde_json::to_string(&entity).unwrap();
         assert!(json.contains("\"id\":1"));
