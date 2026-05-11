@@ -1,13 +1,25 @@
+<%_
+// Track 1 Phase 0 sub-task 3 follow-up (2026-05-11): gate audit columns on JDL
+// presence. If the JDL declares `createdDate` (or any other audit field) explicitly,
+// it's already emitted by the `fields.filter(f => !f.id)` loop above — emitting
+// the unconditional audit column too produces `column "created_date" specified
+// more than once` and breaks `diesel migration run`. Same pattern we applied in
+// the Rust DTO/model/service/schema templates.
+const hasJdlCreatedBy = fields.some(f => f.fieldName === 'createdBy');
+const hasJdlCreatedDate = fields.some(f => f.fieldName === 'createdDate');
+const hasJdlLastModifiedBy = fields.some(f => f.fieldName === 'lastModifiedBy');
+const hasJdlLastModifiedDate = fields.some(f => f.fieldName === 'lastModifiedDate');
+_%>
 <%_ if (devDatabaseTypePostgresql) { _%>
 -- Create <%= entityTableName %> table
 CREATE TABLE <%= entityTableName %> (
     id SERIAL PRIMARY KEY<%_ for (const field of fields.filter(f => !f.id)) { _%>,
     <%= field.fieldNameUnderscored %> <%= field.postgresColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
-    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%>,
-    created_by VARCHAR(50),
-    created_date TIMESTAMP,
-    last_modified_by VARCHAR(50),
-    last_modified_date TIMESTAMP
+    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%><%_ if (!hasJdlCreatedBy) { _%>,
+    created_by VARCHAR(50)<%_ } _%><%_ if (!hasJdlCreatedDate) { _%>,
+    created_date TIMESTAMP<%_ } _%><%_ if (!hasJdlLastModifiedBy) { _%>,
+    last_modified_by VARCHAR(50)<%_ } _%><%_ if (!hasJdlLastModifiedDate) { _%>,
+    last_modified_date TIMESTAMP<%_ } _%>
 );
 
 -- Create indexes
@@ -23,11 +35,11 @@ CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %
 CREATE TABLE <%= entityTableName %> (
     id INTEGER PRIMARY KEY AUTO_INCREMENT<%_ for (const field of fields.filter(f => !f.id)) { _%>,
     <%= field.fieldNameUnderscored %> <%= field.mysqlColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
-    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%>,
-    created_by VARCHAR(50),
-    created_date DATETIME,
-    last_modified_by VARCHAR(50),
-    last_modified_date DATETIME
+    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%><%_ if (!hasJdlCreatedBy) { _%>,
+    created_by VARCHAR(50)<%_ } _%><%_ if (!hasJdlCreatedDate) { _%>,
+    created_date DATETIME<%_ } _%><%_ if (!hasJdlLastModifiedBy) { _%>,
+    last_modified_by VARCHAR(50)<%_ } _%><%_ if (!hasJdlLastModifiedDate) { _%>,
+    last_modified_date DATETIME<%_ } _%>
 );
 
 -- Create indexes
@@ -43,11 +55,11 @@ CREATE INDEX idx_<%= entityTableName %>_<%= relationship.relationshipFieldName %
 CREATE TABLE <%= entityTableName %> (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL<%_ for (const field of fields.filter(f => !f.id)) { _%>,
     <%= field.fieldNameUnderscored %> <%= field.sqliteColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
-    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%>,
-    created_by TEXT,
-    created_date TIMESTAMP,
-    last_modified_by TEXT,
-    last_modified_date TIMESTAMP
+    <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%><%_ if (!hasJdlCreatedBy) { _%>,
+    created_by TEXT<%_ } _%><%_ if (!hasJdlCreatedDate) { _%>,
+    created_date TIMESTAMP<%_ } _%><%_ if (!hasJdlLastModifiedBy) { _%>,
+    last_modified_by TEXT<%_ } _%><%_ if (!hasJdlLastModifiedDate) { _%>,
+    last_modified_date TIMESTAMP<%_ } _%>
 );
 
 -- Create indexes
