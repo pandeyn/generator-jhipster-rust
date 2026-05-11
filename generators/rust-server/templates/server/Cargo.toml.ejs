@@ -100,3 +100,8 @@ reqwest.workspace = true
 [dev-dependencies]
 axum-test = "14"
 tempfile = "3"
+# Phase 2a (2026-05-11): parametrized test cases for user_service sort
+# branches. Documented decision (plan doc, locked 2026-05-10): rstest over
+# 17 separate small `#[test]` functions sharing identical fixture setup —
+# 80% less source-line count for no readability loss.
+rstest = "0.21"

@@ -784,6 +784,11 @@ mod tests {
         use super::*;
         use crate::test_utils::create_test_pool;
         use crate::dto::{CreateUserDto, PageRequest, UpdateUserDto};
+        // Phase 2a (2026-05-11): parametrized cases for the 8-way sort match
+        // in find_all. rstest's `#[case]` annotations let one test function
+        // cover 17 sort permutations (8 fields × 2 directions + 1 default-
+        // unknown) without duplicating fixture setup. Locked decision #9.
+        use rstest::rstest;
 
         #[test]
         fn test_create_user() {
@@ -1044,6 +1049,194 @@ mod tests {
             assert_eq!(z_users[2].login, "zcharlie");
         }
 
+        /// Insert 3 users with distinct values for every string-sortable field.
+        /// Login suffix matches the alphabetical position so callers can spot-
+        /// check ordering by looking at the trailing letter.
+        ///
+        /// Insertion order is `b, a, c` — deliberately scrambled so a test
+        /// that mistakenly asserts insertion order rather than sort order
+        /// would fail loudly. Returns the prefix string for filtering.
+        fn setup_three_sortable_users(conn: &mut DbConnection, prefix: &str) {
+            let users = [
+                // (login_suffix, email_prefix, first_name, last_name, lang_key)
+                ("b", "beta",  "Beta",  "Lname1", "fr"),
+                ("a", "alpha", "Alpha", "Lname2", "en"),
+                ("c", "gamma", "Gamma", "Lname3", "es"),
+            ];
+            for (suffix, email_p, fn_, ln, lk) in users {
+                let dto = CreateUserDto {
+                    login: format!("{}_{}", prefix, suffix),
+                    password: "password123".to_string(),
+                    first_name: Some(fn_.to_string()),
+                    last_name: Some(ln.to_string()),
+                    email: format!("{}_{}@example.com", email_p, prefix),
+                    activated: Some(true),
+                    lang_key: Some(lk.to_string()),
+                    image_url: None,
+                    authorities: None,
+                };
+                UserService::create(conn, dto, "system").unwrap();
+            }
+        }
+
+        /// Filter find_all results to only the users this test created, by
+        /// matching on the unique login prefix. Returns just the suffix
+        /// letters in result order — the value tests assert against.
+        fn extract_suffixes(users: &[User], prefix: &str) -> Vec<String> {
+            users
+                .iter()
+                .filter_map(|u| u.login.strip_prefix(&format!("{}_", prefix)).map(String::from))
+                .collect()
+        }
+
+        // Parametrized sort coverage for the 5 string-sortable fields plus
+        // the default-unknown-field fall-through. Boolean and date fields
+        // need different fixtures (see the next two test functions).
+        //
+        // Each case lists the expected login suffix order. Suffixes are a/b/c;
+        // setup inserts in order b, a, c (scrambled to catch insertion-order
+        // assertion bugs). The expected vec tells you what the sort should
+        // produce regardless of insertion order.
+        #[rstest]
+        #[case::login_asc("login", "asc", "slo", &["a", "b", "c"])]
+        #[case::login_desc("login", "desc", "sld", &["c", "b", "a"])]
+        #[case::email_asc("email", "asc", "sea", &["a", "b", "c"])]
+        #[case::email_desc("email", "desc", "sed", &["c", "b", "a"])]
+        #[case::first_name_asc("firstName", "asc", "sfa", &["a", "b", "c"])]
+        #[case::first_name_desc("firstName", "desc", "sfd", &["c", "b", "a"])]
+        #[case::last_name_asc("lastName", "asc", "sla", &["b", "a", "c"])]
+        #[case::last_name_desc("lastName", "desc", "sln", &["c", "a", "b"])]
+        #[case::lang_key_asc("langKey", "asc", "ska", &["a", "c", "b"])]
+        #[case::lang_key_desc("langKey", "desc", "skd", &["b", "c", "a"])]
+        // Default arm: unknown field falls back to id ASC, which in postgres
+        // matches insertion order. Setup inserted b, a, c — so id asc = b, a, c.
+        #[case::unknown_field_falls_back_to_id_asc("not_a_field", "asc", "sun", &["b", "a", "c"])]
+        fn test_find_all_sorts_by_string_field(
+            #[case] field: &str,
+            #[case] direction: &str,
+            #[case] prefix: &str,
+            #[case] expected_suffixes: &[&str],
+        ) {
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            setup_three_sortable_users(&mut conn, prefix);
+
+            // size=100 ensures all test users fit on page 0 alongside seeded admin/user.
+            let page_request = PageRequest {
+                page: Some(0),
+                size: Some(100),
+                sort: vec![format!("{},{}", field, direction)],
+            };
+            let (users, _total) = UserService::find_all(&mut conn, &page_request).unwrap();
+            let actual = extract_suffixes(&users, prefix);
+            let expected: Vec<String> = expected_suffixes.iter().map(|s| s.to_string()).collect();
+            assert_eq!(
+                actual, expected,
+                "sort={},{} expected suffixes {:?} got {:?}",
+                field, direction, expected, actual
+            );
+        }
+
+        // Boolean field needs a 2-state fixture: one user activated=false,
+        // others activated=true. Within the activated=true group, secondary
+        // ordering is undefined, so the assertion only pins where the
+        // activated=false user sits relative to the activated=true ones.
+        #[rstest]
+        #[case::activated_asc("asc", "sba", false)]   // false (0) sorts first
+        #[case::activated_desc("desc", "sbd", true)]  // true (1) sorts first
+        fn test_find_all_sorts_by_activated(
+            #[case] direction: &str,
+            #[case] prefix: &str,
+            #[case] first_user_activated: bool,
+        ) {
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            // Two users: one activated, one not.
+            for (suffix, activated) in [("on", true), ("off", false)] {
+                let dto = CreateUserDto {
+                    login: format!("{}_{}", prefix, suffix),
+                    password: "password123".to_string(),
+                    first_name: None,
+                    last_name: None,
+                    email: format!("{}_{}@x.com", prefix, suffix),
+                    activated: Some(activated),
+                    lang_key: None,
+                    image_url: None,
+                    authorities: None,
+                };
+                UserService::create(&mut conn, dto, "system").unwrap();
+            }
+            let page_request = PageRequest {
+                page: Some(0),
+                size: Some(100),
+                sort: vec![format!("activated,{}", direction)],
+            };
+            let (users, _) = UserService::find_all(&mut conn, &page_request).unwrap();
+            // Filter to our test users and find the first one in result order.
+            let ours: Vec<&User> = users
+                .iter()
+                .filter(|u| u.login.starts_with(&format!("{}_", prefix)))
+                .collect();
+            assert_eq!(ours.len(), 2, "expected 2 test users, got {}", ours.len());
+            assert_eq!(
+                ours[0].activated, first_user_activated,
+                "sort=activated,{} expected first user activated={} got activated={}",
+                direction, first_user_activated, ours[0].activated
+            );
+        }
+
+        // Date-field sort: insertion order produces increasing created_date /
+        // last_modified_date (postgres NOW() at insert time). Sleeps between
+        // inserts guarantee distinct microsecond-precision timestamps so the
+        // sort order is deterministic. `last_modified_date` equals
+        // `created_date` for never-updated users, so the assertion shape
+        // matches across both fields.
+        #[rstest]
+        #[case::created_date_asc("createdDate", "asc", "sca", &["a", "b", "c"])]
+        #[case::created_date_desc("createdDate", "desc", "scd", &["c", "b", "a"])]
+        #[case::last_modified_date_asc("lastModifiedDate", "asc", "sma", &["a", "b", "c"])]
+        #[case::last_modified_date_desc("lastModifiedDate", "desc", "smd", &["c", "b", "a"])]
+        fn test_find_all_sorts_by_date_field(
+            #[case] field: &str,
+            #[case] direction: &str,
+            #[case] prefix: &str,
+            #[case] expected_suffixes: &[&str],
+        ) {
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            // Insert in alphabetical order with sleeps so a < b < c in time.
+            for suffix in ["a", "b", "c"] {
+                let dto = CreateUserDto {
+                    login: format!("{}_{}", prefix, suffix),
+                    password: "password123".to_string(),
+                    first_name: None,
+                    last_name: None,
+                    email: format!("{}_{}@x.com", prefix, suffix),
+                    activated: Some(true),
+                    lang_key: None,
+                    image_url: None,
+                    authorities: None,
+                };
+                UserService::create(&mut conn, dto, "system").unwrap();
+                // 10ms separation is more than enough for postgres timestamp
+                // resolution on any sane runner.
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            let page_request = PageRequest {
+                page: Some(0),
+                size: Some(100),
+                sort: vec![format!("{},{}", field, direction)],
+            };
+            let (users, _) = UserService::find_all(&mut conn, &page_request).unwrap();
+            let actual = extract_suffixes(&users, prefix);
+            let expected: Vec<String> = expected_suffixes.iter().map(|s| s.to_string()).collect();
+            assert_eq!(
+                actual, expected,
+                "sort={},{} expected {:?} got {:?}",
+                field, direction, expected, actual
+            );
+        }
+
         #[test]
         fn test_update_user() {
             let pool = create_test_pool();
@@ -1245,6 +1438,96 @@ mod tests {
 
             let authorities = UserService::get_authorities(&mut conn, user.id).unwrap();
             assert_eq!(authorities.len(), 2);
+        }
+
+        // Phase 2a step 3 (2026-05-11): error-path and idempotent-contract
+        // tests. Each test pins the specific contract — `assert!(matches!(...))`
+        // on the AppError variant for real error paths; `Ok(())` plus a
+        // post-condition for idempotent operations (delete and update_password
+        // are intentionally not-an-error when the target row doesn't exist).
+        // The contracts here are easy to mis-remember; pinning them in tests
+        // is the cheapest way to keep future refactors honest.
+
+        #[test]
+        fn test_find_by_login_returns_not_found_for_unknown_login() {
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            let result = UserService::find_by_login(&mut conn, "definitely_not_a_real_user_xyz");
+            match result {
+                Err(AppError::NotFound(msg)) => {
+                    assert!(msg.contains("definitely_not_a_real_user_xyz"), "got: {}", msg);
+                }
+                other => panic!("Expected NotFound, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_find_by_email_returns_not_found_for_unknown_email() {
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            let result = UserService::find_by_email(&mut conn, "nobody@nowhere.invalid");
+            assert!(matches!(result, Err(AppError::NotFound(_))));
+        }
+
+        #[test]
+        fn test_update_returns_not_found_for_nonexistent_id() {
+            // The diesel UPDATE silently affects zero rows when the id doesn't
+            // match (postgres `UPDATE ... WHERE id = X` with no match). The
+            // NotFound surfaces from the trailing `find_by_id` that the update
+            // method calls to return the updated row.
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            let dto = UpdateUserDto {
+                login: None,
+                first_name: Some("Doesnt".to_string()),
+                last_name: Some("Matter".to_string()),
+                email: Some("doesnt@matter.com".to_string()),
+                activated: Some(true),
+                lang_key: None,
+                image_url: None,
+                authorities: None,
+            };
+            let result = UserService::update(&mut conn, i32::MAX, dto, "system");
+            match result {
+                Err(AppError::NotFound(msg)) => assert!(msg.contains(&i32::MAX.to_string()), "got: {}", msg),
+                other => panic!("Expected NotFound, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_delete_is_idempotent_for_nonexistent_id() {
+            // Contract: delete returns Ok(()) when the id doesn't exist.
+            // This is intentional — DELETE on zero rows is not an error in
+            // SQL, and the service surface preserves that. Pinning the
+            // contract so a future "make delete strict" refactor produces
+            // an explicit test failure rather than a silent behavior change.
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            let result = UserService::delete(&mut conn, i32::MAX);
+            assert!(result.is_ok(), "delete of nonexistent id should succeed, got {:?}", result);
+        }
+
+        #[test]
+        fn test_update_password_is_idempotent_for_nonexistent_login() {
+            // Same idempotent contract as delete: UPDATE matching zero rows
+            // returns Ok(()). Pin the contract to catch silent regressions.
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            let fake_hash = "$argon2id$placeholder";
+            let result = UserService::update_password(&mut conn, "no_such_login_xyz", fake_hash);
+            assert!(result.is_ok(), "update_password on nonexistent login should succeed, got {:?}", result);
+        }
+
+        #[test]
+        fn test_get_authorities_returns_empty_for_nonexistent_user() {
+            // Documents the contract: querying authorities for an unknown
+            // user_id returns Ok(empty_vec), NOT NotFound. The join semantics
+            // (LEFT JOIN-style filter) naturally yield zero rows.
+            let pool = create_test_pool();
+            let mut conn = pool.get().unwrap();
+            let result = UserService::get_authorities(&mut conn, i32::MAX);
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_empty());
         }
     }
 }
