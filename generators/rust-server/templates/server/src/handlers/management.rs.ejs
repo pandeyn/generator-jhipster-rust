@@ -161,13 +161,14 @@ mod integration_tests {
     #[tokio::test]
     async fn test_info_falls_back_to_config_app_env_when_no_env_var() {
         // When APP_PROFILE is unset, the handler reads state.config.app_env.
-        // create_test_config() defaults to "development" → normalized to "dev".
+        // create_test_config() sets app_env to "test" — neither "production"
+        // nor "development", so it passes through the `_ => other` arm verbatim.
         let _g = ENV_LOCK.lock().await;
         std::env::remove_var("APP_PROFILE");
         let server = create_test_app();
         let response = server.get("/management/info").await;
         let body: InfoResponse = response.json();
-        assert!(body.active_profiles.contains(&"dev".to_string()));
+        assert!(body.active_profiles.contains(&"test".to_string()));
     }
 
 <%_ if (enableSwaggerCodegen) { _%>
