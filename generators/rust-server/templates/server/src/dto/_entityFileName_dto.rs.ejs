@@ -515,6 +515,9 @@ mod tests {
                 <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
                 <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+                <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal parse for required fields. _%>
+                <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
                 <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
@@ -537,6 +540,8 @@ mod tests {
                 <%= field.fieldNameUnderscored %>: Some(42.5),
 <%_ } else if (field.fieldType === 'Double') { _%>
                 <%= field.fieldNameUnderscored %>: Some(42.5),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+                <%= field.fieldNameUnderscored %>: Some("42.50".parse::<bigdecimal::BigDecimal>().unwrap()),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
                 <%= field.fieldNameUnderscored %>: Some(true),
 <%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
@@ -615,11 +620,11 @@ mod tests {
         #[test]
         fn test_<%= entityInstance %>_dto_deserialization() {
 <%_ if (devDatabaseTypeMongodb) { _%>
-            let json = r#"{"id":"507f1f77bcf86cd799439011"<% for (const field of allFields) { %><% if (field.fieldValidationRequired) { %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>,"<%= field.fieldName %>":"test"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>,"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { %>,"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>,"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>,"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>,"<%= field.fieldName %>":"test"<% } %><% } %><% } %>}"#;
+            let json = r#"{"id":"507f1f77bcf86cd799439011"<% for (const field of allFields) { %><% if (field.fieldValidationRequired) { %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>,"<%= field.fieldName %>":"test"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>,"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { %>,"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>,"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>,"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>,"<%= field.fieldName %>":"test"<% } %><% } %><% } %>}"#;
             let dto: <%= entityClass %>Dto = serde_json::from_str(json).unwrap();
             assert_eq!(dto.id, "507f1f77bcf86cd799439011");
 <%_ } else { _%>
-            let json = r#"{"id":1<% for (const field of allFields) { %><% if (field.fieldValidationRequired) { %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>,"<%= field.fieldName %>":"test"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>,"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { %>,"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>,"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>,"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>,"<%= field.fieldName %>":"test"<% } %><% } %><% } %>}"#;
+            let json = r#"{"id":1<% for (const field of allFields) { %><% if (field.fieldValidationRequired) { %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>,"<%= field.fieldName %>":"test"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>,"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { %>,"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>,"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>,"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>,"<%= field.fieldName %>":"test"<% } %><% } %><% } %>}"#;
             let dto: <%= entityClass %>Dto = serde_json::from_str(json).unwrap();
             assert_eq!(dto.id, 1);
 <%_ } _%>
@@ -671,7 +676,7 @@ mod tests {
 
         #[test]
         fn test_create_<%= entityInstance %>_dto_deserialization() {
-            let json = r#"{<% const reqFields = allFields.filter(f => f.fieldValidationRequired); for (let i = 0; i < reqFields.length; i++) { const field = reqFields[i]; const isLast = i === reqFields.length - 1; %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>"<%= field.fieldName %>":"test_value"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { %>"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>"<%= field.fieldName %>":"test_value"<% } %><% if (!isLast) { %>,<% } %><% } %>}"#;
+            let json = r#"{<% const reqFields = allFields.filter(f => f.fieldValidationRequired); for (let i = 0; i < reqFields.length; i++) { const field = reqFields[i]; const isLast = i === reqFields.length - 1; %><% if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { %>"<%= field.fieldName %>":"test_value"<% } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { %>"<%= field.fieldName %>":1<% } else if (field.fieldType === 'Float' || field.fieldType === 'Double' || field.fieldType === 'BigDecimal') { %>"<%= field.fieldName %>":1.0<% } else if (field.fieldType === 'Boolean') { %>"<%= field.fieldName %>":true<% } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { %>"<%= field.fieldName %>":"2024-01-01T00:00:00Z"<% } else { %>"<%= field.fieldName %>":"test_value"<% } %><% if (!isLast) { %>,<% } %><% } %>}"#;
             let result: Result<Create<%= entityClass %>Dto, _> = serde_json::from_str(json);
             assert!(result.is_ok());
         }

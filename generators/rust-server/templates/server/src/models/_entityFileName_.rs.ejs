@@ -122,6 +122,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -174,6 +178,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -223,6 +231,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -270,6 +282,8 @@ mod tests {
             <%= field.fieldNameUnderscored %>: Some(999.99),
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: Some(999.99),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: Some("999.99".parse::<bigdecimal::BigDecimal>().unwrap()),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: Some(false),
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -311,6 +325,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>

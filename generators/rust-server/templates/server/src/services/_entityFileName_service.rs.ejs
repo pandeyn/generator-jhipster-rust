@@ -358,6 +358,8 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 1.0,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -493,6 +495,8 @@ mod tests {
             <%= field.fieldNameUnderscored %>: Some(999.99),
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: Some(999.99),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: Some("999.99".parse::<bigdecimal::BigDecimal>().unwrap()),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: Some(true),
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
