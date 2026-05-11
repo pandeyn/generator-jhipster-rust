@@ -122,6 +122,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with Jaeg
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -364,6 +367,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with circ
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -603,6 +609,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -834,6 +843,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > gateway with cons
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -1076,6 +1088,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -1347,6 +1362,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -1595,6 +1613,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -1832,6 +1853,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -2094,6 +2118,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -2318,6 +2345,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -2522,6 +2552,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -2746,6 +2779,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -2976,6 +3012,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -3215,6 +3254,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -3462,6 +3504,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -3701,6 +3746,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -3932,6 +3980,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -4173,6 +4224,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -4404,6 +4458,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -4642,6 +4699,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -4861,6 +4921,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -5090,6 +5153,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > microservice with
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -5299,6 +5365,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should N
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -5488,6 +5557,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith should n
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -5685,6 +5757,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith with kaf
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
@@ -5890,6 +5965,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -6081,6 +6159,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > monolith without 
   "package.json": {
     "stateCleared": "modified",
   },
+  "server/.tarpaulin.toml": {
+    "stateCleared": "modified",
+  },
   "server/Cargo.toml": {
     "stateCleared": "modified",
   },
@@ -6270,6 +6351,9 @@ exports[`SubGenerator rust-server of rust JHipster blueprint > run > should succ
     "stateCleared": "modified",
   },
   "package.json": {
+    "stateCleared": "modified",
+  },
+  "server/.tarpaulin.toml": {
     "stateCleared": "modified",
   },
   "server/Cargo.toml": {
