@@ -16,7 +16,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { GENERATOR_APP } from 'generator-jhipster/generators';
+// Track 1-b.1 fix (2026-05-10): the previous line `import { GENERATOR_APP } from
+// 'generator-jhipster/generators'` was incompatible with generator-jhipster 9.x.
+// JHipster 9's package.json exports define `./generators/*` (with a required
+// subpath) but NOT bare `./generators`, AND GENERATOR_APP is not a publicly
+// exported constant — it lives only inside cli/program.js as `const = 'app'`.
+// The canonical JHipster generate-sample command template at
+// node_modules/generator-jhipster/dist/generators/generate-blueprint/templates/.blueprint/generate-sample/command.mjs.ejs
+// uses the literal string 'app' in the `import:` array instead of importing the
+// constant — mirrored here.
 import { getGithubSamplesGroup, getGithubSamplesGroups } from 'generator-jhipster/testing';
 
 const DEFAULT_SAMPLES_GROUP = 'samples';
@@ -76,7 +84,7 @@ const command = {
     },
   },
   options: {},
-  import: [GENERATOR_APP],
+  import: ['app'],
 };
 
 export default command;
