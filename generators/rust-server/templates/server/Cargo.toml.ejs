@@ -20,6 +20,11 @@ futures.workspace = true
 diesel.workspace = true
 diesel_migrations.workspace = true
 <%_ } _%>
+<%_ if (hasBigDecimalFields) { _%>
+# Track 1-c.0 fix (2026-05-11): pulled in when an entity field is BigDecimal on
+# a SQL scaffold. See workspace Cargo.toml comment for context.
+bigdecimal.workspace = true
+<%_ } _%>
 dotenvy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

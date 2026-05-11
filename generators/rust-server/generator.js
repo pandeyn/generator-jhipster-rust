@@ -526,6 +526,15 @@ pub use ${rustModuleName}_dto::*;`,
         const { fieldType } = field;
         if (field.skipServer) return;
 
+        // Track 1-c.0 fix (2026-05-11): set application-level flag when ANY
+        // entity field is BigDecimal on a SQL database scaffold. Cargo.toml
+        // templates condition the `bigdecimal` crate dep and diesel's
+        // `numeric` feature on this flag. MongoDB scaffolds map BigDecimal to
+        // f64 (no bigdecimal crate needed) so the flag is SQL-only.
+        if (fieldType === 'BigDecimal' && !application.devDatabaseTypeMongodb) {
+          application.hasBigDecimalFields = true;
+        }
+
         field.rustFieldType = rustFieldTypes[fieldType] ?? 'String';
 
         // MongoDB-specific field types
