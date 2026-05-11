@@ -27,10 +27,14 @@ use crate::dto::common::{deserialize_bson_datetime, deserialize_option_bson_date
 <%_ } _%>
 <%_ } else if (hasDateTimeFields) { _%>
 use chrono::NaiveDateTime;
-<%_ if (hasRequiredDateTimeFields && hasOptionalDateTimeFields) { _%>
+<%_ // Track 1-c.2 fix (corrected 2026-05-11): the Update DTO always uses _%>
+<%_ // `deserialize_option_naive_datetime` (all Update fields are Optional, _%>
+<%_ // regardless of whether the entity field is JDL-required). So whenever _%>
+<%_ // ANY datetime field exists, the optional deserializer is needed. _%>
+<%_ // The required deserializer is needed only when the entity has at least _%>
+<%_ // one required datetime field (main DTO + Create DTO use it). _%>
+<%_ if (hasRequiredDateTimeFields) { _%>
 use crate::dto::common::{deserialize_naive_datetime, deserialize_option_naive_datetime};
-<%_ } else if (hasRequiredDateTimeFields) { _%>
-use crate::dto::common::deserialize_naive_datetime;
 <%_ } else { _%>
 use crate::dto::common::deserialize_option_naive_datetime;
 <%_ } _%>
