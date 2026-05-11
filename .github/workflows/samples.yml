@@ -279,7 +279,19 @@ jobs:
         # 39.92% baseline verified locally with .tarpaulin.toml's main.rs
         # exclusion). Ratchets to 60 in v1.0.1 once Phase 1 lands, 70 in v1.0.2
         # once Phase 3 lands.
-        run: cargo tarpaulin --fail-under 35
+        #
+        # `-- --test-threads=1` serializes test execution. The canonical
+        # scaffold's integration tests (handlers::user, services::auth_service,
+        # services::user_service) hard-code user IDs (e.g. `reactivate_user(2)`)
+        # and reuse fixed test logins, so parallel execution against the shared
+        # `oldie_k8_pg_test` DB causes spurious failures:
+        #   - "User 2 not found"  (id changed because another test ran first)
+        #   - "duplicate key value violates unique constraint users_login_key"
+        #   - "violates foreign key constraint user_authorities_user_id_fkey"
+        # Fixing per-test isolation (transactional rollback / unique login
+        # generation) is Phase 1 template-side work; until then, serialize.
+        # Matches the local-baseline configuration that produced 39.92%.
+        run: cargo tarpaulin --fail-under 35 -- --test-threads=1
 
   # Summary job to ensure all samples + coverage passed
   samples-check:
