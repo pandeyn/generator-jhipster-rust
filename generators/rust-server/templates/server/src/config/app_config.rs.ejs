@@ -145,10 +145,380 @@ impl AppConfig {
     }
 }
 
+// Track 1 Phase 1b (2026-05-11): from_env() coverage. Mutex serializes
+// env-var tests; rest of the suite stays parallel.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_app_env() {
+        for k in [
+            "APP_NAME",
+            "APP_ENV",
+            "APP_PORT",
+            "APP_HOST",
+<%_ if (enableStaticHosting) { _%>
+            "APP_HTTPS",
+            "STATIC_FILES_DIR",
+            "SERVE_STATIC_FILES",
+<%_ } _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+            "MONGODB_URI",
+            "MONGODB_DATABASE",
+<%_ } else { _%>
+            "DATABASE_URL",
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+            "JWT_SECRET",
+            "JWT_EXPIRATION_HOURS",
+<%_ } _%>
+<%_ if (authenticationTypeOauth2) { _%>
+            "FRONTEND_URL",
+<%_ } _%>
+        ] {
+            std::env::remove_var(k);
+        }
+    }
+
+    /// Set the env vars `from_env()` calls `.expect()` on, so tests that
+    /// exercise OTHER vars don't panic. Lets each test focus on what it
+    /// actually asserts.
+    fn set_required_env() {
+<%_ if (devDatabaseTypeMongodb) { _%>
+        std::env::set_var("MONGODB_URI", "mongodb://localhost:27017");
+        std::env::set_var("MONGODB_DATABASE", "test");
+<%_ } else { _%>
+        std::env::set_var("DATABASE_URL", "postgres://test:test@localhost:5432/test");
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+        std::env::set_var("JWT_SECRET", "test-secret-not-used");
+<%_ } _%>
+    }
+
+    #[test]
+    fn test_from_env_uses_documented_defaults() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        // app_name default is baseName — assert non-empty for cross-scaffold portability.
+        assert!(!cfg.app_name.is_empty());
+        assert_eq!(cfg.app_env, "development");
+        assert_eq!(cfg.app_port, 8080);
+        assert_eq!(cfg.app_host, "0.0.0.0");
+    }
+
+    #[test]
+    fn test_from_env_reads_app_port_from_env() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_PORT", "9090");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.app_port, 9090);
+    }
+
+    #[test]
+    fn test_from_env_reads_app_name_from_env() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_NAME", "my-overridden-app");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.app_name, "my-overridden-app");
+    }
+
+    #[test]
+    fn test_from_env_reads_app_host_from_env() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_HOST", "127.0.0.1");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.app_host, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_from_env_reads_app_env_from_env() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_ENV", "production");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.app_env, "production");
+        assert!(cfg.is_production());
+    }
+
+<%_ if (!devDatabaseTypeMongodb) { _%>
+    #[test]
+    fn test_from_env_reads_database_url() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("DATABASE_URL", "postgres://user:pw@host/db");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.database_url, "postgres://user:pw@host/db");
+    }
+<%_ } _%>
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    #[test]
+    fn test_from_env_reads_mongodb_uri() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("MONGODB_URI", "mongodb://override:27017");
+        std::env::set_var("MONGODB_DATABASE", "override-db");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.mongodb_uri, "mongodb://override:27017");
+        assert_eq!(cfg.mongodb_database, "override-db");
+    }
+<%_ } _%>
+
+<%_ if (authenticationTypeJwt) { _%>
+    #[test]
+    fn test_from_env_reads_jwt_secret() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("JWT_SECRET", "real-secret-value");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.jwt_secret, "real-secret-value");
+    }
+
+    #[test]
+    fn test_from_env_jwt_expiration_hours_default_24() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.jwt_expiration_hours, 24);
+    }
+
+    #[test]
+    fn test_from_env_jwt_expiration_hours_override() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("JWT_EXPIRATION_HOURS", "48");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.jwt_expiration_hours, 48);
+    }
+<%_ } _%>
+
+<%_ if (authenticationTypeOauth2) { _%>
+    #[test]
+    fn test_from_env_frontend_url_default() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.frontend_url, "http://localhost:9000");
+    }
+
+    #[test]
+    fn test_from_env_frontend_url_override() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("FRONTEND_URL", "https://app.example.com");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.frontend_url, "https://app.example.com");
+    }
+<%_ } _%>
+
+<%_ if (enableStaticHosting) { _%>
+    #[test]
+    fn test_from_env_app_https_default_false() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert!(!cfg.app_https);
+    }
+
+    #[test]
+    fn test_from_env_app_https_true() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_HTTPS", "true");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert!(cfg.app_https);
+    }
+
+    #[test]
+    fn test_from_env_static_files_dir_none_when_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert!(cfg.static_files_dir.is_none());
+        // serve_static_files defaults to false when STATIC_FILES_DIR is unset.
+        assert!(!cfg.serve_static_files);
+    }
+
+    #[test]
+    fn test_from_env_static_files_dir_implies_serve_static_files_true() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("STATIC_FILES_DIR", "/var/www");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert_eq!(cfg.static_files_dir.as_deref(), Some("/var/www"));
+        // SERVE_STATIC_FILES unset, STATIC_FILES_DIR set => defaults to true.
+        assert!(cfg.serve_static_files);
+    }
+
+    #[test]
+    fn test_from_env_serve_static_files_explicit_overrides_dir_implicit() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("STATIC_FILES_DIR", "/var/www");
+        std::env::set_var("SERVE_STATIC_FILES", "false");
+        let cfg = AppConfig::from_env();
+        clear_app_env();
+        assert!(!cfg.serve_static_files);
+    }
+<%_ } _%>
+
+<%_ if (externalConfig) { _%>
+    // Tests for from_consul_and_env(): layered resolution (env > consul > default).
+    // Shares ENV_LOCK with from_env tests so they don't race on the same env vars.
+
+    fn consul_with<const N: usize>(entries: [(&'static str, &'static str); N]) -> std::collections::HashMap<String, String> {
+        entries.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn test_from_consul_and_env_uses_defaults_when_both_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        // Required vars (DATABASE_URL, JWT_SECRET) come from consul in this test.
+        let consul = consul_with([
+            ("database_url", "postgres://from-consul/db"),
+            ("jwt.secret", "secret-from-consul"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert!(!cfg.app_name.is_empty());
+        assert_eq!(cfg.app_env, "development");
+        assert_eq!(cfg.app_port, 8080);
+        assert_eq!(cfg.app_host, "0.0.0.0");
+<%_ if (!devDatabaseTypeMongodb) { _%>
+        assert_eq!(cfg.database_url, "postgres://from-consul/db");
+<%_ } _%>
+<%_ if (authenticationTypeJwt) { _%>
+        assert_eq!(cfg.jwt_secret, "secret-from-consul");
+        assert_eq!(cfg.jwt_expiration_hours, 24);
+<%_ } _%>
+    }
+
+    #[test]
+    fn test_from_consul_and_env_env_wins_over_consul() {
+        // Documented contract: env vars always win.
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("APP_PORT", "7777");
+        let consul = consul_with([
+            ("app_port", "8888"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.app_port, 7777);
+    }
+
+    #[test]
+    fn test_from_consul_and_env_consul_used_when_env_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        // Required vars from consul so the helper doesn't panic.
+        let consul = consul_with([
+            ("app_name", "from-consul"),
+            ("app_env", "production"),
+            ("app_host", "10.0.0.1"),
+            ("database_url", "postgres://localhost/db"),
+            ("jwt.secret", "consul-secret"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.app_name, "from-consul");
+        assert_eq!(cfg.app_env, "production");
+        assert_eq!(cfg.app_host, "10.0.0.1");
+    }
+
+<%_ if (!devDatabaseTypeMongodb) { _%>
+    #[test]
+    fn test_from_consul_and_env_database_url_from_env_overrides_consul() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        std::env::set_var("DATABASE_URL", "postgres://env-wins/db");
+        let consul = consul_with([
+            ("database_url", "postgres://consul-loses/db"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.database_url, "postgres://env-wins/db");
+    }
+<%_ } _%>
+
+<%_ if (authenticationTypeJwt) { _%>
+    #[test]
+    fn test_from_consul_and_env_jwt_secret_from_consul_when_env_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+<%_ if (devDatabaseTypeMongodb) { _%>
+        std::env::set_var("MONGODB_URI", "mongodb://localhost:27017");
+        std::env::set_var("MONGODB_DATABASE", "test");
+<%_ } else { _%>
+        std::env::set_var("DATABASE_URL", "postgres://test/db");
+<%_ } _%>
+        // JWT_SECRET intentionally unset — must come from consul.
+        let consul = consul_with([
+            ("jwt.secret", "consul-jwt-secret"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.jwt_secret, "consul-jwt-secret");
+    }
+
+    #[test]
+    fn test_from_consul_and_env_jwt_expiration_consul_value() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_app_env();
+        set_required_env();
+        let consul = consul_with([
+            ("jwt.expiration_hours", "72"),
+        ]);
+        let cfg = AppConfig::from_consul_and_env(&consul);
+        clear_app_env();
+        assert_eq!(cfg.jwt_expiration_hours, 72);
+    }
+<%_ } _%>
+
+<%_ } _%>
     #[test]
     fn test_is_production_true() {
         let config = AppConfig {

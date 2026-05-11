@@ -31,3 +31,89 @@ impl MetricsConfig {
         }
     }
 }
+
+// Track 1 Phase 1b (2026-05-11): from_env() coverage. Env-var-touching tests
+// share process-global state, so a module-local Mutex serializes them. This
+// keeps the rest of the test suite parallel. Each test removes the vars it
+// touches so subsequent tests start from a known state. Locked convention:
+// no `serial_test` dev-dep, no test-only public APIs on production types.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_from_env_uses_defaults_when_unset() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("METRICS_ENABLED");
+        std::env::remove_var("METRICS_PATH");
+        let cfg = MetricsConfig::from_env();
+        assert!(cfg.enabled);
+        assert_eq!(cfg.metrics_path, "/management/prometheus");
+    }
+
+    #[test]
+    fn test_from_env_reads_explicit_values() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("METRICS_ENABLED", "false");
+        std::env::set_var("METRICS_PATH", "/custom/prom");
+        let cfg = MetricsConfig::from_env();
+        std::env::remove_var("METRICS_ENABLED");
+        std::env::remove_var("METRICS_PATH");
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.metrics_path, "/custom/prom");
+    }
+
+    #[test]
+    fn test_from_env_enabled_accepts_numeric_one() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("METRICS_ENABLED", "1");
+        let cfg = MetricsConfig::from_env();
+        std::env::remove_var("METRICS_ENABLED");
+        assert!(cfg.enabled);
+    }
+
+    #[test]
+    fn test_from_env_enabled_is_case_insensitive_for_true() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("METRICS_ENABLED", "TRUE");
+        let cfg = MetricsConfig::from_env();
+        std::env::remove_var("METRICS_ENABLED");
+        assert!(cfg.enabled);
+    }
+
+    #[test]
+    fn test_from_env_enabled_false_for_unrecognized_string() {
+        // Any non-"true"/"1" string disables metrics. Documents the contract
+        // explicitly so consumers don't expect e.g. "yes" to enable.
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("METRICS_ENABLED", "yes");
+        let cfg = MetricsConfig::from_env();
+        std::env::remove_var("METRICS_ENABLED");
+        assert!(!cfg.enabled);
+    }
+
+    #[test]
+    fn test_metrics_config_clone() {
+        let cfg = MetricsConfig {
+            enabled: true,
+            metrics_path: "/m".to_string(),
+        };
+        let c = cfg.clone();
+        assert_eq!(c.enabled, cfg.enabled);
+        assert_eq!(c.metrics_path, cfg.metrics_path);
+    }
+
+    #[test]
+    fn test_metrics_config_debug() {
+        let cfg = MetricsConfig {
+            enabled: false,
+            metrics_path: "/management/prometheus".to_string(),
+        };
+        let s = format!("{:?}", cfg);
+        assert!(s.contains("MetricsConfig"));
+        assert!(s.contains("/management/prometheus"));
+    }
+}
