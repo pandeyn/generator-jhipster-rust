@@ -24,10 +24,21 @@ pub struct <%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<i32>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): same audit-field gating as the DTO _%>
+    <%_ // template. JDL-declared fields are emitted by the loop above; gate _%>
+    <%_ // the auto-add so it doesn't redeclare them. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     pub created_date: Option<NaiveDateTime>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<NaiveDateTime>,
+    <%_ } _%>
 }
 
 /// New <%= persistClass %> for insertion
@@ -40,10 +51,21 @@ pub struct New<%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<i32>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): same audit-field gating as the DTO _%>
+    <%_ // template. JDL-declared fields are emitted by the loop above; gate _%>
+    <%_ // the auto-add so it doesn't redeclare them. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
     pub created_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
     pub created_date: Option<NaiveDateTime>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<NaiveDateTime>,
+    <%_ } _%>
 }
 
 /// <%= persistClass %> update changeset
@@ -56,8 +78,15 @@ pub struct Update<%= persistClass %> {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
     pub <%= relationship.relationshipFieldName %>_id: Option<Option<i32>>,
 <%_ } _%>
+    <%_ // Track 1-c.1 fix (2026-05-11): UpdateEntity struct has only the two _%>
+    <%_ // last_modified_* audit fields (created_* are immutable post-creation). _%>
+    <%_ // Gate them on JDL declaration so they don't redeclare when JDL has its own. _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
     pub last_modified_by: Option<String>,
+    <%_ } _%>
+    <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
     pub last_modified_date: Option<NaiveDateTime>,
+    <%_ } _%>
 }
 <%_ const manyToManyRels = relationships.filter(r => r.relationshipType === 'many-to-many' && r.ownerSide); _%>
 <%_ for (const rel of manyToManyRels) { _%>
@@ -93,6 +122,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -109,10 +142,21 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // test fixtures — the field loop above already assigns any _%>
+            <%_ // JDL-declared audit field (E0062 dup otherwise). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some("system".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let cloned = entity.clone();
         assert_eq!(entity.id, cloned.id);
@@ -134,6 +178,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -150,10 +198,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): see note above audit-field gates. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let debug_str = format!("{:?}", entity);
         assert!(debug_str.contains("<%= persistClass %>"));
@@ -174,6 +231,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -190,10 +251,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): see note above audit-field gates. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some("test_user".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         assert_eq!(new_entity.created_by, Some("test_user".to_string()));
     }
@@ -212,6 +282,8 @@ mod tests {
             <%= field.fieldNameUnderscored %>: Some(999.99),
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: Some(999.99),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: Some("999.99".parse::<bigdecimal::BigDecimal>().unwrap()),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: Some(false),
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -225,8 +297,14 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: Some(Some(1)),
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): Update struct only has the two _%>
+            <%_ // last_modified_* audit fields. Gate them too. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some("updater".to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         assert_eq!(update.last_modified_by, Some("updater".to_string()));
     }
@@ -247,6 +325,10 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 42.5,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal needs to be parsed _%>
+            <%_ // from a string literal — there's no numeric literal syntax. _%>
+            <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -263,10 +345,19 @@ mod tests {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: None,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): see note above audit-field gates. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: None,
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: None,
+            <%_ } _%>
         };
         let json = serde_json::to_string(&entity).unwrap();
         assert!(json.contains("\"id\":1"));

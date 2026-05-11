@@ -16,14 +16,24 @@ mongodb = "3.1"
 bson = { version = "2", features = ["chrono-0_4"] }
 futures = "0.3"
 <%_ } else if (devDatabaseTypePostgresql) { _%>
-diesel = { version = "2.1", features = ["postgres", "r2d2", "chrono", "uuid"] }
+diesel = { version = "2.1", features = ["postgres", "r2d2", "chrono", "uuid"<%_ if (hasBigDecimalFields) { _%>, "numeric"<%_ } _%>] }
 diesel_migrations = "2.1"
 <%_ } else if (devDatabaseTypeMysql) { _%>
-diesel = { version = "2.1", features = ["mysql", "r2d2", "chrono", "uuid"] }
+diesel = { version = "2.1", features = ["mysql", "r2d2", "chrono", "uuid"<%_ if (hasBigDecimalFields) { _%>, "numeric"<%_ } _%>] }
 diesel_migrations = "2.1"
 <%_ } else { _%>
-diesel = { version = "2.1", features = ["sqlite", "r2d2", "chrono", "uuid"] }
+diesel = { version = "2.1", features = ["sqlite", "r2d2", "chrono", "uuid"<%_ if (hasBigDecimalFields) { _%>, "numeric"<%_ } _%>] }
 diesel_migrations = "2.1"
+<%_ } _%>
+<%_ if (hasBigDecimalFields) { _%>
+# Track 1-c.0 fix (2026-05-11): bigdecimal is required when any entity field has
+# fieldType BigDecimal on a SQL database. Diesel's `numeric` feature (added above)
+# bridges between bigdecimal::BigDecimal and the database's Numeric/Decimal column
+# type. The `serde` feature is required because the DTO structs derive Serialize
+# and Deserialize, and the default bigdecimal build doesn't implement those
+# traits — without the feature you get E0277 trait bound errors at compile time.
+# MongoDB scaffolds map BigDecimal to f64 and skip this dep.
+bigdecimal = { version = "0.4", features = ["serde"] }
 <%_ } _%>
 dotenvy = "0.15"
 serde = { version = "1", features = ["derive"] }

@@ -32,7 +32,9 @@ pub fn is_sentinel(value: &str) -> bool {
     if value.is_empty() {
         return true;
     }
-    if EXACT_SENTINELS.iter().any(|s| *s == value) {
+    // Track 1-c.2 fix (2026-05-11): clippy::manual_contains flags iter().any()
+    // when contains() is the idiomatic alternative on slices.
+    if EXACT_SENTINELS.contains(&value) {
         return true;
     }
     if value.contains(PATTERN_MARKER) {

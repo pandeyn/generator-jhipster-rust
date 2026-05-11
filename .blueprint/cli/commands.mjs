@@ -17,6 +17,18 @@
  * limitations under the License.
  */
 
-const defaultCommands = {};
+// Track 1-b.1 fix (2026-05-10): JHipster doesn't auto-discover dev-blueprint
+// sub-generators; it requires explicit command registration here. Mirrors the
+// canonical template at
+// node_modules/generator-jhipster/dist/generators/generate-blueprint/templates/.blueprint/cli/commands.mjs.ejs
+// The `blueprint: '@jhipster/jhipster-dev'` sentinel tells the framework to load
+// from devBlueprintPath (computed in cli/cli.cjs from __dirname) rather than from
+// an npm-published package.
+const defaultCommands = {
+  'generate-sample': {
+    desc: 'Generate a test sample (used by .github/workflows/samples.yml)',
+    blueprint: '@jhipster/jhipster-dev',
+  },
+};
 
 export default defaultCommands;

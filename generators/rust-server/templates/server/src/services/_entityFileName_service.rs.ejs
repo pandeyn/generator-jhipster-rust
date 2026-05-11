@@ -62,6 +62,11 @@ impl <%= entityClass %>Service {
                 }
             }
 <%_ } _%>
+<%_ // Track 1-c.2 fix (2026-05-11): gate the unconditional audit sort arms _%>
+<%_ // when JDL declares the corresponding field — the field loop above _%>
+<%_ // already emits an identical match arm, so the unconditional version _%>
+<%_ // is `unreachable_pattern` per clippy (hard error under -D warnings). _%>
+<%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             "createdDate" | "created_date" => {
                 if is_desc {
                     <%= entityTableName %>::table
@@ -77,6 +82,8 @@ impl <%= entityClass %>Service {
                         .select(<%= persistClass %>::as_select()).load(conn)
                 }
             }
+<%_ } _%>
+<%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             "lastModifiedDate" | "last_modified_date" => {
                 if is_desc {
                     <%= entityTableName %>::table
@@ -92,6 +99,7 @@ impl <%= entityClass %>Service {
                         .select(<%= persistClass %>::as_select()).load(conn)
                 }
             }
+<%_ } _%>
             _ => {
                 // Default: sort by id
                 if is_desc {
@@ -142,10 +150,21 @@ impl <%= entityClass %>Service {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: dto.<%= relationship.relationshipFieldName %>_id,
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // service create() — the dto field loop above already maps any _%>
+            <%_ // JDL-declared audit field (E0062 dup otherwise). _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdBy')) { _%>
             created_by: Some(created_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             created_date: Some(now),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some(created_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: Some(now),
+            <%_ } _%>
         };
 
 <%_ if (devDatabaseTypePostgresql) { _%>
@@ -198,8 +217,14 @@ impl <%= entityClass %>Service {
 <%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>
             <%= relationship.relationshipFieldName %>_id: dto.<%= relationship.relationshipFieldName %>_id.map(Some),
 <%_ } _%>
+            <%_ // Track 1-c.1 fix (2026-05-11): gate audit-field assignments in _%>
+            <%_ // service update() — same rationale as create() above. _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedBy')) { _%>
             last_modified_by: Some(modified_by.to_string()),
+            <%_ } _%>
+            <%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             last_modified_date: Some(now),
+            <%_ } _%>
         };
 
         diesel::update(<%= entityTableName %>::table.find(id))
@@ -341,6 +366,8 @@ mod tests {
             <%= field.fieldNameUnderscored %>: 1.0,
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap(),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -476,6 +503,8 @@ mod tests {
             <%= field.fieldNameUnderscored %>: Some(999.99),
 <%_ } else if (field.fieldType === 'Double') { _%>
             <%= field.fieldNameUnderscored %>: Some(999.99),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: Some("999.99".parse::<bigdecimal::BigDecimal>().unwrap()),
 <%_ } else if (field.fieldType === 'Boolean') { _%>
             <%= field.fieldNameUnderscored %>: Some(true),
 <%_ } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
@@ -528,10 +557,35 @@ mod tests {
 
         // Create a <%= rel.otherEntity.entityInstance %>
         let <%= rel.otherEntity.entityInstance %>_dto = crate::dto::Create<%= rel.otherEntity.entityClass %>Dto {
+<%_ // Track 1-c.2 fix (2026-05-11): the related-entity's CreateDto has _%>
+<%_ // non-Optional fields for JDL `required` fields. Emit type-appropriate _%>
+<%_ // test values for required fields; None for optional. Previously this _%>
+<%_ // emitted `None` unconditionally which fails for `name String required` _%>
+<%_ // (E0308 expected String, found Option<_>). _%>
 <%_ for (let i = 0; i < rel.otherEntity.fields.filter(f => !f.id).length; i++) { _%>
 <%_ const field = rel.otherEntity.fields.filter(f => !f.id)[i]; _%>
 <%_ const isLast = i === rel.otherEntity.fields.filter(f => !f.id).length - 1; _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_   if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 1<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 1.0<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::Utc::now().naive_utc()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } _%>
+<%_ } else { _%>
             <%= field.fieldNameUnderscored %>: None<% if (!isLast) { %>,<% } %>
+<%_ } _%>
 <%_ } _%>
         };
         let <%= rel.otherEntity.entityInstance %> = crate::services::<%= rel.otherEntity.entityClass %>Service::create(&mut conn, <%= rel.otherEntity.entityInstance %>_dto, "test_user").unwrap();
@@ -557,10 +611,35 @@ mod tests {
 
         // Create a <%= rel.otherEntity.entityInstance %>
         let <%= rel.otherEntity.entityInstance %>_dto = crate::dto::Create<%= rel.otherEntity.entityClass %>Dto {
+<%_ // Track 1-c.2 fix (2026-05-11): the related-entity's CreateDto has _%>
+<%_ // non-Optional fields for JDL `required` fields. Emit type-appropriate _%>
+<%_ // test values for required fields; None for optional. Previously this _%>
+<%_ // emitted `None` unconditionally which fails for `name String required` _%>
+<%_ // (E0308 expected String, found Option<_>). _%>
 <%_ for (let i = 0; i < rel.otherEntity.fields.filter(f => !f.id).length; i++) { _%>
 <%_ const field = rel.otherEntity.fields.filter(f => !f.id)[i]; _%>
 <%_ const isLast = i === rel.otherEntity.fields.filter(f => !f.id).length - 1; _%>
+<%_ if (field.fieldValidationRequired) { _%>
+<%_   if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Integer' || field.fieldType === 'Long') { _%>
+            <%= field.fieldNameUnderscored %>: 1<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Float' || field.fieldType === 'Double') { _%>
+            <%= field.fieldNameUnderscored %>: 1.0<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'BigDecimal') { _%>
+            <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Boolean') { _%>
+            <%= field.fieldNameUnderscored %>: true<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'Instant' || field.fieldType === 'ZonedDateTime') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::Utc::now().naive_utc()<% if (!isLast) { %>,<% } %>
+<%_   } else if (field.fieldType === 'LocalDate') { _%>
+            <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()<% if (!isLast) { %>,<% } %>
+<%_   } else { _%>
+            <%= field.fieldNameUnderscored %>: "test_value".to_string()<% if (!isLast) { %>,<% } %>
+<%_   } _%>
+<%_ } else { _%>
             <%= field.fieldNameUnderscored %>: None<% if (!isLast) { %>,<% } %>
+<%_ } _%>
 <%_ } _%>
         };
         let <%= rel.otherEntity.entityInstance %> = crate::services::<%= rel.otherEntity.entityClass %>Service::create(&mut conn, <%= rel.otherEntity.entityInstance %>_dto, "test_user").unwrap();

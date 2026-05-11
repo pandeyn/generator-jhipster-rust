@@ -2,8 +2,12 @@ import { readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
+// Track 1-b.1 fix (2026-05-10): moved from 'generator-jhipster/testing' to
+// 'generator-jhipster/ci' — same reason as command.mjs (see note there).
+// Order matters: eslint-plugin-import-x/order rule sorts alphabetically, so
+// `/ci` comes before `/generators/base`.
+import { getGithubSamplesGroup } from 'generator-jhipster/ci';
 import BaseGenerator from 'generator-jhipster/generators/base';
-import { getGithubSamplesGroup } from 'generator-jhipster/testing';
 
 export default class extends BaseGenerator {
   /** @type {string | undefined} */
