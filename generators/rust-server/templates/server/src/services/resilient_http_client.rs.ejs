@@ -304,4 +304,281 @@ mod tests {
         assert!(debug_str.contains("HttpError"));
         assert!(debug_str.contains("502"));
     }
+
+    // Phase 2c (v1.0.1, 2026-06-07): wiremock-based integration tests.
+    // Targets the previously-uncovered HTTP-method bodies (get/post/put/delete),
+    // check_response, and the CB-tripping behavior on network errors and
+    // timeouts. Isolated in a sub-module so wiremock imports don't pollute
+    // the unit-test namespace above.
+    //
+    // Notable contract pinned: `check_response` returns Ok(response) for
+    // 5xx responses — meaning the CB does NOT trip on 5xx by itself.
+    // Only reqwest errors (network failure, timeout) reach
+    // `CircuitBreakerService.execute`'s Err arm. The v1.0.1 plan's
+    // sketch had this backwards; tests assert the actual behavior.
+    mod wiremock_tests {
+        use super::*;
+        use serde_json::json;
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn tight_cb_config() -> CircuitBreakerConfig {
+            // sliding_window_size=2 + failure_rate_threshold=0.5 means a
+            // single failure-out-of-two trips the CB. Keeps tests fast.
+            CircuitBreakerConfig {
+                enabled: true,
+                failure_rate_threshold: 0.5,
+                sliding_window_size: 2,
+                wait_duration_in_open_secs: 60,
+                permitted_calls_in_half_open: 1,
+                request_timeout_ms: 5000,
+            }
+        }
+
+        fn short_timeout_cb_config() -> CircuitBreakerConfig {
+            // 100ms timeout for the timeout-trip test — well below the
+            // 500ms mock delay we configure for that test.
+            CircuitBreakerConfig {
+                enabled: true,
+                failure_rate_threshold: 0.5,
+                sliding_window_size: 2,
+                wait_duration_in_open_secs: 60,
+                permitted_calls_in_half_open: 1,
+                request_timeout_ms: 100,
+            }
+        }
+
+        fn make_client_with(cfg: CircuitBreakerConfig) -> ResilientHttpClient {
+            let cb = Arc::new(CircuitBreakerService::new(cfg));
+            ResilientHttpClient::new(cb)
+        }
+
+        // ---------------- happy paths (4) ----------------
+
+        #[tokio::test]
+        async fn test_get_returns_200_with_parsed_body() {
+            let mock = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/api/items"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"id": 42, "name": "widget"})),
+                )
+                .mount(&mock)
+                .await;
+
+            let client = make_client_with(tight_cb_config());
+            let response = client
+                .get("test-svc-get-happy", &format!("{}/api/items", mock.uri()))
+                .await
+                .expect("GET should succeed");
+
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: serde_json::Value = response.json().await.expect("JSON body");
+            assert_eq!(body["id"], 42);
+            assert_eq!(body["name"], "widget");
+        }
+
+        #[tokio::test]
+        async fn test_post_sends_body_and_receives_201() {
+            let mock = MockServer::start().await;
+            let payload = json!({"login": "alice"});
+            Mock::given(method("POST"))
+                .and(path("/api/users"))
+                .and(body_json(&payload))
+                .respond_with(ResponseTemplate::new(201).set_body_json(json!({"id": 7})))
+                .mount(&mock)
+                .await;
+
+            let client = make_client_with(tight_cb_config());
+            let response = client
+                .post("test-svc-post-happy", &format!("{}/api/users", mock.uri()), &payload)
+                .await
+                .expect("POST should succeed");
+
+            assert_eq!(response.status(), StatusCode::CREATED);
+            let body: serde_json::Value = response.json().await.expect("JSON body");
+            assert_eq!(body["id"], 7);
+        }
+
+        #[tokio::test]
+        async fn test_put_sends_body_and_receives_200() {
+            let mock = MockServer::start().await;
+            let payload = json!({"name": "renamed"});
+            Mock::given(method("PUT"))
+                .and(path("/api/items/1"))
+                .and(body_json(&payload))
+                .respond_with(ResponseTemplate::new(200))
+                .mount(&mock)
+                .await;
+
+            let client = make_client_with(tight_cb_config());
+            let response = client
+                .put("test-svc-put-happy", &format!("{}/api/items/1", mock.uri()), &payload)
+                .await
+                .expect("PUT should succeed");
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn test_delete_returns_204() {
+            let mock = MockServer::start().await;
+            Mock::given(method("DELETE"))
+                .and(path("/api/items/1"))
+                .respond_with(ResponseTemplate::new(204))
+                .mount(&mock)
+                .await;
+
+            let client = make_client_with(tight_cb_config());
+            let response = client
+                .delete("test-svc-delete-happy", &format!("{}/api/items/1", mock.uri()))
+                .await
+                .expect("DELETE should succeed");
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        }
+
+        // ---------------- 5xx passthrough contract (2) ----------------
+
+        #[tokio::test]
+        async fn test_500_response_returns_ok_with_status_visible() {
+            // Documented contract: `check_response` returns Ok(response)
+            // for 5xx. The caller sees the status; the CB does NOT trip on
+            // 5xx by itself (reqwest doesn't error on a 500 response). Pins
+            // current behavior so a future "trip CB on 5xx" change is
+            // visible as a test failure rather than a silent semantic drift.
+            let mock = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/api/oops"))
+                .respond_with(ResponseTemplate::new(500))
+                .mount(&mock)
+                .await;
+
+            let client = make_client_with(tight_cb_config());
+            let response = client
+                .get("test-svc-5xx", &format!("{}/api/oops", mock.uri()))
+                .await
+                .expect("client should NOT error on 5xx; see check_response contract");
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+
+        #[tokio::test]
+        async fn test_404_returns_ok_with_status_visible() {
+            // Same contract for 4xx — the response surfaces to the caller.
+            let mock = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/api/missing"))
+                .respond_with(ResponseTemplate::new(404))
+                .mount(&mock)
+                .await;
+
+            let client = make_client_with(tight_cb_config());
+            let response = client
+                .get("test-svc-4xx", &format!("{}/api/missing", mock.uri()))
+                .await
+                .expect("4xx must NOT error");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        }
+
+        // ---------------- CB tripping on real network errors (3) ----------------
+        //
+        // Using `http://127.0.0.1:1` to force a real reqwest::Error. Port 1
+        // is privileged + unused, the kernel returns RST and reqwest sees a
+        // connection-refused error. NOT using MockServer-drop here because
+        // wiremock holds the TCP listener in a spawned task and the port
+        // isn't reliably freed by the time the next request fires — tests
+        // would race against an arbitrary in-process listener.
+
+        const UNREACHABLE_URL: &str = "http://127.0.0.1:1/api";
+
+        #[tokio::test]
+        async fn test_network_error_returns_request_failed_variant() {
+            // Single failing call surfaces as RequestFailed. The CB's
+            // execute() catches the reqwest::Error from `?` propagation and
+            // emits CircuitBreakerError::RequestFailed.
+            let client = make_client_with(tight_cb_config());
+            let result = client.get("test-svc-netfail-1", UNREACHABLE_URL).await;
+            match result {
+                Err(ResilientHttpError::CircuitBreaker(CircuitBreakerError::RequestFailed(_))) => {}
+                other => panic!("expected CircuitBreaker(RequestFailed), got {:?}", other),
+            }
+        }
+
+        #[tokio::test]
+        async fn test_repeated_network_errors_trip_circuit_open() {
+            // With tight CB config (sliding_window=2, threshold=0.5), two
+            // failures in a row flip the CB to Open. Third call must
+            // short-circuit with CircuitOpen (not RequestFailed).
+            let client = make_client_with(tight_cb_config());
+            // Two failing calls fill the sliding window above the failure
+            // threshold; CB transitions to Open.
+            let _ = client.get("test-svc-trip", UNREACHABLE_URL).await;
+            let _ = client.get("test-svc-trip", UNREACHABLE_URL).await;
+
+            // Third call must short-circuit.
+            let result = client.get("test-svc-trip", UNREACHABLE_URL).await;
+            match result {
+                Err(ResilientHttpError::CircuitBreaker(CircuitBreakerError::CircuitOpen(svc))) => {
+                    assert_eq!(svc, "test-svc-trip");
+                }
+                other => panic!("expected CircuitOpen, got {:?}", other),
+            }
+        }
+
+        #[tokio::test]
+        async fn test_circuit_open_rejects_without_hitting_http() {
+            // Once CB is Open, the inner closure is never invoked. Verify
+            // by mounting a healthy mock at a DIFFERENT URL after tripping
+            // the CB — since the CB is keyed on service_name, the call still
+            // short-circuits before reaching the HTTP layer.
+            let client = make_client_with(tight_cb_config());
+            let _ = client.get("test-svc-rejects", UNREACHABLE_URL).await;
+            let _ = client.get("test-svc-rejects", UNREACHABLE_URL).await;
+
+            // Mount a healthy endpoint that would respond 200 IF reached.
+            let healthy_mock = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(ResponseTemplate::new(200))
+                .mount(&healthy_mock)
+                .await;
+
+            let result = client
+                .get("test-svc-rejects", &format!("{}/healthy", healthy_mock.uri()))
+                .await;
+            match result {
+                Err(ResilientHttpError::CircuitBreaker(CircuitBreakerError::CircuitOpen(_))) => {}
+                other => panic!("expected CircuitOpen short-circuit, got {:?}", other),
+            }
+        }
+
+        // ---------------- Timeout (1) ----------------
+
+        #[tokio::test]
+        async fn test_slow_response_times_out_with_timeout_variant() {
+            // The Client's own reqwest timeout must be LONGER than the CB's
+            // wrapper timeout — otherwise reqwest fires first and we get
+            // RequestFailed instead of Timeout. ResilientHttpClient::new
+            // couples them (Client timeout = config.request_timeout), so
+            // for this test we use with_timeout() to decouple: 60s Client
+            // timeout, 100ms CB timeout, 500ms mock delay → tokio::time::
+            // timeout wrapper fires → CircuitBreakerError::Timeout.
+            let mock = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/slow"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_delay(Duration::from_millis(500)),
+                )
+                .mount(&mock)
+                .await;
+
+            let cb = Arc::new(CircuitBreakerService::new(short_timeout_cb_config()));
+            let client = ResilientHttpClient::with_timeout(cb, Duration::from_secs(60));
+
+            let result = client
+                .get("test-svc-timeout", &format!("{}/slow", mock.uri()))
+                .await;
+            match result {
+                Err(ResilientHttpError::CircuitBreaker(CircuitBreakerError::Timeout)) => {}
+                other => panic!("expected Timeout, got {:?}", other),
+            }
+        }
+    }
 }
