@@ -544,6 +544,91 @@ mod tests {
         let find_result = <%= entityClass %>Service::find_by_id(&mut conn, created.id);
         assert!(find_result.is_err());
     }
+
+    // Phase 2d (v1.0.1, 2026-06-07): exercise every sort match arm.
+    //
+    // The existing test_find_all uses `sort: Vec::new()` which dispatches
+    // to the `_ => id ASC` default branch — every field-specific arm of
+    // the match in find_all sits uncovered. This test walks the dispatch
+    // table emitted by the entity template for this entity's specific
+    // field list, asserting each (field × direction) sort returns Ok.
+    //
+    // Ordering isn't asserted per-arm because the underlying diesel
+    // .order() semantics are pinned by user_service Phase 2a's
+    // parametrized tests; the value here is template-coverage —
+    // catching "generator emitted wrong column in this arm" regressions.
+    // Lives in the entity service template so coverage flows to every
+    // scaffold with entities (Product, Category in microservice-cb; any
+    // future entity inherits the same coverage shape).
+    #[test]
+    fn test_find_all_exercises_all_sort_arms() {
+        let pool = create_test_pool();
+        let mut conn = pool.get().unwrap();
+
+        // Three entities ensures every sort returns a non-empty page;
+        // also pins that the default page-size cap (100) isn't a factor.
+        for _ in 0..3 {
+            let dto = create_test_dto();
+            <%= entityClass %>Service::create(&mut conn, dto, "test_user").unwrap();
+        }
+
+        let sort_specs: &[&str] = &[
+<%_ for (const field of fields.filter(f => !f.id)) { _%>
+            "<%= field.fieldName %>,asc",
+            "<%= field.fieldName %>,desc",
+<%_ } _%>
+<%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
+            "createdDate,asc",
+            "createdDate,desc",
+<%_ } _%>
+<%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
+            "lastModifiedDate,asc",
+            "lastModifiedDate,desc",
+<%_ } _%>
+            // Default-unknown-field branch (asc and desc both fall through
+            // to the `_ => id ASC/DESC` arm, exercising both is_desc paths).
+            "not_a_field,asc",
+            "not_a_field,desc",
+        ];
+
+        for spec in sort_specs {
+            let page_request = PageRequest {
+                page: Some(0),
+                size: Some(100),
+                sort: vec![spec.to_string()],
+            };
+            let result = <%= entityClass %>Service::find_all(&mut conn, &page_request);
+            assert!(
+                result.is_ok(),
+                "sort spec {:?} failed: {:?}",
+                spec,
+                result.as_ref().err()
+            );
+            let (items, _total) = result.unwrap();
+            assert!(
+                items.len() >= 3,
+                "sort spec {:?} returned only {} items; the 3 created above should appear on page 0",
+                spec,
+                items.len()
+            );
+        }
+    }
+<%_ for (const rel of manyToOneRels) { _%>
+
+    // Phase 2d (2026-06-07): cover find_<%= rel.relationshipFieldName %>_by_id, generated
+    // only when this entity has a many-to-one relationship to
+    // <%= rel.otherEntity.entityClass %>. The function returns Result<Option<_>, _> —
+    // both the Some and None paths exist in template code; pin both.
+    #[test]
+    fn test_find_<%= rel.relationshipFieldName %>_by_id_returns_none_for_nonexistent() {
+        let pool = create_test_pool();
+        let mut conn = pool.get().unwrap();
+        // i32::MAX is a valid id type but vanishingly unlikely to exist in
+        // a freshly-migrated test DB.
+        let result = <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&mut conn, i32::MAX);
+        assert!(matches!(result, Ok(None)), "expected Ok(None), got {:?}", result);
+    }
+<%_ } _%>
 <%_ for (const rel of manyToManyOwnerRels) { _%>
 
     #[test]
