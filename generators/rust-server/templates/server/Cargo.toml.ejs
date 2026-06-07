@@ -105,3 +105,10 @@ tempfile = "3"
 # 17 separate small `#[test]` functions sharing identical fixture setup —
 # 80% less source-line count for no readability loss.
 rstest = "0.21"
+<%_ if (circuitBreakerEnabled) { _%>
+# Phase 2c (v1.0.1 plan, locked decision #2): HTTP server mock for
+# resilient_http_client tests. Same dep covers Phase 3a (consul + vault
+# wiremock tests). Clean MockServer API with body/header/query matchers;
+# ~5M downloads, MIT/Apache-2.0.
+wiremock = "0.6"
+<%_ } _%>
