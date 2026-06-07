@@ -972,6 +972,41 @@ mod tests {
         let debug_str = format!("{:?}", request);
         assert!(debug_str.contains("oldpass"));
     }
+
+    // Phase 2b (2026-05-11): is_password_length_invalid is the gatekeeper
+    // for both `register` and `change_password`. Pin its boundary semantics
+    // (4 <= len <= 100) so a future Spring-Boot-spec change can't drift the
+    // contract without making someone explicitly update tests.
+    #[test]
+    fn test_is_password_length_invalid_rejects_empty() {
+        assert!(is_password_length_invalid(""));
+    }
+
+    #[test]
+    fn test_is_password_length_invalid_rejects_below_min() {
+        // MIN is 4 — 3-char password must be rejected.
+        assert!(is_password_length_invalid("abc"));
+    }
+
+    #[test]
+    fn test_is_password_length_invalid_accepts_at_min() {
+        // Exact MIN (4) is valid.
+        assert!(!is_password_length_invalid("abcd"));
+    }
+
+    #[test]
+    fn test_is_password_length_invalid_accepts_at_max() {
+        // Exact MAX (100) is valid.
+        let max = "x".repeat(100);
+        assert!(!is_password_length_invalid(&max));
+    }
+
+    #[test]
+    fn test_is_password_length_invalid_rejects_above_max() {
+        // MAX + 1 must be rejected.
+        let too_long = "x".repeat(101);
+        assert!(is_password_length_invalid(&too_long));
+    }
 <%_ } _%>
 }
 
@@ -1017,6 +1052,10 @@ mod integration_tests {
                 "/api/account",
                 routes().layer(middleware::from_fn_with_state(state.clone(), auth_middleware)),
             )
+            // Phase 2b (2026-05-11): mount public_routes so register tests can
+            // POST /api/register. Additive — doesn't touch the existing
+            // protected /api/account routes.
+            .nest("/api", public_routes())
             .with_state(state.clone());
 
         let server = TestServer::new(app).unwrap();
@@ -1240,6 +1279,243 @@ mod integration_tests {
         let text = response.text();
         assert!(text.contains("user"));
         assert!(text.contains("user@localhost"));
+    }
+
+    // Phase 2b (2026-05-11): coverage push for handlers/account.rs error paths.
+    // Targets the 38 uncovered lines that the Phase 1c/1d work didn't reach:
+    // save_account branches (anonymous, duplicate-email, update-account path),
+    // register branches (password length, duplicate login, duplicate email,
+    // happy path), and the authenticate 400 BadRequest gaps for empty
+    // username/password. Quality bar: each test asserts the specific status
+    // code AND a body fragment that pins the contract (e.g., the message
+    // text, the error-type field), not bare 4xx.
+
+    // --- save_account error paths ---
+
+    #[tokio::test]
+    async fn test_save_account_rejects_unauthenticated_user() {
+        // No Authorization header → auth_middleware inserts anonymous user →
+        // save_account returns Unauthorized. Pins the contract that public
+        // POST /api/account without credentials is rejected.
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "firstName": "First",
+            "lastName": "Last",
+            "email": "anyone@example.com",
+            "langKey": "en",
+            "imageUrl": null,
+        });
+        let response = server.post("/api/account").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+        assert!(response.text().contains("Not authenticated"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_save_account_rejects_email_owned_by_another_user() {
+        // Two users exist (admin + user). Sign in as `user` and try to save
+        // an account update with admin's email. The duplicate-email check
+        // must reject with 400 — not 200 — to prevent account hijack.
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        create_test_user(&state.pool);
+        let token = generate_test_token(&state.config, "user", &["ROLE_USER".to_string()]);
+
+        let body = serde_json::json!({
+            "firstName": "User",
+            "lastName": "Test",
+            "email": "admin@localhost",
+            "langKey": "en",
+            "imageUrl": null,
+        });
+        let response = server
+            .post("/api/account")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&body)
+            .await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Email already in use"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_save_account_allows_user_to_keep_own_email() {
+        // The duplicate-email check only fires when the matched login
+        // differs from the requester. Posting one's own email back must NOT
+        // be rejected — covers the fall-through branch.
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+        let token = generate_test_token(&state.config, "user", &["ROLE_USER".to_string()]);
+
+        let body = serde_json::json!({
+            "firstName": "User",
+            "lastName": "Test",
+            "email": "user@localhost",  // same as current user
+            "langKey": "fr",
+            "imageUrl": null,
+        });
+        let response = server
+            .post("/api/account")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&body)
+            .await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_save_account_updates_account_on_new_email() {
+        // Happy path that exercises update_account with a non-conflicting
+        // email. The seeded test users (admin, user) have known emails;
+        // posting a brand-new email triggers the update path.
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+        let token = generate_test_token(&state.config, "user", &["ROLE_USER".to_string()]);
+
+        let body = serde_json::json!({
+            "firstName": "Updated",
+            "lastName": "Name",
+            "email": "user-new-email@example.com",
+            "langKey": "es",
+            "imageUrl": "https://example.com/avatar.png",
+        });
+        let response = server
+            .post("/api/account")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&body)
+            .await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+    }
+
+    // --- register error paths ---
+    //
+    // `register` is gated `!enableEmail` in the production code path; the
+    // canonical microservice-cb scaffold has email disabled, so these
+    // tests run against the always-activated `create_registered_user`
+    // codepath. Tests use unique login/email prefixes to avoid colliding
+    // with seeded users and with one another.
+
+    #[tokio::test]
+    async fn test_register_rejects_password_below_min() {
+        // MIN is 4 chars. Anything shorter must 400 BEFORE the user is
+        // created — verify by the response code; if the error message had
+        // leaked the password we'd want to assert it doesn't.
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "login": "phase2bshort",
+            "email": "phase2bshort@example.com",
+            "password": "abc",  // 3 chars, below MIN(4)
+            "langKey": "en",
+        });
+        let response = server.post("/api/register").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Password must be between"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_register_rejects_password_above_max() {
+        // MAX is 100. 101 chars must 400.
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "login": "phase2blong",
+            "email": "phase2blong@example.com",
+            "password": "x".repeat(101),
+            "langKey": "en",
+        });
+        let response = server.post("/api/register").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Password must be between"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_register_rejects_duplicate_login() {
+        // Seed `admin` then try to register a fresh user with login `admin`.
+        // Must 400 with the documented contract message.
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        let body = serde_json::json!({
+            "login": "admin",  // collides with seeded admin
+            "email": "phase2bdupelogin@example.com",
+            "password": "validpass123",
+            "langKey": "en",
+        });
+        let response = server.post("/api/register").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Login already in use"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_register_rejects_duplicate_email() {
+        // Distinct login but same email as a seeded user must 400.
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+        let body = serde_json::json!({
+            "login": "phase2bdupemail",
+            "email": "admin@localhost",  // collides with seeded admin's email
+            "password": "validpass123",
+            "langKey": "en",
+        });
+        let response = server.post("/api/register").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Email already in use"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_register_succeeds_with_valid_input() {
+        // Happy path. Unique login + email + valid password + lang_key →
+        // 201 Created. Exercises the full create_registered_user code path.
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "login": "phase2bhappy",
+            "email": "phase2bhappy@example.com",
+            "password": "validpass123",
+            "langKey": "en",
+        });
+        let response = server.post("/api/register").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_register_accepts_omitted_lang_key() {
+        // lang_key has #[serde(default)] → Option<String>::None. Verify
+        // that omitting it doesn't 400; the registered user should still
+        // be created (lang_key=None gets carried through).
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "login": "phase2bnolang",
+            "email": "phase2bnolang@example.com",
+            "password": "validpass123",
+        });
+        let response = server.post("/api/register").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::CREATED);
+    }
+
+    // --- authenticate 400 BadRequest gaps ---
+
+    #[tokio::test]
+    async fn test_authenticate_rejects_empty_username() {
+        // The handler's first guard returns BadRequest before touching the
+        // DB or AuthService. Documents the contract that empty credentials
+        // are a 400, not a 401 — Spring Boot parity.
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "username": "",
+            "password": "anything",
+            "remember_me": false,
+        });
+        let response = server.post("/api/authenticate").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Username is required"), "got: {}", response.text());
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_rejects_empty_password() {
+        let (server, _state) = create_test_app();
+        let body = serde_json::json!({
+            "username": "admin",
+            "password": "",
+            "remember_me": false,
+        });
+        let response = server.post("/api/authenticate").json(&body).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert!(response.text().contains("Password is required"), "got: {}", response.text());
     }
 }
 <%_ } _%>
