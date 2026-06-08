@@ -505,10 +505,12 @@ jobs:
               echo "FAIL — /api/health never returned UP"
               echo "--- last response ---"
               curl -v http://localhost:8080/api/health 2>&1 | tail -20 || true
-              echo "--- docker compose ps ---"
-              docker compose -f docker/app.yml ps
-              echo "--- docker compose logs ---"
-              docker compose -f docker/app.yml logs --no-color | tail -200
+              echo "--- docker compose ps -a (includes exited) ---"
+              docker compose -f docker/app.yml ps -a
+              echo "--- docker compose logs app (most-relevant) ---"
+              docker compose -f docker/app.yml logs --no-color --no-log-prefix app | tail -200
+              echo "--- docker compose logs (all, last 500 lines) ---"
+              docker compose -f docker/app.yml logs --no-color | tail -500
               exit 1
             fi
           done
@@ -578,10 +580,12 @@ jobs:
               echo "FAIL — /api/health never returned UP"
               echo "--- last response ---"
               curl -v http://localhost:8080/api/health 2>&1 | tail -20 || true
-              echo "--- docker compose ps ---"
-              docker compose -f docker/app.yml ps
-              echo "--- docker compose logs ---"
-              docker compose -f docker/app.yml logs --no-color | tail -200
+              echo "--- docker compose ps -a (includes exited) ---"
+              docker compose -f docker/app.yml ps -a
+              echo "--- docker compose logs app (most-relevant) ---"
+              docker compose -f docker/app.yml logs --no-color --no-log-prefix app | tail -200
+              echo "--- docker compose logs (all, last 500 lines) ---"
+              docker compose -f docker/app.yml logs --no-color | tail -500
               exit 1
             fi
           done
@@ -646,10 +650,12 @@ jobs:
               echo "FAIL — /api/health never returned UP"
               echo "--- last response ---"
               curl -v http://localhost:8080/api/health 2>&1 | tail -20 || true
-              echo "--- docker compose ps ---"
-              docker compose -f docker/app.yml ps
-              echo "--- docker compose logs ---"
-              docker compose -f docker/app.yml logs --no-color | tail -200
+              echo "--- docker compose ps -a (includes exited) ---"
+              docker compose -f docker/app.yml ps -a
+              echo "--- docker compose logs app (most-relevant) ---"
+              docker compose -f docker/app.yml logs --no-color --no-log-prefix app | tail -200
+              echo "--- docker compose logs (all, last 500 lines) ---"
+              docker compose -f docker/app.yml logs --no-color | tail -500
               exit 1
             fi
           done
