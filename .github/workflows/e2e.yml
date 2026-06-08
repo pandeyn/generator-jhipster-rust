@@ -10,9 +10,13 @@ name: E2E Integration Matrix
 # gate (locked decision #4: green within 24 h of release commit).
 #
 # Sub-phase progression (each is its own PR landing on top of this):
-#   1-a.0 — workflow skeleton + 5 new yo-rc scaffolds (this file)
-#   1-a.1 — generate + cargo check + cargo clippy on all 7 (this file)
-#   1-a.2 — add cargo test per scaffold with DB service containers
+#   1-a.0 — workflow skeleton + 5 new yo-rc scaffolds (DONE, PR #24)
+#   1-a.1 — generate + cargo check + cargo clippy on all 7 (DONE, PR #24)
+#   1-a.2 — cargo test per scaffold with DB service containers (this PR
+#           covers the sqlite scaffold only; postgres/mysql/mongo follow as
+#           separate PRs because they each need their own service container
+#           and env wiring — incremental landing instead of a single
+#           4-DB restructure)
 #   1-a.3 — add entity regeneration via JDL fixture + cargo check after regen
 #   1-a.4 — add docker-compose up + /health probe
 #   1-a.5 — add Cypress for monolith + gateway scaffolds
@@ -126,6 +130,25 @@ jobs:
         # PR #20 — that was a latent bug in vault_service that only this
         # broader matrix would have caught earlier.
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test (sqlite scaffold — no service container needed)
+        # Track 1-a.2 first cut: sqlite scaffold tests run in-process using
+        # unique temp files per pool (see generated test_utils.rs). No env
+        # vars, no service containers, no setup. Other DB types
+        # (postgres / mysql / mongodb) land in follow-up PRs because each
+        # needs its own service container + env wiring at the job level
+        # (GH Actions services: blocks can't conditionally apply per matrix
+        # entry, so per-DB cargo test will require restructuring this job
+        # into multiple per-DB jobs).
+        #
+        # --test-threads=1: mirrors samples.yml's canonical-scaffold setup.
+        # The generated user_service / handlers::user / auth_service tests
+        # hard-code user IDs that race when parallel; tracked as a v1.0.2+
+        # template refactor (per-test transactional rollback or unique-login
+        # generation).
+        if: matrix.scaffold == 'mono-sqlite-jwt-ng'
+        working-directory: app/server
+        run: cargo test --all-targets -- --test-threads=1
 
   # Aggregator job — used to require a single status check in branch
   # protection rules even though the matrix has many entries.
