@@ -414,9 +414,18 @@ mod tests {
     fn test_from_consul_and_env_uses_defaults_when_both_unset() {
         let _g = ENV_LOCK.lock().unwrap();
         clear_app_env();
-        // Required vars (DATABASE_URL, JWT_SECRET) come from consul in this test.
+        // Required vars (DB connection + auth secret) come from consul in
+        // this test. Keys vary by scaffold dimension: mongo uses
+        // mongodb_uri/mongodb_database; sql uses database_url. OAuth2
+        // scaffolds have no required auth-secret field; jwt.secret is
+        // harmless to leave in the map for them (just ignored).
         let consul = consul_with([
+<%_ if (devDatabaseTypeMongodb) { _%>
+            ("mongodb_uri", "mongodb://from-consul:27017"),
+            ("mongodb_database", "from_consul_db"),
+<%_ } else { _%>
             ("database_url", "postgres://from-consul/db"),
+<%_ } _%>
             ("jwt.secret", "secret-from-consul"),
         ]);
         let cfg = AppConfig::from_consul_and_env(&consul);
@@ -425,7 +434,10 @@ mod tests {
         assert_eq!(cfg.app_env, "development");
         assert_eq!(cfg.app_port, 8080);
         assert_eq!(cfg.app_host, "0.0.0.0");
-<%_ if (!devDatabaseTypeMongodb) { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+        assert_eq!(cfg.mongodb_uri, "mongodb://from-consul:27017");
+        assert_eq!(cfg.mongodb_database, "from_consul_db");
+<%_ } else { _%>
         assert_eq!(cfg.database_url, "postgres://from-consul/db");
 <%_ } _%>
 <%_ if (authenticationTypeJwt) { _%>
@@ -454,11 +466,18 @@ mod tests {
         let _g = ENV_LOCK.lock().unwrap();
         clear_app_env();
         // Required vars from consul so the helper doesn't panic.
+        // DB-connection keys vary by scaffold dimension (see uses_defaults
+        // test above for the rationale).
         let consul = consul_with([
             ("app_name", "from-consul"),
             ("app_env", "production"),
             ("app_host", "10.0.0.1"),
+<%_ if (devDatabaseTypeMongodb) { _%>
+            ("mongodb_uri", "mongodb://localhost:27017"),
+            ("mongodb_database", "test"),
+<%_ } else { _%>
             ("database_url", "postgres://localhost/db"),
+<%_ } _%>
             ("jwt.secret", "consul-secret"),
         ]);
         let cfg = AppConfig::from_consul_and_env(&consul);
