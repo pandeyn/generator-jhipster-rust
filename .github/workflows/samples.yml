@@ -175,7 +175,7 @@ jobs:
       # anyway (different RUSTFLAGS, different fingerprint).
       - name: Upload canonical scaffold for coverage job
         if: matrix.sample == 'microservice-cb' && success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scaffold-microservice-cb
           path: |
