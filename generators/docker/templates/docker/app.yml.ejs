@@ -33,12 +33,20 @@ services:
       # task definition, etc.).
       - APP_ENV=development
 <%_ if (isMongodb) { _%>
+      # Track 1-a.4.1 fix: connect to the upstream-managed mongodb service.
       - MONGODB_URI=mongodb://mongodb:27017
       - MONGODB_DATABASE=<%= baseName.toLowerCase() %>
 <%_ } else if (isPostgresql) { _%>
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/<%= baseName.toLowerCase() %>
+      # Track 1-a.4.1 fix: connect to upstream's `postgresql` service
+      # (POSTGRES_USER=<baseName>, trust auth, DB defaults to user name).
+      # Replaces the previous `db:5432` host which referenced a duplicate
+      # postgres service that our template declared in parallel with
+      # upstream's — both bound host port 5432 and conflicted.
+      - DATABASE_URL=postgres://<%= baseName %>@postgresql:5432/<%= baseName %>
 <%_ } else if (isMysql) { _%>
-      - DATABASE_URL=mysql://root:root@db:3306/<%= baseName.toLowerCase() %>
+      # Track 1-a.4.1 fix: connect to upstream's `mysql` service
+      # (MYSQL_ROOT_PASSWORD=root, MYSQL_DATABASE=<baseName lowercase>).
+      - DATABASE_URL=mysql://root:root@mysql:3306/<%= baseName.toLowerCase() %>
 <%_ } else { _%>
       # Track 1-a.4 fix (2026-06-07): use the Dockerfile-prepared
       # /app/target/db directory (owned by uid 1001 per the Dockerfile
@@ -77,12 +85,15 @@ services:
       - sqlite-data:/app/target/db
 <%_ } _%>
 <%_ if (isPostgresql || isMysql || isMongodb || hasConsul) { _%>
+    # Track 1-a.4.1 fix: depend on upstream's service names. Previously
+    # we waited on our own `db:` service AND upstream's `postgresql:` /
+    # `mysql:` — the duplicate `db:` no longer exists.
     depends_on:
 <%_ if (isPostgresql) { _%>
-      db:
+      postgresql:
         condition: service_healthy
 <%_ } else if (isMysql) { _%>
-      db:
+      mysql:
         condition: service_healthy
 <%_ } else if (isMongodb) { _%>
       mongodb:
@@ -111,62 +122,7 @@ services:
       timeout: 5s
       retries: 10
 <%_ } _%>
-<%_ if (isPostgresql) { _%>
-
-  db:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=<%= baseName.toLowerCase() %>
-    ports:
-      - 127.0.0.1:5432:5432
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  postgres-data:
-<%_ } else if (isMysql) { _%>
-
-  db:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=<%= baseName.toLowerCase() %>
-    ports:
-      - 127.0.0.1:3306:3306
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-proot']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  mysql-data:
-<%_ } else if (isMongodb) { _%>
-
-  mongodb:
-    image: mongo:7.0
-    ports:
-      - 127.0.0.1:27017:27017
-    volumes:
-      - mongodb-data:/data/db
-    healthcheck:
-      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  mongodb-data:
-<%_ } else if (isSqlite) { _%>
+<%_ if (isSqlite) { _%>
 
 volumes:
   # Track 1-a.4 fix (2026-06-07): named volume for the sqlite DB file
@@ -175,3 +131,10 @@ volumes:
   # from writing. Named volumes inherit the container's user perms.
   sqlite-data:
 <%_ } _%>
+# Track 1-a.4.1 (2026-06-07): postgres/mysql/mongo DB services are
+# provided by upstream JHipster's docker generator (via extends: in
+# this file). Previously we declared our own duplicates which conflicted
+# on host ports and had different credentials. The `extends:` blocks
+# upstream injects after our template renders bring in postgresql.yml /
+# mysql.yml / mongodb.yml from the same docker/ directory; those files
+# carry the actual service config (image, ports, volumes, healthcheck).
