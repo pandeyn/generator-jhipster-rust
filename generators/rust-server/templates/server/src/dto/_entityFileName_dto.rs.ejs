@@ -656,7 +656,16 @@ mod tests {
 <%_ for (const field of allFields) { _%>
 <%_ if (field.fieldValidationRequired) { _%>
 <%_ if (field.fieldType === 'String' || field.fieldType === 'TextBlob') { _%>
+<%_ /* If the field has a pattern that looks email-shaped, "valid_value" won't
+       satisfy it. Detect '@' in the pattern (correctly catches typical email
+       regexes like ^[^@\s]+@[^@\s]+\.[^@\s]+$) and emit a valid email instead.
+       For other pattern shapes, callers may need to override the template if
+       the default fails. */ _%>
+<%_ if (field.fieldValidateRulesPattern && field.fieldValidateRulesPattern.includes('@')) { _%>
+                <%= field.fieldNameUnderscored %>: "test@example.com".to_string(),
+<%_ } else { _%>
                 <%= field.fieldNameUnderscored %>: "valid_value".to_string(),
+<%_ } _%>
 <%_ } else if (field.fieldType === 'Integer') { _%>
                 <%= field.fieldNameUnderscored %>: 1,
 <%_ } else if (field.fieldType === 'Long') { _%>

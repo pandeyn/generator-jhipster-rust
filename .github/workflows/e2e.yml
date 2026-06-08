@@ -1,27 +1,33 @@
 name: E2E Integration Matrix
 
-# Track 1-a (v1.0.1, sub-phases 1-a.0 + 1-a.1 landed 2026-06-07):
-# Validates that the generator's output — actual generated scaffolds — compiles
-# and lints clean across the 7 representative dimension combinations the
-# v1.0.0 plan locked. Distinct from samples.yml: that workflow runs on every
-# PR against 3 canonical scaffolds (fast template-correctness gate). e2e.yml
-# runs the broader matrix on opt-in PRs (via the `e2e` label), manual dispatch,
-# and a nightly schedule. The nightly run is the basis for the future release
-# gate (locked decision #4: green within 24 h of release commit).
+# Track 1-a (v1.0.1):
+# Validates that the generator's output — actual generated scaffolds — compiles,
+# lints clean, and runs its tests across the 7 representative dimension
+# combinations the v1.0.0 plan locked. Distinct from samples.yml: that workflow
+# runs on every PR against 3 canonical scaffolds (fast template-correctness
+# gate). e2e.yml runs the broader matrix on opt-in PRs (via the `e2e` label),
+# manual dispatch, and a nightly schedule. The nightly run is the basis for
+# the future release gate (locked decision #4: green within 24 h of release
+# commit).
 #
-# Sub-phase progression (each is its own PR landing on top of this):
-#   1-a.0 — workflow skeleton + 5 new yo-rc scaffolds (DONE, PR #24)
-#   1-a.1 — generate + cargo check + cargo clippy on all 7 (DONE, PR #24)
-#   1-a.2 — cargo test per scaffold with DB service containers (this PR
-#           covers the sqlite scaffold only; postgres/mysql/mongo follow as
-#           separate PRs because they each need their own service container
-#           and env wiring — incremental landing instead of a single
-#           4-DB restructure)
-#   1-a.3 — add entity regeneration via JDL fixture + cargo check after regen
-#   1-a.4 — add docker-compose up + /health probe
-#   1-a.5 — add Cypress for monolith + gateway scaffolds
-#   1-a.6 — add per-scaffold tarpaulin (informational artifact, NOT gating
-#           per locked decision #3 — coverage gating stays on samples.yml)
+# Structure: per-DB jobs instead of one monolithic matrix. GH Actions's
+# `services:` block applies at the job level, so each DB type needs its own
+# job with its own service container. Adopted in 1-a.2.1 (postgres);
+# extended in 1-a.2.2 (mysql) and 1-a.2.3 (mongodb).
+#
+# Sub-phase progression:
+#   1-a.0 — workflow skeleton + 5 new yo-rc scaffolds (PR #24)
+#   1-a.1 — generate + cargo check + cargo clippy on all 7 (PR #24)
+#   1-a.2 — cargo test per scaffold with DB service containers:
+#     1-a.2.0 — sqlite (PR #25)
+#     1-a.2.1 — postgres scaffolds (this PR)
+#     1-a.2.2 — mysql scaffold (next)
+#     1-a.2.3 — mongodb scaffolds (next)
+#   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
+#   1-a.4 — docker-compose up + /health probe
+#   1-a.5 — Cypress for monolith + gateway scaffolds
+#   1-a.6 — per-scaffold tarpaulin (informational artifact, NOT gating per
+#           locked decision #3 — coverage gating stays on samples.yml)
 
 on:
   # Opt-in on PRs via the `e2e` label. The full matrix is expensive
@@ -39,124 +45,262 @@ on:
 permissions:
   contents: read
 
+# Shared opt-in gate. All e2e-* jobs inherit this via `if:`.
+# Workflow-level `if:` isn't supported, so it's duplicated per job.
+
 jobs:
-  e2e-matrix:
-    name: ${{ matrix.scaffold }}
+  # ---- e2e-sqlite ---------------------------------------------------
+  # In-process: sqlite test_utils creates unique tmp files per pool.
+  # No service container, no env vars, no setup.
+  e2e-sqlite:
+    name: ${{ matrix.scaffold }} (sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Gate PR runs on the `e2e` label so the workflow only burns CI minutes
-    # when explicitly requested. workflow_dispatch and schedule bypass this.
     if: |
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
     strategy:
       fail-fast: false
-      # Cap parallelism at 4 per the v1.0.0 plan (free-tier GH Actions limit).
-      max-parallel: 4
       matrix:
-        # Test matrix locked 2026-05-10. Covers all 3 app types × all 4 DBs ×
-        # auth/SD/frontend variety. See v1.0.0 plan §"Test matrix" for the
-        # full rationale.
         scaffold:
-          # 1. Monolith + sqlite + jwt + Angular
           - mono-sqlite-jwt-ng
-          # 2. Monolith + postgresql + jwt + React
-          - mono-pg-jwt-react
-          # 3. Monolith + mysql + oauth2 + Vue
-          - mono-mysql-oauth2-vue
-          # 4. Monolith + mongodb + jwt + Angular
-          - mono-mongo-jwt-ng
-          # 5. Microservice + postgresql + jwt + Consul + Circuit Breaker (canonical, also in samples.yml)
-          - microservice-cb
-          # 6. Microservice + mongodb + oauth2 + Consul
-          - ms-mongo-oauth2-consul
-          # 7. Gateway + postgresql + jwt + Consul + Circuit Breaker (also in samples.yml)
-          - gateway-cb
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
-
-      # Pinned to commit SHAs to defend against tag-rewriting supply-chain
-      # attacks. Same pins as samples.yml; dependabot updates both together.
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
         with:
           components: rustfmt, clippy
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          # One cache key per scaffold so each scaffold's target/ stays warm
-          # across runs without thrashing.
           key: e2e-${{ matrix.scaffold }}
           workspaces: |
             app/server -> target
-
       - name: Install blueprint dependencies
         run: npm ci
-
       - name: Generate scaffold
-        # Local-CLI invocation (same pattern as samples.yml — see that file
-        # for the full rationale on why this isn't `npx yo`).
         run: |
           mkdir -p app
           cd app
           node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
-
       - name: Sanity-check generated tree
         working-directory: app
         run: |
           test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
           test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
           echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
-
       - name: cargo check
         working-directory: app/server
-        # Runs in dev profile — faster than release and catches the same
-        # generator-template-emits-uncompilable-code regressions. samples.yml's
-        # canonical scaffold uses release-mode clippy because it doubles as
-        # the coverage gate's compile step; e2e.yml needs broader-matrix
-        # signal more than it needs release-mode-specific lint passes.
         run: cargo check --all-targets
-
       - name: cargo clippy
         working-directory: app/server
-        # -D warnings turns lints into hard errors. Catches things like the
-        # clippy 1.96 wildcard_in_or_patterns regression that surfaced in
-        # PR #20 — that was a latent bug in vault_service that only this
-        # broader matrix would have caught earlier.
         run: cargo clippy --all-targets -- -D warnings
-
-      - name: cargo test (sqlite scaffold — no service container needed)
-        # Track 1-a.2 first cut: sqlite scaffold tests run in-process using
-        # unique temp files per pool (see generated test_utils.rs). No env
-        # vars, no service containers, no setup. Other DB types
-        # (postgres / mysql / mongodb) land in follow-up PRs because each
-        # needs its own service container + env wiring at the job level
-        # (GH Actions services: blocks can't conditionally apply per matrix
-        # entry, so per-DB cargo test will require restructuring this job
-        # into multiple per-DB jobs).
-        #
-        # --test-threads=1: mirrors samples.yml's canonical-scaffold setup.
-        # The generated user_service / handlers::user / auth_service tests
-        # hard-code user IDs that race when parallel; tracked as a v1.0.2+
-        # template refactor (per-test transactional rollback or unique-login
-        # generation).
-        if: matrix.scaffold == 'mono-sqlite-jwt-ng'
+      - name: cargo test
         working-directory: app/server
         run: cargo test --all-targets -- --test-threads=1
 
-  # Aggregator job — used to require a single status check in branch
-  # protection rules even though the matrix has many entries.
+  # ---- e2e-postgres -------------------------------------------------
+  # Three scaffolds use postgres as the test DB. Each matrix entry runs
+  # in its own job instance with its own postgres service container, so
+  # they don't conflict on shared state.
+  #
+  # test_utils.rs (postgres variant) reads TEST_DATABASE_URL, falls back
+  # to DATABASE_URL + "_test" suffix, and auto-creates the test DB via
+  # a maintenance connection — so the service container just needs the
+  # default "postgres" superuser DB available.
+  e2e-postgres:
+    name: ${{ matrix.scaffold }} (postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-pg-jwt-react
+          - microservice-cb
+          - gateway-cb
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/jhipster_rust_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/jhipster_rust_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: e2e-${{ matrix.scaffold }}
+          workspaces: |
+            app/server -> target
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Sanity-check generated tree
+        working-directory: app
+        run: |
+          test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
+          test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
+          echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
+      - name: Wait for postgres readiness
+        run: |
+          # services: has its own healthcheck, but cold runners can race;
+          # belt-and-suspenders here (same pattern as samples.yml's coverage
+          # gate).
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for postgres..."
+            sleep 1
+          done
+      - name: cargo check
+        working-directory: app/server
+        run: cargo check --all-targets
+      - name: cargo clippy
+        working-directory: app/server
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        working-directory: app/server
+        # --test-threads=1: same workaround samples.yml uses for the
+        # canonical scaffold. Generated user_service / handlers::user /
+        # auth_service tests hard-code user IDs (e.g. reactivate_user(2))
+        # and reuse fixed logins. Tracked as a v1.0.2+ template refactor.
+        run: cargo test --all-targets -- --test-threads=1
+
+  # ---- e2e-mysql ----------------------------------------------------
+  # No service container yet — cargo test wiring lands in 1-a.2.2. For
+  # now this job runs generate + check + clippy only, mirroring the
+  # pre-PR-#25 e2e-matrix behavior for the mysql scaffold.
+  e2e-mysql:
+    name: ${{ matrix.scaffold }} (mysql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-mysql-oauth2-vue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: e2e-${{ matrix.scaffold }}
+          workspaces: |
+            app/server -> target
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Sanity-check generated tree
+        working-directory: app
+        run: |
+          test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
+          test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
+          echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
+      - name: cargo check
+        working-directory: app/server
+        run: cargo check --all-targets
+      - name: cargo clippy
+        working-directory: app/server
+        run: cargo clippy --all-targets -- -D warnings
+
+  # ---- e2e-mongo ----------------------------------------------------
+  # No service container yet — cargo test wiring lands in 1-a.2.3.
+  e2e-mongo:
+    name: ${{ matrix.scaffold }} (mongo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-mongo-jwt-ng
+          - ms-mongo-oauth2-consul
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: e2e-${{ matrix.scaffold }}
+          workspaces: |
+            app/server -> target
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Sanity-check generated tree
+        working-directory: app
+        run: |
+          test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
+          test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
+          echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
+      - name: cargo check
+        working-directory: app/server
+        run: cargo check --all-targets
+      - name: cargo clippy
+        working-directory: app/server
+        run: cargo clippy --all-targets -- -D warnings
+
+  # ---- Aggregator ---------------------------------------------------
+  # Single status check for branch-protection use even though the work
+  # spans multiple jobs.
   e2e-check:
     name: All E2E Scaffolds Pass
     runs-on: ubuntu-latest
-    needs: [e2e-matrix]
-    # Mirror the same opt-in gate as the matrix.
+    needs: [e2e-sqlite, e2e-postgres, e2e-mysql, e2e-mongo]
     if: |
       always() && (
         github.event_name == 'workflow_dispatch' ||
@@ -166,8 +310,14 @@ jobs:
     steps:
       - name: Verify all scaffolds passed
         run: |
-          if [ "${{ needs.e2e-matrix.result }}" != "success" ]; then
-            echo "One or more e2e scaffolds failed: ${{ needs.e2e-matrix.result }}"
-            exit 1
-          fi
-          echo "All 7 scaffolds passed."
+          for r in "${{ needs.e2e-sqlite.result }}" "${{ needs.e2e-postgres.result }}" "${{ needs.e2e-mysql.result }}" "${{ needs.e2e-mongo.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "One or more e2e jobs failed:"
+              echo "  e2e-sqlite:   ${{ needs.e2e-sqlite.result }}"
+              echo "  e2e-postgres: ${{ needs.e2e-postgres.result }}"
+              echo "  e2e-mysql:    ${{ needs.e2e-mysql.result }}"
+              echo "  e2e-mongo:    ${{ needs.e2e-mongo.result }}"
+              exit 1
+            fi
+          done
+          echo "All 7 scaffolds passed across 4 DB-typed jobs."
