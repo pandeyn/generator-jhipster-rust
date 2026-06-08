@@ -1,0 +1,24 @@
+{
+  "generator-jhipster": {
+    "applicationType": "microservice",
+    "authenticationType": "oauth2",
+    "backendType": "Rust",
+    "baseName": "msMongo",
+    "buildTool": "maven",
+    "cacheProvider": "no",
+    "databaseType": "mongodb",
+    "devDatabaseType": "mongodb",
+    "jhipsterVersion": "9.0.0",
+    "packageName": "com.mycompany.msmongo",
+    "prodDatabaseType": "mongodb",
+    "serviceDiscoveryType": "consul",
+    "skipClient": true,
+    "skipJhipsterDependencies": true,
+    "testFrameworks": [],
+    "withAdminUi": false
+  },
+  "generator-jhipster-rust": {
+    "blueprintVersion": "1.0.0",
+    "rustVersion": "1.75.0"
+  }
+}
