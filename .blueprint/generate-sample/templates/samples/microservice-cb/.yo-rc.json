@@ -8,6 +8,7 @@
     "cacheProvider": "no",
     "databaseType": "sql",
     "devDatabaseType": "postgresql",
+    "distributedTracing": "zipkin",
     "entities": ["Product", "Category"],
     "jhipsterVersion": "9.0.0",
     "packageName": "com.mycompany.cbmicroservice",

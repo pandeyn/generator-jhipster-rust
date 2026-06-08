@@ -112,3 +112,175 @@ impl TracingConfig {
 pub fn shutdown_tracer() {
     opentelemetry::global::shutdown_tracer_provider();
 }
+
+// Phase 3c (2026-06-07): coverage of from_env() + init_tracer's
+// disabled-branch + struct construction. Locked decision #5 caps the
+// per-file target at >=30% because init_tracer's exporter init does
+// real work at file-load time that can't be exercised without a real
+// OTLP/Zipkin collector. Mutex serializes env-var tests (locked
+// convention 2026-05-11); the rest of the suite stays parallel.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    const ENV_VARS: &[&str] = &[
+        "TRACING_ENABLED",
+        "TRACING_SERVICE_NAME",
+        "TRACING_ENDPOINT",
+        "TRACING_SAMPLE_RATIO",
+    ];
+
+    fn clear_env() {
+        for var in ENV_VARS {
+            std::env::remove_var(var);
+        }
+    }
+
+    #[test]
+    fn test_from_env_returns_defaults_when_no_vars_set() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+
+        let cfg = TracingConfig::from_env();
+        assert!(cfg.enabled, "enabled should default to true");
+        assert_eq!(cfg.service_name, "<%= baseName %>");
+<%_ if (distributedTracingZipkin) { _%>
+        assert_eq!(cfg.endpoint, "http://localhost:9411/api/v2/spans");
+<%_ } else if (distributedTracingJaeger) { _%>
+        assert_eq!(cfg.endpoint, "http://localhost:4317");
+<%_ } _%>
+        assert!((cfg.sample_ratio - 1.0).abs() < f64::EPSILON);
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_tracing_enabled_false_via_string() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_ENABLED", "false");
+
+        let cfg = TracingConfig::from_env();
+        assert!(!cfg.enabled);
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_tracing_enabled_via_one() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_ENABLED", "1");
+
+        let cfg = TracingConfig::from_env();
+        assert!(cfg.enabled, "TRACING_ENABLED=1 should enable tracing");
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_tracing_enabled_case_insensitive() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_ENABLED", "TRUE");
+
+        let cfg = TracingConfig::from_env();
+        assert!(cfg.enabled, "TRACING_ENABLED=TRUE should enable tracing (case-insensitive)");
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_tracing_enabled_garbage_disables() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_ENABLED", "yes-please");
+
+        let cfg = TracingConfig::from_env();
+        // The closure returns false because "yes-please" != "true" and != "1".
+        assert!(!cfg.enabled, "non-true/1 values should disable tracing");
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_service_name_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_SERVICE_NAME", "custom-svc");
+
+        let cfg = TracingConfig::from_env();
+        assert_eq!(cfg.service_name, "custom-svc");
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_endpoint_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_ENDPOINT", "http://tracer.internal:9000/spans");
+
+        let cfg = TracingConfig::from_env();
+        assert_eq!(cfg.endpoint, "http://tracer.internal:9000/spans");
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_sample_ratio_valid() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_SAMPLE_RATIO", "0.25");
+
+        let cfg = TracingConfig::from_env();
+        assert!((cfg.sample_ratio - 0.25).abs() < f64::EPSILON);
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_from_env_reads_sample_ratio_malformed_falls_back_to_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("TRACING_SAMPLE_RATIO", "not-a-float");
+
+        let cfg = TracingConfig::from_env();
+        // parse::<f64>().ok() yields None on garbage; unwrap_or(1.0) restores default.
+        assert!((cfg.sample_ratio - 1.0).abs() < f64::EPSILON);
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_init_tracer_returns_none_when_disabled() {
+        // No env access, no global state — pure short-circuit on the
+        // self.enabled check. The exporter init below this branch is
+        // explicitly NOT exercised per locked decision #5 (needs a real
+        // OTLP/Zipkin collector).
+        let cfg = TracingConfig {
+            enabled: false,
+            service_name: "test-svc".to_string(),
+            endpoint: "http://example.invalid".to_string(),
+            sample_ratio: 1.0,
+        };
+        assert!(cfg.init_tracer().is_none());
+    }
+
+    #[test]
+    fn test_tracing_config_struct_construction_and_clone() {
+        // Covers the Debug + Clone derives on TracingConfig.
+        let cfg = TracingConfig {
+            enabled: true,
+            service_name: "svc".to_string(),
+            endpoint: "http://example.invalid".to_string(),
+            sample_ratio: 0.5,
+        };
+        let cloned = cfg.clone();
+        assert_eq!(cloned.service_name, "svc");
+        assert!(format!("{:?}", cfg).contains("TracingConfig"));
+    }
+}
