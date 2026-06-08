@@ -24,11 +24,11 @@ name: E2E Integration Matrix
 #     1-a.2.2 — mysql scaffold (PR #27)
 #     1-a.2.3 — mongodb scaffolds (PR #28)
 #   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
-#           (this PR; also includes the diesel.toml fix that restores
-#           incremental `jhipster jdl` for ALL users, not just CI —
-#           see diesel.toml.ejs for the rationale)
-#   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
-#   1-a.4 — docker-compose up + /health probe
+#           (PR #29; also fixed diesel.toml [print_schema] overwrite AND
+#           the migration-timestamp-collision bug for incremental
+#           `jhipster jdl` onto a scaffold with existing entities)
+#   1-a.4 — docker-compose up + /health probe (rolled out per-DB like
+#           1-a.2; sqlite scaffold first in this PR, other DBs follow)
 #   1-a.5 — Cypress for monolith + gateway scaffolds
 #   1-a.6 — per-scaffold tarpaulin (informational artifact, NOT gating per
 #           locked decision #3 — coverage gating stays on samples.yml)
@@ -120,6 +120,42 @@ jobs:
         # tables + the new Author/Book/Tag entities). --test-threads=1
         # mirrors samples.yml's canonical-scaffold workaround.
         run: cargo test --all-targets -- --test-threads=1
+      # Track 1-a.4.0: docker-compose smoke test for the sqlite scaffold.
+      # Builds the multi-stage Dockerfile, brings up the docker-compose
+      # stack, polls /api/health until it responds, then tears down.
+      # Confirms the generated Dockerfile + docker/app.yml + entrypoint
+      # actually produce a running app — the closest CI gets to "what
+      # an end user does after generating a scaffold". Other DBs follow
+      # in 1-a.4.1+ once the sqlite case is proven.
+      - name: docker-compose smoke test
+        working-directory: app
+        run: |
+          set -e
+          echo "::group::Build + start docker compose stack"
+          docker compose -f docker/app.yml up -d --build
+          echo "::endgroup::"
+          echo "::group::Poll /api/health until UP (max 120s)"
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/health 2>/dev/null | grep -q '"status":"UP"'; then
+              echo "OK — /api/health returned UP after ${i}*2s"
+              curl -sS http://localhost:8080/api/health
+              break
+            fi
+            echo "[$i/60] not yet up, sleeping 2s..."
+            sleep 2
+            if [ "$i" = "60" ]; then
+              echo "FAIL — /api/health never returned UP"
+              echo "--- last response ---"
+              curl -v http://localhost:8080/api/health 2>&1 | tail -20 || true
+              echo "--- docker compose logs ---"
+              docker compose -f docker/app.yml logs --no-color | tail -100
+              exit 1
+            fi
+          done
+          echo "::endgroup::"
+          echo "::group::Teardown"
+          docker compose -f docker/app.yml down -v
+          echo "::endgroup::"
 
   # ---- e2e-postgres -------------------------------------------------
   # Three scaffolds use postgres as the test DB. Each matrix entry runs
