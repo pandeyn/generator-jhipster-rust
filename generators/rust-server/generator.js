@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { existsSync, readdirSync } from 'node:fs';
 
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
 import { createNeedleCallback } from 'generator-jhipster/generators/base-core/support';
@@ -764,6 +765,32 @@ ${allLines}
 
         const assignedTimestamp = new Map();
 
+        // Track 1-a.3 fix (2026-06-07): seed the collision-avoidance set with
+        // EXISTING migration timestamp prefixes on disk. Without this, when
+        // `jhipster jdl <fixture>` adds entities to a scaffold that already
+        // has migrations (e.g. customer/order from the initial JDL), the new
+        // entity's changelogDate can land on the exact same YYYYMMDDHHMMSS
+        // prefix as an existing migration. Diesel keys migration identity by
+        // the timestamp VERSION prefix, so the colliding migration gets
+        // silently treated as already-applied — and any later migration that
+        // FKs into the "applied" table fails with `relation "X" does not exist`.
+        //
+        // Two existing migrations live under .../create_<entityTableName>;
+        // capture them by table name so a regeneration of the SAME entity
+        // can preserve its stable filename via the changelogDate-vs-deps
+        // branch below.
+        const existingByEntityTable = new Map(); // entityTableName -> timestamp
+        const allExistingPrefixes = new Set(); // every timestamp prefix in migrations/
+        const migrationsDirPath = this.destinationPath('migrations');
+        if (existsSync(migrationsDirPath)) {
+          for (const dirName of readdirSync(migrationsDirPath)) {
+            const m = dirName.match(/^(\d+)_create_(.+)$/);
+            if (!m) continue; // skip 00000000000000_diesel_initial_setup etc.
+            allExistingPrefixes.add(m[1]);
+            existingByEntityTable.set(m[2], m[1]);
+          }
+        }
+
         // First pass: write the entity source files and their CREATE TABLE migrations.
         for (const entity of sorted) {
           let maxDepTimestamp = '0';
@@ -774,8 +801,21 @@ ${allLines}
           // Prefer entity.changelogDate when it already sorts after every dependency,
           // so regenerations keep stable migration filenames. Otherwise bump past
           // the latest dependency timestamp.
-          entity.migrationTimestamp =
-            entity.changelogDate > maxDepTimestamp ? entity.changelogDate : bumpMigrationTimestamp(maxDepTimestamp, 1);
+          let candidate = entity.changelogDate > maxDepTimestamp ? entity.changelogDate : bumpMigrationTimestamp(maxDepTimestamp, 1);
+          // Track 1-a.3: avoid colliding with any OTHER migration's prefix on
+          // disk. The candidate is OK if (a) no existing prefix matches, OR
+          // (b) the existing match is THIS entity's prior migration
+          // (regeneration — preserve the stable filename).
+          const myExisting = existingByEntityTable.get(entity.entityTableName);
+          while (allExistingPrefixes.has(candidate) && candidate !== myExisting) {
+            candidate = bumpMigrationTimestamp(candidate, 1);
+          }
+          // Add the chosen timestamp to the set so SAME-batch siblings bump
+          // past it too (within this loop they're picked up via
+          // assignedTimestamp / fkDeps, but no-dependency entities like
+          // Tag won't see it any other way).
+          allExistingPrefixes.add(candidate);
+          entity.migrationTimestamp = candidate;
           assignedTimestamp.set(entity, entity.migrationTimestamp);
 
           await this.writeFiles({
