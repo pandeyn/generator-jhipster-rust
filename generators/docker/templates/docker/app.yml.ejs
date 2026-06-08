@@ -32,7 +32,14 @@ services:
 <%_ } else if (isMysql) { _%>
       - DATABASE_URL=mysql://root:root@db:3306/<%= baseName.toLowerCase() %>
 <%_ } else { _%>
-      - DATABASE_URL=sqlite://./data/<%= baseName.toLowerCase() %>.db
+      # Track 1-a.4 fix (2026-06-07): use the Dockerfile-prepared
+      # /app/target/db directory (owned by uid 1001 per the Dockerfile
+      # USER directive). The prior relative path `./data/...` resolved
+      # to /app/data inside the container, but the bind mount
+      # `./data:/app/data` made docker create that dir as root on the
+      # host — uid 1001 inside the container then got "unable to open
+      # database file" trying to write to it.
+      - DATABASE_URL=sqlite:///app/target/db/<%= baseName.toLowerCase() %>.db
 <%_ } _%>
       - APP_HOST=0.0.0.0
       - APP_PORT=8080
@@ -53,8 +60,13 @@ services:
     ports:
       - 127.0.0.1:8080:8080
 <%_ if (isSqlite) { _%>
+    # Track 1-a.4 fix (2026-06-07): use a named volume for persistence
+    # instead of `./data:/app/data` bind mount. Bind mounts to a
+    # nonexistent host dir get created as root, making uid 1001 inside
+    # the container unable to write. Named volumes are managed by
+    # docker and inherit the container's user permissions correctly.
     volumes:
-      - ./data:/app/data
+      - sqlite-data:/app/target/db
 <%_ } _%>
 <%_ if (isPostgresql || isMysql || isMongodb || hasConsul) { _%>
     depends_on:
@@ -146,4 +158,12 @@ volumes:
 
 volumes:
   mongodb-data:
+<%_ } else if (isSqlite) { _%>
+
+volumes:
+  # Track 1-a.4 fix (2026-06-07): named volume for the sqlite DB file
+  # at /app/target/db/<baseName>.db. Bind mounts to non-existent host
+  # dirs get created as root, preventing the container's uid 1001 user
+  # from writing. Named volumes inherit the container's user perms.
+  sqlite-data:
 <%_ } _%>
