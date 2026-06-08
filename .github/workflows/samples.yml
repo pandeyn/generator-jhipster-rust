@@ -278,13 +278,18 @@ jobs:
         # Gate ratchet history (canonical scaffold microservice-cb):
         #   v0.9.9 local baseline:   39.92% (636/1593 with main.rs excluded)
         #   v1.0.0 initial gate:     35 (5pp slack under baseline)
-        #   v1.0.0 post-Phase 1:     50 (current — Phase 1 a/b/c/d landed
-        #                                56.52%, 6pp slack to absorb measurement
-        #                                noise and small mid-PR coverage churn).
-        # Future ratchets: 60 once Phase 2 lands (≥80% per Tier-2 file),
-        # 70 in v1.0.1 once Phase 3 lands (consul/vault/config_watcher/
-        # tracing_config coverage). Bumping the gate after each Phase
-        # PR locks in the gains and catches silent regressions on future PRs.
+        #   v1.0.0 post-Phase 1:     50 (Phase 1 a/b/c/d landed 56.52%,
+        #                                6pp slack to absorb measurement noise).
+        #   v1.0.1 post-Phase 3:     75 (current — Phase 2 + Phase 3 a/b/c
+        #                                landed 84.36%, 9.36pp slack absorbs
+        #                                mid-PR coverage churn and the
+        #                                tracing_config ratio dip that's
+        #                                structural per locked decision #5).
+        # The v1.0.1 plan originally locked two intermediate ratchets (50 → 60
+        # post-Phase-2, → 70 post-Phase-3). Phase 2 + Phase 3a delivered overall
+        # to 83.71% — so far above the 60 gate that intermediate ratchets
+        # became bookkeeping. Decision #8 (2026-06-07) bundled them into this
+        # single 50 → 75 ratchet at the end of Phase 3.
         #
         # `-- --test-threads=1` serializes test execution. The canonical
         # scaffold's integration tests (handlers::user, services::auth_service,
@@ -296,7 +301,7 @@ jobs:
         #   - "violates foreign key constraint user_authorities_user_id_fkey"
         # Fixing per-test isolation (transactional rollback / unique login
         # generation) is Phase 1 template-side work; until then, serialize.
-        run: cargo tarpaulin --fail-under 50 -- --test-threads=1
+        run: cargo tarpaulin --fail-under 75 -- --test-threads=1
 
   # Summary job to ensure all samples + coverage passed
   samples-check:
