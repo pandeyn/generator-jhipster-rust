@@ -139,6 +139,25 @@ mod tests {
     use super::*;
     use crate::config::new_shared_remote_config;
 
+    fn test_consul_config(host: String, port: u16, watch_enabled: bool) -> ConsulConfig {
+        ConsulConfig {
+            host,
+            port,
+            service_name: "test-service".to_string(),
+            service_id: "test-service-1".to_string(),
+            service_tags: vec![],
+            health_check_interval: 10,
+            register_service: true,
+            enable_config: true,
+            acl_token: None,
+            config_key_prefix: "config/test".to_string(),
+            health_check_host: "localhost".to_string(),
+            config_profile: "dev".to_string(),
+            watch_enabled,
+            watch_interval: 1,
+        }
+    }
+
     #[test]
     fn test_config_watcher_creation() {
         // Just verify the struct can be constructed
@@ -147,4 +166,274 @@ mod tests {
         assert!(!cancel_token.is_cancelled());
         drop(remote_config);
     }
+
+    #[tokio::test]
+    async fn test_run_disabled_returns_immediately() {
+        // Build a ConsulService pointing at an unreachable URL; if the watcher
+        // didn't honor watch_enabled=false it would hang on HTTP timeouts.
+        let consul_cfg = test_consul_config("127.0.0.1".to_string(), 1, false);
+<%_ if (circuitBreakerEnabled) { _%>
+        let consul = Arc::new(ConsulService::new(consul_cfg.clone(), None));
+<%_ } else { _%>
+        let consul = Arc::new(ConsulService::new(consul_cfg.clone()));
+<%_ } _%>
+        let remote_config = new_shared_remote_config();
+        let cancel = CancellationToken::new();
+        let watcher = ConfigWatcher::new(consul, consul_cfg, remote_config, cancel);
+
+        // Should return ~immediately. Bound with a small timeout — if the
+        // function blocked we'd hit it.
+        tokio::time::timeout(std::time::Duration::from_millis(200), watcher.run())
+            .await
+            .expect("disabled watcher should return immediately");
+    }
+
+<%_ if (circuitBreakerEnabled) { _%>
+    // Phase 3b (2026-06-07): wiremock-backed coverage of the watch loop.
+    // Pattern mirrors Phase 3a (consul_service, vault_service) — assert
+    // header/query params with body_json + query_param + header matchers.
+    mod wiremock_tests {
+        use super::*;
+        use base64::Engine;
+        use serde_json::json;
+        use std::time::Duration;
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn b64(s: &str) -> String {
+            base64::engine::general_purpose::STANDARD.encode(s)
+        }
+
+        async fn make_consul(server: &MockServer) -> (Arc<ConsulService>, ConsulConfig) {
+            let addr = server.address();
+            let cfg = test_consul_config(addr.ip().to_string(), addr.port(), true);
+            let svc = Arc::new(ConsulService::new(cfg.clone(), None));
+            (svc, cfg)
+        }
+
+        #[tokio::test]
+        async fn test_run_detects_index_change_and_updates_shared_config() {
+            let server = MockServer::start().await;
+            // watch_config(base_key, 0) -> X-Consul-Index: 5 (index changed -> reload)
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .and(query_param("raw", "true"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("ignored")
+                        .insert_header("X-Consul-Index", "5"),
+                )
+                .mount(&server)
+                .await;
+            // watch_config(profile_key, 0) -> X-Consul-Index: 10
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .and(query_param("raw", "true"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("ignored")
+                        .insert_header("X-Consul-Index", "10"),
+                )
+                .mount(&server)
+                .await;
+            // load_profiled_config -> load_all_config(base_key) recurse
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .and(query_param("recurse", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"Key": "logging.level", "Value": b64("info")}
+                ])))
+                .mount(&server)
+                .await;
+            // load_profiled_config -> load_all_config(profile_key) recurse
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .and(query_param("recurse", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"Key": "logging.level", "Value": b64("debug")}
+                ])))
+                .mount(&server)
+                .await;
+
+            let (consul, consul_cfg) = make_consul(&server).await;
+            let remote_config = new_shared_remote_config();
+            let cancel = CancellationToken::new();
+            let watcher = ConfigWatcher::new(
+                consul,
+                consul_cfg,
+                Arc::clone(&remote_config),
+                cancel.clone(),
+            );
+
+            // Run the watcher briefly, then cancel.
+            let handle = tokio::spawn(watcher.run());
+            // Give it enough time to complete at least one cycle (mocked HTTP
+            // resolves in <10ms each; 4 endpoints = ~40ms typical).
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            cancel.cancel();
+            tokio::time::timeout(Duration::from_millis(500), handle)
+                .await
+                .expect("watcher should terminate after cancel")
+                .expect("watcher task should not panic");
+
+            // Profile config overrides base on logging.level -> "debug".
+            let cfg = remote_config.read().await;
+            assert_eq!(
+                cfg.log_level, "debug",
+                "shared remote config should reflect KV reload (profile wins on conflict)"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_run_cancellation_terminates_loop() {
+            let server = MockServer::start().await;
+            // Same two watch_config endpoints; same X-Consul-Index forever, so
+            // every cycle is a no-op. Watcher just keeps looping until cancelled.
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("ignored")
+                        .insert_header("X-Consul-Index", "0"),
+                )
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("ignored")
+                        .insert_header("X-Consul-Index", "0"),
+                )
+                .mount(&server)
+                .await;
+
+            let (consul, consul_cfg) = make_consul(&server).await;
+            let remote_config = new_shared_remote_config();
+            let cancel = CancellationToken::new();
+            let watcher = ConfigWatcher::new(consul, consul_cfg, remote_config, cancel.clone());
+
+            let handle = tokio::spawn(watcher.run());
+            // Let it spin for a couple of cycles, then cancel.
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            cancel.cancel();
+            tokio::time::timeout(Duration::from_millis(500), handle)
+                .await
+                .expect("watcher should terminate after cancel")
+                .expect("watcher task should not panic");
+        }
+
+        #[tokio::test]
+        async fn test_run_watch_error_then_cancel_during_retry_sleep() {
+            // First watch endpoint returns 500 — watch_cycle returns Err,
+            // run() enters the 10s retry sleep. We cancel mid-sleep; the
+            // tokio::select! in the retry arm picks up the cancellation
+            // branch and run() returns. Covers the Err branch + the
+            // cancel-during-retry arm.
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("consul down"))
+                .mount(&server)
+                .await;
+            // The profile endpoint shouldn't even get hit (watch_cycle bails
+            // after the first watch_config Err). Mount a default 500 just in
+            // case.
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .respond_with(ResponseTemplate::new(500))
+                .mount(&server)
+                .await;
+
+            let (consul, consul_cfg) = make_consul(&server).await;
+            let remote_config = new_shared_remote_config();
+            let cancel = CancellationToken::new();
+            let watcher = ConfigWatcher::new(consul, consul_cfg, remote_config, cancel.clone());
+
+            let handle = tokio::spawn(watcher.run());
+            // Give it long enough for the first watch_cycle to fail (~few ms)
+            // and enter the retry sleep, but well under the 10s retry timer.
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            cancel.cancel();
+            // Without the cancel-during-retry arm we'd block here for ~10s.
+            tokio::time::timeout(Duration::from_millis(500), handle)
+                .await
+                .expect("cancel during retry-sleep should terminate the watcher promptly")
+                .expect("watcher task should not panic");
+        }
+
+        #[tokio::test]
+        async fn test_run_logs_changes_when_log_level_or_pool_size_differ() {
+            // Seed the shared config with non-default values, then have the
+            // watcher reload values that DIFFER. Exercises the two info!()
+            // diff-detection branches (log_level change, database_pool_size
+            // change).
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .and(query_param("raw", "true"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("ignored")
+                        .insert_header("X-Consul-Index", "7"),
+                )
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .and(query_param("raw", "true"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("ignored")
+                        .insert_header("X-Consul-Index", "11"),
+                )
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .and(query_param("recurse", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"Key": "logging.level", "Value": b64("warn")},
+                    {"Key": "database.pool_size", "Value": b64("42")}
+                ])))
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .and(query_param("recurse", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+                .mount(&server)
+                .await;
+
+            let (consul, consul_cfg) = make_consul(&server).await;
+            // Seed shared config so the reload sees a diff on both fields.
+            let remote_config = new_shared_remote_config();
+            {
+                let mut cfg = remote_config.write().await;
+                cfg.log_level = "info".to_string();
+                cfg.database_pool_size = 10;
+            }
+
+            let cancel = CancellationToken::new();
+            let watcher = ConfigWatcher::new(
+                consul,
+                consul_cfg,
+                Arc::clone(&remote_config),
+                cancel.clone(),
+            );
+
+            let handle = tokio::spawn(watcher.run());
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            cancel.cancel();
+            tokio::time::timeout(Duration::from_millis(500), handle)
+                .await
+                .expect("watcher should terminate after cancel")
+                .expect("watcher task should not panic");
+
+            let cfg = remote_config.read().await;
+            assert_eq!(cfg.log_level, "warn", "log_level diff should be applied");
+            assert_eq!(cfg.database_pool_size, 42, "pool_size diff should be applied");
+        }
+    }
+<%_ } _%>
 }
