@@ -21,8 +21,8 @@ name: E2E Integration Matrix
 #   1-a.2 — cargo test per scaffold with DB service containers:
 #     1-a.2.0 — sqlite (PR #25)
 #     1-a.2.1 — postgres scaffolds (PR #26)
-#     1-a.2.2 — mysql scaffold (this PR)
-#     1-a.2.3 — mongodb scaffolds (next)
+#     1-a.2.2 — mysql scaffold (PR #27)
+#     1-a.2.3 — mongodb scaffolds (this PR)
 #   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
 #   1-a.4 — docker-compose up + /health probe
 #   1-a.5 — Cypress for monolith + gateway scaffolds
@@ -274,7 +274,10 @@ jobs:
         run: cargo test --all-targets -- --test-threads=1
 
   # ---- e2e-mongo ----------------------------------------------------
-  # No service container yet — cargo test wiring lands in 1-a.2.3.
+  # MongoDB scaffolds. test_utils.rs (mongo variant) reads TEST_MONGODB_URI
+  # and TEST_MONGODB_DATABASE; no migrations needed (schemaless). Per-test
+  # cleanup happens via clean_test_data_mongo() which drops all collections
+  # except authorities and reseeds them.
   e2e-mongo:
     name: ${{ matrix.scaffold }} (mongo)
     runs-on: ubuntu-latest
@@ -289,6 +292,19 @@ jobs:
         scaffold:
           - mono-mongo-jwt-ng
           - ms-mongo-oauth2-consul
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 })' || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_MONGODB_URI: mongodb://localhost:27017
+      TEST_MONGODB_DATABASE: jhipster_rust_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -316,12 +332,30 @@ jobs:
           test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
           test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
           echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
+      - name: Wait for mongo readiness
+        run: |
+          # Polls a ping via the runner-bundled mongosh isn't always available;
+          # use docker exec on the service container instead. The container
+          # is named after the service key; GH Actions exposes it via the
+          # job's docker network.
+          for i in $(seq 1 30); do
+            if docker ps --filter "ancestor=mongo:7" --format '{{.Names}}' | head -1 | xargs -I{} docker exec {} mongosh --quiet --eval 'db.runCommand({ ping: 1 })' >/dev/null 2>&1; then
+              echo "mongo is ready"
+              break
+            fi
+            echo "Waiting for mongo... ($i/30)"
+            sleep 2
+          done
       - name: cargo check
         working-directory: app/server
         run: cargo check --all-targets
       - name: cargo clippy
         working-directory: app/server
         run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        working-directory: app/server
+        # --test-threads=1: same workaround as other DBs.
+        run: cargo test --all-targets -- --test-threads=1
 
   # ---- Aggregator ---------------------------------------------------
   # Single status check for branch-protection use even though the work
