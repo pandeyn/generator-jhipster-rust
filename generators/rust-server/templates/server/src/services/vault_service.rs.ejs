@@ -841,6 +841,125 @@ mod tests {
                 result.err()
             );
         }
+
+        // ---- Circuit-breaker mapping arms ----
+        // execute_with_circuit_breaker has 5 arms (CircuitOpen, HalfOpenRejected,
+        // Timeout, RequestFailed, NotEnabled). Cover the three reachable in
+        // practice: RequestFailed (inner errors map to ConnectionError),
+        // CircuitOpen (trip the CB then call again), Timeout (CB's internal
+        // timeout fires before the upstream replies). HalfOpenRejected requires
+        // wait-duration elapsed + re-entrant call state which is hard to
+        // synthesize deterministically without time mocking; NotEnabled is a
+        // panic arm that's unreachable since execute_with_circuit_breaker only
+        // calls cb.execute() inside the `if cb.is_enabled()` guard.
+
+        use crate::config::CircuitBreakerConfig;
+        use crate::services::CircuitBreakerService;
+        use std::time::Duration;
+
+        fn cb_with(window: usize, threshold: f64, timeout_ms: u64) -> Arc<CircuitBreakerService> {
+            Arc::new(CircuitBreakerService::new(CircuitBreakerConfig {
+                enabled: true,
+                failure_rate_threshold: threshold,
+                sliding_window_size: window,
+                wait_duration_in_open_secs: 60,
+                permitted_calls_in_half_open: 1,
+                request_timeout_ms: timeout_ms,
+            }))
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_inner_failure_with_cb_maps_to_connection_error() {
+            // First inner-failure with CB enabled: CB wraps as RequestFailed,
+            // vault maps to ConnectionError. (The original ReadError type is
+            // lost when CB is in the path — documented behavior.)
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/broken"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("upstream down"))
+                .mount(&server)
+                .await;
+
+            let cb = cb_with(10, 0.99, 5000);
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, Some(cb)).await.unwrap();
+            let result = svc.read_secrets("secret/data/broken").await;
+            assert!(
+                matches!(result, Err(VaultError::ConnectionError(_))),
+                "expected ConnectionError (CB RequestFailed -> ConnectionError), got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_after_cb_opens_returns_circuit_breaker_open() {
+            // Trip the CB with 2 failures in a sliding-window of 2 (50%+ threshold),
+            // then call once more. Third call hits the open circuit and gets
+            // CircuitBreakerError::CircuitOpen, which vault maps to
+            // VaultError::CircuitBreakerOpen.
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/dying"))
+                .respond_with(ResponseTemplate::new(500))
+                .mount(&server)
+                .await;
+
+            let cb = cb_with(2, 0.5, 5000);
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, Some(cb)).await.unwrap();
+            // Two failures fill the window and trip the breaker.
+            let _ = svc.read_secrets("secret/data/dying").await;
+            let _ = svc.read_secrets("secret/data/dying").await;
+            // Third call: CB is open, no HTTP sent.
+            let result = svc.read_secrets("secret/data/dying").await;
+            assert!(
+                matches!(result, Err(VaultError::CircuitBreakerOpen(ref m)) if m.contains("vault")),
+                "expected CircuitBreakerOpen mentioning vault service, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_cb_timeout_maps_to_connection_error() {
+            // CB request_timeout_ms is 50; the upstream takes 500ms to reply.
+            // CB's tokio::time::timeout fires first, returning
+            // CircuitBreakerError::Timeout. Vault maps that to ConnectionError
+            // with a "timed out" message.
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/slow"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_json(json!({"data": {"data": {"k": "v"}}}))
+                        .set_delay(Duration::from_millis(500)),
+                )
+                .mount(&server)
+                .await;
+
+            let cb = cb_with(10, 0.99, 50);
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, Some(cb)).await.unwrap();
+            let result = svc.read_secrets("secret/data/slow").await;
+            assert!(
+                matches!(result, Err(VaultError::ConnectionError(ref m)) if m.contains("timed out")),
+                "expected ConnectionError citing timeout, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- start_token_renewal ----
+
+        #[tokio::test]
+        async fn test_start_token_renewal_returns_early_when_auto_renew_disabled() {
+            // With auto_renew=false the function logs + returns without
+            // spawning the background loop. Covers the early-exit branch.
+            let mut cfg = read_config("http://127.0.0.1:1".to_string(), "t");
+            cfg.auto_renew = false;
+            let svc = Arc::new(VaultService::new(cfg, None).await.unwrap());
+            let cancel = tokio_util::sync::CancellationToken::new();
+            // Should be effectively a no-op; doesn't panic, doesn't hang.
+            svc.start_token_renewal(cancel);
+        }
     }
 <%_ } _%>
 }
