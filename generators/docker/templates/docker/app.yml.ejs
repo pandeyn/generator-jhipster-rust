@@ -122,19 +122,32 @@ services:
       timeout: 5s
       retries: 10
 <%_ } _%>
-<%_ if (isSqlite) { _%>
-
-volumes:
-  # Track 1-a.4 fix (2026-06-07): named volume for the sqlite DB file
-  # at /app/target/db/<baseName>.db. Bind mounts to non-existent host
-  # dirs get created as root, preventing the container's uid 1001 user
-  # from writing. Named volumes inherit the container's user perms.
-  sqlite-data:
-<%_ } _%>
 # Track 1-a.4.1 (2026-06-07): postgres/mysql/mongo DB services are
 # provided by upstream JHipster's docker generator (via extends: in
 # this file). Previously we declared our own duplicates which conflicted
 # on host ports and had different credentials. The `extends:` blocks
 # upstream injects after our template renders bring in postgresql.yml /
 # mysql.yml / mongodb.yml from the same docker/ directory; those files
-# carry the actual service config (image, ports, volumes, healthcheck).
+# carry the actual service config (image, ports, healthcheck).
+#
+# Track 1-a.4.2 fix (2026-06-07): docker compose's `extends:` mechanism
+# does NOT inherit top-level volume declarations from the extended file.
+# Upstream's mysql.yml and mongodb.yml reference `mysql_data:` /
+# `mongodb_data:` volumes inside their service block, but since OUR
+# app.yml is the compose file being run, the volume names must be
+# declared HERE. Without these, docker compose refuses to start with:
+#     service "mysql" refers to undefined volume mysql_data: invalid compose project
+# Upstream's postgresql.yml has its volume mount commented out, so no
+# postgres volume is needed.
+volumes:
+<%_ if (isSqlite) { _%>
+  # Track 1-a.4 fix (2026-06-07): named volume for the sqlite DB file
+  # at /app/target/db/<baseName>.db. Bind mounts to non-existent host
+  # dirs get created as root, preventing the container's uid 1001 user
+  # from writing. Named volumes inherit the container's user perms.
+  sqlite-data:
+<%_ } else if (isMysql) { _%>
+  mysql_data:
+<%_ } else if (isMongodb) { _%>
+  mongodb_data:
+<%_ } _%>
