@@ -20,8 +20,8 @@ name: E2E Integration Matrix
 #   1-a.1 — generate + cargo check + cargo clippy on all 7 (PR #24)
 #   1-a.2 — cargo test per scaffold with DB service containers:
 #     1-a.2.0 — sqlite (PR #25)
-#     1-a.2.1 — postgres scaffolds (this PR)
-#     1-a.2.2 — mysql scaffold (next)
+#     1-a.2.1 — postgres scaffolds (PR #26)
+#     1-a.2.2 — mysql scaffold (this PR)
 #     1-a.2.3 — mongodb scaffolds (next)
 #   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
 #   1-a.4 — docker-compose up + /health probe
@@ -194,9 +194,9 @@ jobs:
         run: cargo test --all-targets -- --test-threads=1
 
   # ---- e2e-mysql ----------------------------------------------------
-  # No service container yet — cargo test wiring lands in 1-a.2.2. For
-  # now this job runs generate + check + clippy only, mirroring the
-  # pre-PR-#25 e2e-matrix behavior for the mysql scaffold.
+  # Mirrors e2e-postgres in shape: per-matrix-entry mysql service
+  # container, TEST_DATABASE_URL env, scaffold's test_utils auto-creates
+  # the test DB via maintenance connection.
   e2e-mysql:
     name: ${{ matrix.scaffold }} (mysql)
     runs-on: ubuntu-latest
@@ -210,6 +210,22 @@ jobs:
       matrix:
         scaffold:
           - mono-mysql-oauth2-vue
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: mysql
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/jhipster_rust_test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/jhipster_rust_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -237,12 +253,25 @@ jobs:
           test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
           test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
           echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
+      - name: Wait for mysql readiness
+        # Same belt-and-suspenders as postgres — services: health-cmd handles
+        # cold-runner race but cargo test's first connection happens fast
+        # enough to occasionally beat it.
+        run: |
+          until mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -proot --silent; do
+            echo "Waiting for mysql..."
+            sleep 1
+          done
       - name: cargo check
         working-directory: app/server
         run: cargo check --all-targets
       - name: cargo clippy
         working-directory: app/server
         run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        working-directory: app/server
+        # --test-threads=1: same workaround as postgres + canonical scaffolds.
+        run: cargo test --all-targets -- --test-threads=1
 
   # ---- e2e-mongo ----------------------------------------------------
   # No service container yet — cargo test wiring lands in 1-a.2.3.
