@@ -95,7 +95,10 @@ impl VaultService {
 
                 Self::approle_login_static(&client, &config.addr, &role_id, &secret_id).await?
             }
-            "token" | _ => {
+            // "token" is the documented default; any other value also falls
+            // back to token auth. Clippy 1.96+ rejects the explicit `"token" |
+            // _` pattern as redundant since the wildcard already covers it.
+            _ => {
                 config.token.clone()
                     .ok_or_else(|| VaultError::AuthError("VAULT_TOKEN is required for token auth".to_string()))?
             }
