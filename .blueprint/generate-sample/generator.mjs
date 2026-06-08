@@ -56,10 +56,22 @@ export default class extends BaseGenerator {
             const jdlFile = `${sampleFile}.jdl`;
             this.copyTemplate(join(sampleFolder, jdlFile), jdlFile, { noGlob: true });
           } else if (sampleType === 'yo-rc') {
-            this.copyTemplate('**', '', {
-              fromBasePath: this.templatePath(sampleFolder, sampleFile),
-              globOptions: { dot: true },
-            });
+            // Phase 3a fix (2026-06-07): mem-fs-editor's copyTemplate('**', ...)
+            // misfires here because its glob path runs multimatch against every
+            // path in the in-memory store; an absolute destination-side store
+            // entry like `<cwd>/package.json` matches `**` and gets resolved as
+            // a non-existent source ("Trying to copy from a source that does
+            // not exist"). Enumerating files on disk and copying each by name
+            // with no globOptions takes the preferFiles fast path, which never
+            // runs the multimatch step. Limits sample contents to .yo-rc.json
+            // and .jhipster/*.json — the only structure yo-rc samples need.
+            const fromDir = this.templatePath(sampleFolder, sampleFile);
+            this.copyTemplate(join(fromDir, '.yo-rc.json'), '.yo-rc.json', { noGlob: true });
+            const entityDir = join(fromDir, '.jhipster');
+            const entityEntries = await readdir(entityDir).catch(() => []);
+            for (const entry of entityEntries) {
+              this.copyTemplate(join(entityDir, entry), join('.jhipster', entry), { noGlob: true });
+            }
           }
         }
       },
