@@ -139,6 +139,7 @@ services:
 #     service "mysql" refers to undefined volume mysql_data: invalid compose project
 # Upstream's postgresql.yml has its volume mount commented out, so no
 # postgres volume is needed.
+<%_ if (isSqlite || isMysql || isMongodb) { _%>
 volumes:
 <%_ if (isSqlite) { _%>
   # Track 1-a.4 fix (2026-06-07): named volume for the sqlite DB file
@@ -150,4 +151,5 @@ volumes:
   mysql_data:
 <%_ } else if (isMongodb) { _%>
   mongodb_data:
+<%_ } _%>
 <%_ } _%>
