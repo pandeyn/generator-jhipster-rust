@@ -22,7 +22,11 @@ name: E2E Integration Matrix
 #     1-a.2.0 — sqlite (PR #25)
 #     1-a.2.1 — postgres scaffolds (PR #26)
 #     1-a.2.2 — mysql scaffold (PR #27)
-#     1-a.2.3 — mongodb scaffolds (this PR)
+#     1-a.2.3 — mongodb scaffolds (PR #28)
+#   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
+#           (this PR; also includes the diesel.toml fix that restores
+#           incremental `jhipster jdl` for ALL users, not just CI —
+#           see diesel.toml.ejs for the rationale)
 #   1-a.3 — entity regeneration via JDL fixture + cargo check after regen
 #   1-a.4 — docker-compose up + /health probe
 #   1-a.5 — Cypress for monolith + gateway scaffolds
@@ -98,8 +102,23 @@ jobs:
       - name: cargo clippy
         working-directory: app/server
         run: cargo clippy --all-targets -- -D warnings
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        # The blueprint's source.addEntityToRustSchema injects per-entity
+        # `diesel::table!` blocks via needle markers in schema.rs. Mongo
+        # scaffolds skip the diesel path entirely; the entity templates
+        # still emit Author/Book/Tag models + handlers + services.
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: cargo check after entity regen
+        working-directory: app/server
+        run: cargo check --all-targets
       - name: cargo test
         working-directory: app/server
+        # Runs against the post-import scaffold (initial users/authorities
+        # tables + the new Author/Book/Tag entities). --test-threads=1
+        # mirrors samples.yml's canonical-scaffold workaround.
         run: cargo test --all-targets -- --test-threads=1
 
   # ---- e2e-postgres -------------------------------------------------
@@ -185,6 +204,14 @@ jobs:
       - name: cargo clippy
         working-directory: app/server
         run: cargo clippy --all-targets -- -D warnings
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: cargo check after entity regen
+        working-directory: app/server
+        run: cargo check --all-targets
       - name: cargo test
         working-directory: app/server
         # --test-threads=1: same workaround samples.yml uses for the
@@ -268,6 +295,14 @@ jobs:
       - name: cargo clippy
         working-directory: app/server
         run: cargo clippy --all-targets -- -D warnings
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: cargo check after entity regen
+        working-directory: app/server
+        run: cargo check --all-targets
       - name: cargo test
         working-directory: app/server
         # --test-threads=1: same workaround as postgres + canonical scaffolds.
@@ -352,6 +387,14 @@ jobs:
       - name: cargo clippy
         working-directory: app/server
         run: cargo clippy --all-targets -- -D warnings
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: cargo check after entity regen
+        working-directory: app/server
+        run: cargo check --all-targets
       - name: cargo test
         working-directory: app/server
         # --test-threads=1: same workaround as other DBs.

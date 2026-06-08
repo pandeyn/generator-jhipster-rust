@@ -1,0 +1,35 @@
+/*
+ * Track 1-a.3 entity regeneration fixture.
+ *
+ * Three entities exercising the relationship templates:
+ *   - Author -> Book  : OneToMany (Author hasMany Book; Book belongsTo Author derives M:1)
+ *   - Book   <-> Tag  : ManyToMany (join-table on SQL, array-field on Mongo)
+ *
+ * Used by .github/workflows/e2e.yml's "Import entity JDL" step against
+ * each of the 7 matrix scaffolds. After import, cargo check + cargo test
+ * verify the generated entity code compiles and existing tests still
+ * pass — confirming the entity-template pipeline survives across the
+ * matrix dimensions (sql vs mongo, jwt vs oauth2, monolith vs microservice
+ * vs gateway).
+ */
+
+entity Author {
+  name String required
+}
+
+entity Book {
+  title String required
+  isbn String
+}
+
+entity Tag {
+  name String required
+}
+
+relationship OneToMany {
+  Author{books} to Book{author}
+}
+
+relationship ManyToMany {
+  Book{tags} to Tag{books}
+}
