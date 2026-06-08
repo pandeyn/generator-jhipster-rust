@@ -33,8 +33,15 @@ services:
       # task definition, etc.).
       - APP_ENV=development
 <%_ if (isMongodb) { _%>
-      # Track 1-a.4.1 fix: connect to the upstream-managed mongodb service.
-      - MONGODB_URI=mongodb://mongodb:27017
+      # Track 1-a.4.3 fix (2026-06-08): include `?directConnection=true`.
+      # Upstream's mongodb.yml initiates rs0 with `host: 'localhost:27017'`
+      # — that works for mongo's own healthcheck but breaks any other
+      # container's client. The client follows the replSet topology and
+      # tries to connect to literal 'localhost:27017', resolving to the
+      # client container itself (no mongo there → connection refused).
+      # `directConnection=true` tells the driver to use the URI's host
+      # directly and ignore replSet-advertised addresses.
+      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - MONGODB_DATABASE=<%= baseName.toLowerCase() %>
 <%_ } else if (isPostgresql) { _%>
       # Track 1-a.4.1 fix: connect to upstream's `postgresql` service
