@@ -12,7 +12,15 @@ services:
   app:
     image: <%= baseName.toLowerCase() %>
     build:
-      context: .
+      # Track 1-a.4 fix (2026-06-07): docker compose resolves `context:`
+      # relative to the COMPOSE FILE's directory, not the user's pwd.
+      # This file lives at docker/app.yml, so `context: .` resolved to
+      # docker/ — but the blueprint emits Dockerfile at the project
+      # root (one level up). Result: `docker compose -f docker/app.yml
+      # up --build` failed for every downstream user with:
+      #     open Dockerfile: no such file or directory
+      # `context: ..` points back at the project root.
+      context: ..
       dockerfile: Dockerfile
     environment:
       - RUST_LOG=info
