@@ -1,0 +1,150 @@
+name: E2E Integration Matrix
+
+# Track 1-a (v1.0.1, sub-phases 1-a.0 + 1-a.1 landed 2026-06-07):
+# Validates that the generator's output — actual generated scaffolds — compiles
+# and lints clean across the 7 representative dimension combinations the
+# v1.0.0 plan locked. Distinct from samples.yml: that workflow runs on every
+# PR against 3 canonical scaffolds (fast template-correctness gate). e2e.yml
+# runs the broader matrix on opt-in PRs (via the `e2e` label), manual dispatch,
+# and a nightly schedule. The nightly run is the basis for the future release
+# gate (locked decision #4: green within 24 h of release commit).
+#
+# Sub-phase progression (each is its own PR landing on top of this):
+#   1-a.0 — workflow skeleton + 5 new yo-rc scaffolds (this file)
+#   1-a.1 — generate + cargo check + cargo clippy on all 7 (this file)
+#   1-a.2 — add cargo test per scaffold with DB service containers
+#   1-a.3 — add entity regeneration via JDL fixture + cargo check after regen
+#   1-a.4 — add docker-compose up + /health probe
+#   1-a.5 — add Cypress for monolith + gateway scaffolds
+#   1-a.6 — add per-scaffold tarpaulin (informational artifact, NOT gating
+#           per locked decision #3 — coverage gating stays on samples.yml)
+
+on:
+  # Opt-in on PRs via the `e2e` label. The full matrix is expensive
+  # (~10-15 min wall-clock when fully loaded); not every PR needs it.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  # Manual dispatch — for ad-hoc runs from the Actions tab.
+  workflow_dispatch:
+  # Nightly at 08:00 UTC. Pre-release gate (locked decision #4) checks
+  # that the most recent nightly run is green within 24 h of the release
+  # commit. Wire-up of the release gate itself is deferred to release prep.
+  schedule:
+    - cron: '0 8 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-matrix:
+    name: ${{ matrix.scaffold }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Gate PR runs on the `e2e` label so the workflow only burns CI minutes
+    # when explicitly requested. workflow_dispatch and schedule bypass this.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    strategy:
+      fail-fast: false
+      # Cap parallelism at 4 per the v1.0.0 plan (free-tier GH Actions limit).
+      max-parallel: 4
+      matrix:
+        # Test matrix locked 2026-05-10. Covers all 3 app types × all 4 DBs ×
+        # auth/SD/frontend variety. See v1.0.0 plan §"Test matrix" for the
+        # full rationale.
+        scaffold:
+          # 1. Monolith + sqlite + jwt + Angular
+          - mono-sqlite-jwt-ng
+          # 2. Monolith + postgresql + jwt + React
+          - mono-pg-jwt-react
+          # 3. Monolith + mysql + oauth2 + Vue
+          - mono-mysql-oauth2-vue
+          # 4. Monolith + mongodb + jwt + Angular
+          - mono-mongo-jwt-ng
+          # 5. Microservice + postgresql + jwt + Consul + Circuit Breaker (canonical, also in samples.yml)
+          - microservice-cb
+          # 6. Microservice + mongodb + oauth2 + Consul
+          - ms-mongo-oauth2-consul
+          # 7. Gateway + postgresql + jwt + Consul + Circuit Breaker (also in samples.yml)
+          - gateway-cb
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      # Pinned to commit SHAs to defend against tag-rewriting supply-chain
+      # attacks. Same pins as samples.yml; dependabot updates both together.
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          # One cache key per scaffold so each scaffold's target/ stays warm
+          # across runs without thrashing.
+          key: e2e-${{ matrix.scaffold }}
+          workspaces: |
+            app/server -> target
+
+      - name: Install blueprint dependencies
+        run: npm ci
+
+      - name: Generate scaffold
+        # Local-CLI invocation (same pattern as samples.yml — see that file
+        # for the full rationale on why this isn't `npx yo`).
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+
+      - name: Sanity-check generated tree
+        working-directory: app
+        run: |
+          test -f server/Cargo.toml || { echo "FAIL: server/Cargo.toml missing"; exit 1; }
+          test -f server/src/main.rs || { echo "FAIL: server/src/main.rs missing"; exit 1; }
+          echo "Generated $(find server/src -name '*.rs' | wc -l) Rust files."
+
+      - name: cargo check
+        working-directory: app/server
+        # Runs in dev profile — faster than release and catches the same
+        # generator-template-emits-uncompilable-code regressions. samples.yml's
+        # canonical scaffold uses release-mode clippy because it doubles as
+        # the coverage gate's compile step; e2e.yml needs broader-matrix
+        # signal more than it needs release-mode-specific lint passes.
+        run: cargo check --all-targets
+
+      - name: cargo clippy
+        working-directory: app/server
+        # -D warnings turns lints into hard errors. Catches things like the
+        # clippy 1.96 wildcard_in_or_patterns regression that surfaced in
+        # PR #20 — that was a latent bug in vault_service that only this
+        # broader matrix would have caught earlier.
+        run: cargo clippy --all-targets -- -D warnings
+
+  # Aggregator job — used to require a single status check in branch
+  # protection rules even though the matrix has many entries.
+  e2e-check:
+    name: All E2E Scaffolds Pass
+    runs-on: ubuntu-latest
+    needs: [e2e-matrix]
+    # Mirror the same opt-in gate as the matrix.
+    if: |
+      always() && (
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'schedule' ||
+        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+      )
+    steps:
+      - name: Verify all scaffolds passed
+        run: |
+          if [ "${{ needs.e2e-matrix.result }}" != "success" ]; then
+            echo "One or more e2e scaffolds failed: ${{ needs.e2e-matrix.result }}"
+            exit 1
+          fi
+          echo "All 7 scaffolds passed."

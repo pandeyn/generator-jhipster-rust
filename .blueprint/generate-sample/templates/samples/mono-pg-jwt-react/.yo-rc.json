@@ -1,0 +1,24 @@
+{
+  "generator-jhipster": {
+    "applicationType": "monolith",
+    "authenticationType": "jwt",
+    "backendType": "Rust",
+    "baseName": "monoPg",
+    "buildTool": "maven",
+    "cacheProvider": "no",
+    "clientFramework": "react",
+    "databaseType": "sql",
+    "devDatabaseType": "postgresql",
+    "jhipsterVersion": "9.0.0",
+    "packageName": "com.mycompany.monopg",
+    "prodDatabaseType": "postgresql",
+    "skipClient": true,
+    "skipJhipsterDependencies": true,
+    "testFrameworks": [],
+    "withAdminUi": false
+  },
+  "generator-jhipster-rust": {
+    "blueprintVersion": "1.0.0",
+    "rustVersion": "1.75.0"
+  }
+}

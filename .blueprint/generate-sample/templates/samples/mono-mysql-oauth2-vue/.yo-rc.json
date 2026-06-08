@@ -1,0 +1,24 @@
+{
+  "generator-jhipster": {
+    "applicationType": "monolith",
+    "authenticationType": "oauth2",
+    "backendType": "Rust",
+    "baseName": "monoMysql",
+    "buildTool": "maven",
+    "cacheProvider": "no",
+    "clientFramework": "vue",
+    "databaseType": "sql",
+    "devDatabaseType": "mysql",
+    "jhipsterVersion": "9.0.0",
+    "packageName": "com.mycompany.monomysql",
+    "prodDatabaseType": "mysql",
+    "skipClient": true,
+    "skipJhipsterDependencies": true,
+    "testFrameworks": [],
+    "withAdminUi": false
+  },
+  "generator-jhipster-rust": {
+    "blueprintVersion": "1.0.0",
+    "rustVersion": "1.75.0"
+  }
+}
