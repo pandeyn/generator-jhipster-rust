@@ -37,9 +37,9 @@ CREATE TABLE <%= entityTableName %> (
     <%= field.fieldNameUnderscored %> <%= field.mysqlColumnType %><%- field.fieldValidationRequired ? ' NOT NULL' : '' %><%- field.fieldValidationUnique ? ' UNIQUE' : '' %><%_ } _%><%_ for (const relationship of relationships.filter(r => r.relationshipType === 'many-to-one' || (r.relationshipType === 'one-to-one' && r.ownerSide))) { _%>,
     <%= relationship.relationshipFieldName %>_id INTEGER REFERENCES <%= relationship.otherEntityTableName %>(id)<%_ } _%><%_ if (!hasJdlCreatedBy) { _%>,
     created_by VARCHAR(50)<%_ } _%><%_ if (!hasJdlCreatedDate) { _%>,
-    created_date DATETIME<%_ } _%><%_ if (!hasJdlLastModifiedBy) { _%>,
+    created_date DATETIME(6)<%_ } _%><%_ if (!hasJdlLastModifiedBy) { _%>,
     last_modified_by VARCHAR(50)<%_ } _%><%_ if (!hasJdlLastModifiedDate) { _%>,
-    last_modified_date DATETIME<%_ } _%>
+    last_modified_date DATETIME(6)<%_ } _%>
 );
 
 -- Create indexes

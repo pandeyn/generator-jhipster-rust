@@ -95,14 +95,14 @@ CREATE TABLE users (
 <%_ if (enableEmail) { _%>
     activation_key VARCHAR(20),
     reset_key VARCHAR(20),
-    reset_date DATETIME,
+    reset_date DATETIME(6),
 <%_ } _%>
     lang_key VARCHAR(10),
     image_url VARCHAR(256),
     created_by VARCHAR(50),
-    created_date DATETIME,
+    created_date DATETIME(6),
     last_modified_by VARCHAR(50),
-    last_modified_date DATETIME
+    last_modified_date DATETIME(6)
 );
 
 -- Create user_authorities join table
