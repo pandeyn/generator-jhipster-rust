@@ -1,0 +1,26 @@
+{
+  "generator-jhipster": {
+    "applicationType": "microservice",
+    "authenticationType": "jwt",
+    "backendType": "Rust",
+    "baseName": "cbMicroservice",
+    "buildTool": "maven",
+    "cacheProvider": "no",
+    "databaseType": "sql",
+    "devDatabaseType": "postgresql",
+    "entities": ["Product", "Category"],
+    "jhipsterVersion": "9.0.0",
+    "packageName": "com.mycompany.cbmicroservice",
+    "prodDatabaseType": "postgresql",
+    "secretsManagement": "vault",
+    "serviceDiscoveryType": "consul",
+    "skipClient": true,
+    "skipJhipsterDependencies": true,
+    "testFrameworks": [],
+    "withAdminUi": false
+  },
+  "generator-jhipster-rust": {
+    "blueprintVersion": "1.0.0",
+    "rustVersion": "1.75.0"
+  }
+}

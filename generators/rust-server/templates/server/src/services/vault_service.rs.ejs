@@ -403,15 +403,441 @@ pub enum VaultError {
 mod tests {
     use super::*;
 
+    fn token_config(token: Option<&str>) -> VaultConfig {
+        VaultConfig {
+            enabled: true,
+            addr: "http://127.0.0.1:1".to_string(),
+            auth_method: "token".to_string(),
+            token: token.map(String::from),
+            role_id: None,
+            secret_id: None,
+            secret_path: "secret/data/test".to_string(),
+            auto_renew: false,
+        }
+    }
+
     #[test]
     fn test_vault_error_display() {
-        let err = VaultError::ConnectionError("timeout".to_string());
-        assert_eq!(err.to_string(), "Connection error: timeout");
-
-        let err = VaultError::AuthError("invalid token".to_string());
-        assert_eq!(err.to_string(), "Authentication error: invalid token");
-
-        let err = VaultError::PermissionError("denied".to_string());
-        assert_eq!(err.to_string(), "Permission denied: denied");
+        assert_eq!(
+            VaultError::ConnectionError("timeout".to_string()).to_string(),
+            "Connection error: timeout"
+        );
+        assert_eq!(
+            VaultError::AuthError("invalid token".to_string()).to_string(),
+            "Authentication error: invalid token"
+        );
+        assert_eq!(
+            VaultError::PermissionError("denied".to_string()).to_string(),
+            "Permission denied: denied"
+        );
+        assert_eq!(
+            VaultError::ReadError("read fail".to_string()).to_string(),
+            "Secret read error: read fail"
+        );
+        assert_eq!(
+            VaultError::NotFound("missing".to_string()).to_string(),
+            "Not found: missing"
+        );
+        assert_eq!(
+            VaultError::ParseError("bad json".to_string()).to_string(),
+            "Parse error: bad json"
+        );
+<%_ if (circuitBreakerEnabled) { _%>
+        assert_eq!(
+            VaultError::CircuitBreakerOpen("vault".to_string()).to_string(),
+            "Circuit breaker open: vault"
+        );
+<%_ } _%>
     }
+
+    #[tokio::test]
+    async fn test_new_with_token_auth_succeeds() {
+        let cfg = token_config(Some("static-token"));
+<%_ if (circuitBreakerEnabled) { _%>
+        let result = VaultService::new(cfg, None).await;
+<%_ } else { _%>
+        let result = VaultService::new(cfg).await;
+<%_ } _%>
+        let svc = result.expect("token auth should succeed when token is set");
+        assert_eq!(*svc.token.read().await, "static-token");
+        assert_eq!(svc.config().secret_path, "secret/data/test");
+    }
+
+    #[tokio::test]
+    async fn test_new_with_token_auth_missing_token_fails() {
+        let cfg = token_config(None);
+<%_ if (circuitBreakerEnabled) { _%>
+        let result = VaultService::new(cfg, None).await;
+<%_ } else { _%>
+        let result = VaultService::new(cfg).await;
+<%_ } _%>
+        assert!(
+            matches!(result, Err(VaultError::AuthError(ref m)) if m.contains("VAULT_TOKEN")),
+            "expected AuthError citing VAULT_TOKEN, got {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_new_with_approle_missing_role_id_fails() {
+        let mut cfg = token_config(None);
+        cfg.auth_method = "approle".to_string();
+        cfg.secret_id = Some("s".to_string());
+<%_ if (circuitBreakerEnabled) { _%>
+        let result = VaultService::new(cfg, None).await;
+<%_ } else { _%>
+        let result = VaultService::new(cfg).await;
+<%_ } _%>
+        assert!(
+            matches!(result, Err(VaultError::AuthError(ref m)) if m.contains("VAULT_ROLE_ID")),
+            "expected AuthError citing VAULT_ROLE_ID, got {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_new_with_approle_missing_secret_id_fails() {
+        let mut cfg = token_config(None);
+        cfg.auth_method = "approle".to_string();
+        cfg.role_id = Some("r".to_string());
+<%_ if (circuitBreakerEnabled) { _%>
+        let result = VaultService::new(cfg, None).await;
+<%_ } else { _%>
+        let result = VaultService::new(cfg).await;
+<%_ } _%>
+        assert!(
+            matches!(result, Err(VaultError::AuthError(ref m)) if m.contains("VAULT_SECRET_ID")),
+            "expected AuthError citing VAULT_SECRET_ID, got {:?}",
+            result.err()
+        );
+    }
+
+<%_ if (circuitBreakerEnabled) { _%>
+    // Phase 3a (2026-06-07): wiremock-backed coverage of all HTTP-touching
+    // paths. Gated on circuitBreakerEnabled because the wiremock dev-dep is
+    // gated there too. Pattern mirrors resilient_http_client (Phase 2c).
+    mod wiremock_tests {
+        use super::*;
+        use serde_json::json;
+        use wiremock::matchers::{body_json, header, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn approle_config(addr: String, role_id: &str, secret_id: &str) -> VaultConfig {
+            VaultConfig {
+                enabled: true,
+                addr,
+                auth_method: "approle".to_string(),
+                token: None,
+                role_id: Some(role_id.to_string()),
+                secret_id: Some(secret_id.to_string()),
+                secret_path: "secret/data/test".to_string(),
+                auto_renew: false,
+            }
+        }
+
+        fn read_config(addr: String, token: &str) -> VaultConfig {
+            VaultConfig {
+                enabled: true,
+                addr,
+                auth_method: "token".to_string(),
+                token: Some(token.to_string()),
+                role_id: None,
+                secret_id: None,
+                secret_path: "secret/data/myapp".to_string(),
+                auto_renew: false,
+            }
+        }
+
+        #[tokio::test]
+        async fn test_approle_login_returns_client_token_and_asserts_body() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/v1/auth/approle/login"))
+                .and(body_json(json!({"role_id":"role-abc","secret_id":"secret-xyz"})))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "auth": {
+                        "client_token": "approle-token",
+                        "lease_duration": 3600,
+                        "renewable": true,
+                    }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = approle_config(server.uri(), "role-abc", "secret-xyz");
+            let svc = VaultService::new(cfg, None)
+                .await
+                .expect("AppRole login should succeed on 200");
+            assert_eq!(*svc.token.read().await, "approle-token");
+        }
+
+        #[tokio::test]
+        async fn test_approle_login_4xx_returns_auth_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/v1/auth/approle/login"))
+                .respond_with(ResponseTemplate::new(401).set_body_string("invalid role"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = approle_config(server.uri(), "r", "s");
+            let result = VaultService::new(cfg, None).await;
+            assert!(
+                matches!(result, Err(VaultError::AuthError(ref m)) if m.contains("HTTP 401")),
+                "expected AuthError citing HTTP 401, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_approle_login_connection_error_returns_connection_error() {
+            // Guaranteed-unreachable URL avoids MockServer drop races (Phase 2c
+            // pattern): port 1 always refuses TCP, no lingering listener.
+            let cfg = approle_config("http://127.0.0.1:1".to_string(), "r", "s");
+            let result = VaultService::new(cfg, None).await;
+            assert!(
+                matches!(result, Err(VaultError::ConnectionError(_))),
+                "expected ConnectionError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_approle_login_malformed_json_returns_parse_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/v1/auth/approle/login"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = approle_config(server.uri(), "r", "s");
+            let result = VaultService::new(cfg, None).await;
+            assert!(
+                matches!(result, Err(VaultError::ParseError(_))),
+                "expected ParseError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_happy_path_returns_kv_pairs_and_asserts_header() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/myapp"))
+                .and(header("X-Vault-Token", "my-vault-token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "data": {
+                        "data": {
+                            "db_password": "p@ss",
+                            "api_key": "sk-123",
+                            "nested": { "ignored": true }
+                        }
+                    }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "my-vault-token");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let secrets = svc.read_secrets("secret/data/myapp").await.unwrap();
+            assert_eq!(secrets.get("db_password"), Some(&"p@ss".to_string()));
+            assert_eq!(secrets.get("api_key"), Some(&"sk-123".to_string()));
+            // Non-string values (the `nested` object) get filtered out.
+            assert!(!secrets.contains_key("nested"));
+            assert_eq!(secrets.len(), 2);
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_404_returns_empty_map() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/missing"))
+                .respond_with(ResponseTemplate::new(404))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let secrets = svc.read_secrets("secret/data/missing").await.unwrap();
+            assert!(secrets.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_403_returns_permission_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/forbidden"))
+                .respond_with(ResponseTemplate::new(403))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.read_secrets("secret/data/forbidden").await;
+            assert!(
+                matches!(result, Err(VaultError::PermissionError(_))),
+                "expected PermissionError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_5xx_returns_read_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/broken"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("vault down"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.read_secrets("secret/data/broken").await;
+            assert!(
+                matches!(result, Err(VaultError::ReadError(ref m)) if m.contains("HTTP 500")),
+                "expected ReadError citing HTTP 500, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_connection_error() {
+            // Build svc against a real mock to authenticate, then point reads
+            // at an unreachable URL. Token auth doesn't make network calls so
+            // we can use the unreachable URL directly.
+            let cfg = read_config("http://127.0.0.1:1".to_string(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.read_secrets("secret/data/anything").await;
+            assert!(
+                matches!(result, Err(VaultError::ConnectionError(_))),
+                "expected ConnectionError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_secrets_malformed_json_returns_parse_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/garbage"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.read_secrets("secret/data/garbage").await;
+            assert!(
+                matches!(result, Err(VaultError::ParseError(_))),
+                "expected ParseError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_read_default_secrets_uses_configured_path() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/secret/data/myapp"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "data": { "data": { "k": "v" } }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let secrets = svc.read_default_secrets().await.unwrap();
+            assert_eq!(secrets.get("k"), Some(&"v".to_string()));
+        }
+
+        #[tokio::test]
+        async fn test_renew_token_happy_path_updates_token_and_returns_lease() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/v1/auth/token/renew-self"))
+                .and(header("X-Vault-Token", "original-token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "auth": {
+                        "client_token": "renewed-token",
+                        "lease_duration": 7200,
+                        "renewable": true,
+                    }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "original-token");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let lease = svc.renew_token().await.expect("renewal should succeed");
+            assert_eq!(lease, 7200);
+            assert_eq!(*svc.token.read().await, "renewed-token");
+        }
+
+        #[tokio::test]
+        async fn test_renew_token_4xx_returns_auth_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/v1/auth/token/renew-self"))
+                .respond_with(ResponseTemplate::new(403))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.renew_token().await;
+            assert!(
+                matches!(result, Err(VaultError::AuthError(ref m)) if m.contains("Token renewal failed")),
+                "expected AuthError citing renewal failure, got {:?}",
+                result.err()
+            );
+            // Token should be unchanged after a failed renewal.
+            assert_eq!(*svc.token.read().await, "t");
+        }
+
+        #[tokio::test]
+        async fn test_renew_token_connection_error() {
+            let cfg = read_config("http://127.0.0.1:1".to_string(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.renew_token().await;
+            assert!(
+                matches!(result, Err(VaultError::ConnectionError(_))),
+                "expected ConnectionError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_renew_token_malformed_json_returns_parse_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/v1/auth/token/renew-self"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let cfg = read_config(server.uri(), "t");
+            let svc = VaultService::new(cfg, None).await.unwrap();
+            let result = svc.renew_token().await;
+            assert!(
+                matches!(result, Err(VaultError::ParseError(_))),
+                "expected ParseError, got {:?}",
+                result.err()
+            );
+        }
+    }
+<%_ } _%>
 }

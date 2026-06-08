@@ -848,4 +848,718 @@ mod tests {
         let config = test_config();
         assert_eq!(config.consul_url(), "http://localhost:8500");
     }
+
+    #[test]
+    fn test_consul_error_display_covers_all_variants() {
+        assert_eq!(
+            ConsulError::ConnectionError("conn".to_string()).to_string(),
+            "Connection error: conn"
+        );
+        assert_eq!(
+            ConsulError::RegistrationError("reg".to_string()).to_string(),
+            "Service registration failed: reg"
+        );
+        assert_eq!(
+            ConsulError::DeregistrationError("dereg".to_string()).to_string(),
+            "Service deregistration failed: dereg"
+        );
+        assert_eq!(
+            ConsulError::DiscoveryError("disc".to_string()).to_string(),
+            "Service discovery failed: disc"
+        );
+        assert_eq!(
+            ConsulError::NoInstancesAvailable("svc".to_string()).to_string(),
+            "No healthy instances available for service: svc"
+        );
+        assert_eq!(
+            ConsulError::ConfigError("cfg".to_string()).to_string(),
+            "Configuration error: cfg"
+        );
+        assert_eq!(
+            ConsulError::ParseError("p".to_string()).to_string(),
+            "Parse error: p"
+        );
+<%_ if (circuitBreakerEnabled) { _%>
+        assert_eq!(
+            ConsulError::CircuitBreakerOpen("cb".to_string()).to_string(),
+            "Circuit breaker open: cb"
+        );
+<%_ } _%>
+    }
+
+    #[tokio::test]
+    async fn test_register_service_disabled_short_circuits_to_ok() {
+        let mut cfg = test_config();
+        cfg.register_service = false;
+<%_ if (circuitBreakerEnabled) { _%>
+        let svc = ConsulService::new(cfg, None);
+<%_ } else { _%>
+        let svc = ConsulService::new(cfg);
+<%_ } _%>
+        let result = svc.register_service("192.168.1.10", 8080).await;
+        assert!(result.is_ok(), "expected Ok when register_service=false, got {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_deregister_service_disabled_short_circuits_to_ok() {
+        let mut cfg = test_config();
+        cfg.register_service = false;
+<%_ if (circuitBreakerEnabled) { _%>
+        let svc = ConsulService::new(cfg, None);
+<%_ } else { _%>
+        let svc = ConsulService::new(cfg);
+<%_ } _%>
+        let result = svc.deregister_service().await;
+        assert!(result.is_ok(), "expected Ok when register_service=false, got {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_get_config_disabled_returns_none() {
+        let mut cfg = test_config();
+        cfg.enable_config = false;
+<%_ if (circuitBreakerEnabled) { _%>
+        let svc = ConsulService::new(cfg, None);
+<%_ } else { _%>
+        let svc = ConsulService::new(cfg);
+<%_ } _%>
+        let result = svc.get_config("any").await;
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[tokio::test]
+    async fn test_set_config_disabled_returns_config_error() {
+        let mut cfg = test_config();
+        cfg.enable_config = false;
+<%_ if (circuitBreakerEnabled) { _%>
+        let svc = ConsulService::new(cfg, None);
+<%_ } else { _%>
+        let svc = ConsulService::new(cfg);
+<%_ } _%>
+        let result = svc.set_config("k", "v").await;
+        assert!(
+            matches!(result, Err(ConsulError::ConfigError(ref m)) if m.contains("disabled")),
+            "expected ConfigError citing disabled, got {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_load_all_config_disabled_returns_empty_map() {
+        let mut cfg = test_config();
+        cfg.enable_config = false;
+<%_ if (circuitBreakerEnabled) { _%>
+        let svc = ConsulService::new(cfg, None);
+<%_ } else { _%>
+        let svc = ConsulService::new(cfg);
+<%_ } _%>
+        let result = svc.load_all_config("prefix").await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_watch_config_disabled_returns_none_and_zero_index() {
+        let mut cfg = test_config();
+        cfg.enable_config = false;
+<%_ if (circuitBreakerEnabled) { _%>
+        let svc = ConsulService::new(cfg, None);
+<%_ } else { _%>
+        let svc = ConsulService::new(cfg);
+<%_ } _%>
+        let (value, index) = svc.watch_config("any", 0).await.unwrap();
+        assert!(value.is_none());
+        assert_eq!(index, 0);
+    }
+
+<%_ if (circuitBreakerEnabled) { _%>
+    // Phase 3a (2026-06-07): wiremock-backed coverage of Consul HTTP-touching
+    // paths. Mirrors the Vault test layout in this same template's sibling.
+    mod wiremock_tests {
+        use super::*;
+        use base64::Engine;
+        use serde_json::json;
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        /// Build a ConsulConfig whose host/port point at the given mock server.
+        fn cfg_for(server: &MockServer) -> ConsulConfig {
+            let addr = server.address();
+            ConsulConfig {
+                host: addr.ip().to_string(),
+                port: addr.port(),
+                service_name: "test-service".to_string(),
+                service_id: "test-service-1".to_string(),
+                service_tags: vec!["test".to_string()],
+                health_check_interval: 10,
+                register_service: true,
+                enable_config: true,
+                acl_token: None,
+                config_key_prefix: "config/test".to_string(),
+                health_check_host: "localhost".to_string(),
+                config_profile: "dev".to_string(),
+                watch_enabled: true,
+                watch_interval: 55,
+            }
+        }
+
+        fn cfg_unreachable() -> ConsulConfig {
+            let mut cfg = test_config();
+            // Guaranteed connection-refused (Phase 2c pattern).
+            cfg.host = "127.0.0.1".to_string();
+            cfg.port = 1;
+            cfg
+        }
+
+        fn b64(s: &str) -> String {
+            base64::engine::general_purpose::STANDARD.encode(s)
+        }
+
+        // ---- register_service ----
+
+        #[tokio::test]
+        async fn test_register_service_happy_path() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/v1/agent/service/register"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            svc.register_service("192.168.1.10", 8080)
+                .await
+                .expect("registration should succeed on 200");
+        }
+
+        #[tokio::test]
+        async fn test_register_service_5xx_returns_registration_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/v1/agent/service/register"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("consul down"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.register_service("10.0.0.1", 8080).await;
+            assert!(
+                matches!(result, Err(ConsulError::RegistrationError(ref m)) if m.contains("HTTP 500")),
+                "expected RegistrationError citing HTTP 500, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_register_service_connection_error() {
+            let svc = ConsulService::new(cfg_unreachable(), None);
+            let result = svc.register_service("10.0.0.1", 8080).await;
+            assert!(
+                matches!(result, Err(ConsulError::ConnectionError(_))),
+                "expected ConnectionError, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- deregister_service ----
+
+        #[tokio::test]
+        async fn test_deregister_service_happy_path_uses_encoded_id() {
+            let server = MockServer::start().await;
+            // service_id is "test-service-1" -> no special chars, but verify
+            // the URL still hits the right endpoint.
+            Mock::given(method("PUT"))
+                .and(path("/v1/agent/service/deregister/test-service-1"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            svc.deregister_service()
+                .await
+                .expect("deregistration should succeed on 200");
+        }
+
+        #[tokio::test]
+        async fn test_deregister_service_5xx_returns_deregistration_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/v1/agent/service/deregister/test-service-1"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.deregister_service().await;
+            assert!(
+                matches!(result, Err(ConsulError::DeregistrationError(_))),
+                "expected DeregistrationError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_deregister_service_connection_error() {
+            let svc = ConsulService::new(cfg_unreachable(), None);
+            let result = svc.deregister_service().await;
+            assert!(
+                matches!(result, Err(ConsulError::ConnectionError(_))),
+                "expected ConnectionError, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- discover_service ----
+
+        #[tokio::test]
+        async fn test_discover_service_happy_path_returns_instances_and_caches() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/health/service/auth-svc"))
+                .and(query_param("passing", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {
+                        "Service": {
+                            "ID": "auth-1",
+                            "Service": "auth-svc",
+                            "Tags": ["prod"],
+                            "Address": "10.0.0.5",
+                            "Port": 9000,
+                            "Meta": null
+                        }
+                    },
+                    {
+                        "Service": {
+                            "ID": "auth-2",
+                            "Service": "auth-svc",
+                            "Tags": [],
+                            "Address": "10.0.0.6",
+                            "Port": 9001,
+                            "Meta": null
+                        }
+                    }
+                ])))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let instances = svc.discover_service("auth-svc").await.unwrap();
+            assert_eq!(instances.len(), 2);
+            assert_eq!(instances[0].id, "auth-1");
+            assert_eq!(instances[1].port, 9001);
+            // Cache populated.
+            let cache = svc.service_cache.read().await;
+            assert!(cache.contains_key("auth-svc"));
+        }
+
+        #[tokio::test]
+        async fn test_discover_service_5xx_returns_discovery_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/health/service/down-svc"))
+                .respond_with(ResponseTemplate::new(503).set_body_string("unavailable"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.discover_service("down-svc").await;
+            assert!(
+                matches!(result, Err(ConsulError::DiscoveryError(ref m)) if m.contains("HTTP 503")),
+                "expected DiscoveryError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_discover_service_malformed_json_returns_parse_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/health/service/x"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.discover_service("x").await;
+            assert!(
+                matches!(result, Err(ConsulError::ParseError(_))),
+                "expected ParseError, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- get_service_url ----
+
+        #[tokio::test]
+        async fn test_get_service_url_cache_hit_skips_http() {
+            let server = MockServer::start().await;
+            // Mount no expectations - if HTTP is called, expect(0) below
+            // would fail the test.
+            Mock::given(method("GET"))
+                .and(path("/v1/health/service/cached"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(0)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            // Pre-populate cache with one instance.
+            {
+                let mut cache = svc.service_cache.write().await;
+                cache.insert(
+                    "cached".to_string(),
+                    vec![ServiceInstance {
+                        id: "c1".to_string(),
+                        service: "cached".to_string(),
+                        tags: vec![],
+                        address: "10.0.0.99".to_string(),
+                        port: 9999,
+                        meta: None,
+                    }],
+                );
+            }
+            let url = svc.get_service_url("cached").await.unwrap();
+            assert_eq!(url, "http://10.0.0.99:9999");
+        }
+
+        #[tokio::test]
+        async fn test_get_service_url_cache_miss_calls_discover() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/health/service/new-svc"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {
+                        "Service": {
+                            "ID": "new-1",
+                            "Service": "new-svc",
+                            "Tags": [],
+                            "Address": "10.1.1.1",
+                            "Port": 7000,
+                            "Meta": null
+                        }
+                    }
+                ])))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let url = svc.get_service_url("new-svc").await.unwrap();
+            assert_eq!(url, "http://10.1.1.1:7000");
+        }
+
+        #[tokio::test]
+        async fn test_get_service_url_empty_instances_returns_no_instances_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/health/service/dead-svc"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.get_service_url("dead-svc").await;
+            assert!(
+                matches!(result, Err(ConsulError::NoInstancesAvailable(ref n)) if n == "dead-svc"),
+                "expected NoInstancesAvailable, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- get_config ----
+
+        #[tokio::test]
+        async fn test_get_config_200_returns_some_value() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/feature_flag"))
+                .and(query_param("raw", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("enabled"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let value = svc.get_config("feature_flag").await.unwrap();
+            assert_eq!(value, Some("enabled".to_string()));
+        }
+
+        #[tokio::test]
+        async fn test_get_config_404_returns_none() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/missing"))
+                .respond_with(ResponseTemplate::new(404))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let value = svc.get_config("missing").await.unwrap();
+            assert!(value.is_none());
+        }
+
+        #[tokio::test]
+        async fn test_get_config_5xx_returns_config_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/k"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.get_config("k").await;
+            assert!(
+                matches!(result, Err(ConsulError::ConfigError(_))),
+                "expected ConfigError, got {:?}",
+                result.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_get_config_connection_error() {
+            let svc = ConsulService::new(cfg_unreachable(), None);
+            let result = svc.get_config("k").await;
+            assert!(
+                matches!(result, Err(ConsulError::ConnectionError(_))),
+                "expected ConnectionError, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- set_config ----
+
+        #[tokio::test]
+        async fn test_set_config_happy_path() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/v1/kv/config/test/db_host"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            svc.set_config("db_host", "postgres.internal")
+                .await
+                .expect("set_config should succeed on 200");
+        }
+
+        #[tokio::test]
+        async fn test_set_config_5xx_returns_config_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/v1/kv/config/test/k"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.set_config("k", "v").await;
+            assert!(
+                matches!(result, Err(ConsulError::ConfigError(_))),
+                "expected ConfigError, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- load_all_config ----
+
+        #[tokio::test]
+        async fn test_load_all_config_200_decodes_base64_values() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .and(query_param("recurse", "true"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {
+                        "Key": "config/test/application/db.host",
+                        "Value": b64("localhost")
+                    },
+                    {
+                        "Key": "config/test/application/db.port",
+                        "Value": b64("5432")
+                    },
+                    {
+                        "Key": "config/test/application/nullable_entry",
+                        "Value": null
+                    }
+                ])))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let config = svc.load_all_config("config/test/application").await.unwrap();
+            assert_eq!(config.get("config/test/application/db.host"), Some(&"localhost".to_string()));
+            assert_eq!(config.get("config/test/application/db.port"), Some(&"5432".to_string()));
+            // Null values are silently skipped by parse_kv_response.
+            assert!(!config.contains_key("config/test/application/nullable_entry"));
+            assert_eq!(config.len(), 2);
+        }
+
+        #[tokio::test]
+        async fn test_load_all_config_404_returns_empty_map() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/missing"))
+                .respond_with(ResponseTemplate::new(404))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let config = svc.load_all_config("config/test/missing").await.unwrap();
+            assert!(config.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_load_all_config_5xx_returns_config_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/x"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.load_all_config("config/test/x").await;
+            assert!(
+                matches!(result, Err(ConsulError::ConfigError(_))),
+                "expected ConfigError, got {:?}",
+                result.err()
+            );
+        }
+
+        // ---- load_profiled_config (calls load_all_config twice and merges) ----
+
+        #[tokio::test]
+        async fn test_load_profiled_config_profile_overrides_base() {
+            let server = MockServer::start().await;
+            // Base config returns db.host=base-host, only_in_base=yes
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"Key": "db.host", "Value": b64("base-host")},
+                    {"Key": "only_in_base", "Value": b64("yes")}
+                ])))
+                .expect(1)
+                .mount(&server)
+                .await;
+            // Profile config overrides db.host and adds only_in_profile
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"Key": "db.host", "Value": b64("dev-host")},
+                    {"Key": "only_in_profile", "Value": b64("yep")}
+                ])))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let merged = svc.load_profiled_config().await.unwrap();
+            // Profile wins on db.host
+            assert_eq!(merged.get("db.host"), Some(&"dev-host".to_string()));
+            assert_eq!(merged.get("only_in_base"), Some(&"yes".to_string()));
+            assert_eq!(merged.get("only_in_profile"), Some(&"yep".to_string()));
+            assert_eq!(merged.len(), 3);
+        }
+
+        #[tokio::test]
+        async fn test_load_profiled_config_base_failure_yields_empty_then_merges_profile() {
+            let server = MockServer::start().await;
+            // Base errors with 500 (unwrap_or_default fall-through to empty map).
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(1)
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/config/test/application-dev"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"Key": "k", "Value": b64("v")}
+                ])))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let merged = svc.load_profiled_config().await.unwrap();
+            assert_eq!(merged.get("k"), Some(&"v".to_string()));
+            assert_eq!(merged.len(), 1);
+        }
+
+        // ---- watch_config ----
+
+        #[tokio::test]
+        async fn test_watch_config_200_returns_value_and_parses_consul_index_header() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/some_key"))
+                .and(query_param("raw", "true"))
+                .and(query_param("index", "42"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_string("new-value")
+                        .insert_header("X-Consul-Index", "99"),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let (value, index) = svc.watch_config("some_key", 42).await.unwrap();
+            assert_eq!(value, Some("new-value".to_string()));
+            assert_eq!(index, 99);
+        }
+
+        #[tokio::test]
+        async fn test_watch_config_404_returns_none_with_index_zero_when_no_header() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/gone"))
+                .respond_with(ResponseTemplate::new(404))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let (value, index) = svc.watch_config("gone", 0).await.unwrap();
+            assert!(value.is_none());
+            // No X-Consul-Index header → unwrap_or(0).
+            assert_eq!(index, 0);
+        }
+
+        #[tokio::test]
+        async fn test_watch_config_5xx_returns_config_error() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/v1/kv/broken"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let svc = ConsulService::new(cfg_for(&server), None);
+            let result = svc.watch_config("broken", 0).await;
+            assert!(
+                matches!(result, Err(ConsulError::ConfigError(_))),
+                "expected ConfigError, got {:?}",
+                result.err()
+            );
+        }
+    }
+<%_ } _%>
 }
