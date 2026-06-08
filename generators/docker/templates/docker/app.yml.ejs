@@ -24,6 +24,14 @@ services:
       dockerfile: Dockerfile
     environment:
       - RUST_LOG=info
+      # Track 1-a.4 fix (2026-06-07): override the Dockerfile's
+      # `ENV APP_ENV=production` for the development compose. Production
+      # mode refuses to start without CORS_ALLOWED_ORIGINS set, and this
+      # file's own header declares "intended for development purpose".
+      # Operators deploying to real environments override APP_ENV via
+      # their orchestrator's env config (Kubernetes Deployment, ECS
+      # task definition, etc.).
+      - APP_ENV=development
 <%_ if (isMongodb) { _%>
       - MONGODB_URI=mongodb://mongodb:27017
       - MONGODB_DATABASE=<%= baseName.toLowerCase() %>
