@@ -769,13 +769,114 @@ jobs:
         working-directory: app
         run: docker compose -f docker/app.yml down -v
 
+  # ---- e2e-cypress-sqlite -------------------------------------------
+  # Track 1-a.5.1: Cypress headless against mono-sqlite-jwt-ng. The
+  # scaffold was converted from yo-rc → JDL in this PR (skipClient: true
+  # → clientFramework angular + testFrameworks [cypress] baked in).
+  # Same docker-compose-up + cypress-run shape as e2e-cypress-gateway,
+  # but sqlite needs no DB service container (the scaffold's compose
+  # mounts a named volume into /app/target/db).
+  e2e-cypress-sqlite:
+    name: ${{ matrix.scaffold }} (cypress)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-sqlite-jwt-ng
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Sanity-check generated tree
+        working-directory: app
+        run: |
+          test -f Dockerfile || { echo "FAIL: Dockerfile missing"; exit 1; }
+          test -f docker/app.yml || { echo "FAIL: docker/app.yml missing"; exit 1; }
+          test -d client || { echo "FAIL: client/ missing"; exit 1; }
+          test -f client/cypress.config.ts || { echo "FAIL: client/cypress.config.ts missing"; exit 1; }
+          test -d client/test/cypress/e2e || { echo "FAIL: client/test/cypress/e2e missing"; exit 1; }
+      - name: Install client npm deps (incl. Cypress binary)
+        working-directory: app/client
+        run: npm install --no-audit --no-fund
+      - name: Build + start docker compose stack
+        working-directory: app
+        run: docker compose -f docker/app.yml up -d --build
+      - name: Wait for /api/health UP (max 240s)
+        working-directory: app
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8080/api/health 2>/dev/null | grep -q '"status":"UP"'; then
+              echo "OK — /api/health UP after ${i}*2s"
+              break
+            fi
+            sleep 2
+            if [ "$i" = "120" ]; then
+              echo "FAIL — /api/health never returned UP"
+              echo "--- docker compose ps -a ---"
+              docker compose -f docker/app.yml ps -a
+              echo "--- docker compose logs app (last 200) ---"
+              docker compose -f docker/app.yml logs --no-color --no-log-prefix app | tail -200
+              exit 1
+            fi
+          done
+      - name: Run Cypress headless (chrome)
+        working-directory: app/client
+        run: npm run e2e:cypress
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots-${{ matrix.scaffold }}
+          path: app/tmp/cypress/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Docker compose logs on failure
+        if: failure()
+        working-directory: app
+        run: |
+          echo "--- docker compose ps -a ---"
+          docker compose -f docker/app.yml ps -a
+          echo "--- docker compose logs (all, last 500) ---"
+          docker compose -f docker/app.yml logs --no-color | tail -500
+      - name: Teardown
+        if: always()
+        working-directory: app
+        run: docker compose -f docker/app.yml down -v
+
   # ---- Aggregator ---------------------------------------------------
   # Single status check for branch-protection use even though the work
   # spans multiple jobs.
   e2e-check:
     name: All E2E Scaffolds Pass
     runs-on: ubuntu-latest
-    needs: [e2e-sqlite, e2e-postgres, e2e-mysql, e2e-mongo, e2e-postgres-docker, e2e-mysql-docker, e2e-mongo-docker, e2e-cypress-gateway]
+    needs:
+      [
+        e2e-sqlite,
+        e2e-postgres,
+        e2e-mysql,
+        e2e-mongo,
+        e2e-postgres-docker,
+        e2e-mysql-docker,
+        e2e-mongo-docker,
+        e2e-cypress-gateway,
+        e2e-cypress-sqlite,
+      ]
     if: |
       always() && (
         github.event_name == 'workflow_dispatch' ||
@@ -785,7 +886,7 @@ jobs:
     steps:
       - name: Verify all scaffolds passed
         run: |
-          for r in "${{ needs.e2e-sqlite.result }}" "${{ needs.e2e-postgres.result }}" "${{ needs.e2e-mysql.result }}" "${{ needs.e2e-mongo.result }}" "${{ needs.e2e-postgres-docker.result }}" "${{ needs.e2e-mysql-docker.result }}" "${{ needs.e2e-mongo-docker.result }}" "${{ needs.e2e-cypress-gateway.result }}"; do
+          for r in "${{ needs.e2e-sqlite.result }}" "${{ needs.e2e-postgres.result }}" "${{ needs.e2e-mysql.result }}" "${{ needs.e2e-mongo.result }}" "${{ needs.e2e-postgres-docker.result }}" "${{ needs.e2e-mysql-docker.result }}" "${{ needs.e2e-mongo-docker.result }}" "${{ needs.e2e-cypress-gateway.result }}" "${{ needs.e2e-cypress-sqlite.result }}"; do
             if [ "$r" != "success" ]; then
               echo "One or more e2e jobs failed:"
               echo "  e2e-sqlite:           ${{ needs.e2e-sqlite.result }}"
@@ -796,7 +897,8 @@ jobs:
               echo "  e2e-mysql-docker:     ${{ needs.e2e-mysql-docker.result }}"
               echo "  e2e-mongo-docker:     ${{ needs.e2e-mongo-docker.result }}"
               echo "  e2e-cypress-gateway:  ${{ needs.e2e-cypress-gateway.result }}"
+              echo "  e2e-cypress-sqlite:   ${{ needs.e2e-cypress-sqlite.result }}"
               exit 1
             fi
           done
-          echo "All scaffolds passed (Track 1-a.5.0 in progress)."
+          echo "All scaffolds passed (Track 1-a.5.1 in progress)."

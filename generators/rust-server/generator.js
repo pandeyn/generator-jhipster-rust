@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 
 import BaseApplicationGenerator from 'generator-jhipster/generators/base-application';
 import { createNeedleCallback } from 'generator-jhipster/generators/base-core/support';
+import { isReservedPostgresqlKeyword } from 'generator-jhipster/generators/spring-boot/generators/data-relational/support';
 
 import {
   SERVER_RUST_SRC_DIR,
@@ -606,6 +607,29 @@ ${allLines}
             }),
           );
         };
+      },
+    });
+  }
+
+  get [BaseApplicationGenerator.PREPARING_EACH_ENTITY]() {
+    return this.asPreparingEachEntityTaskGroup({
+      async preparingEachEntityTask({ application, entity }) {
+        // Bug #17 fix (1-a.5.1): upstream's configureEntityTable only prefixes
+        // `jhi_` when isReservedTableName(name, prodDatabaseType) returns true.
+        // That call uses a per-DB lookup that has MYSQL/POSTGRESQL/ORACLE/MSSQL
+        // word lists but NO sqlite list — so on sqlite scaffolds, reserved
+        // words like `order` slip through and the generated migration emits
+        // `CREATE TABLE order (...)` which fails with a syntax error.
+        //
+        // We re-check the table name against the postgres reserved list (which
+        // covers `order`, `user`, `group`, etc. — a superset of practical
+        // collisions). If upstream missed it (postgres scaffolds already got
+        // the prefix; only sqlite/h2 reach here without one), prefix `jhi_`.
+        if (!entity.entityTableName || !application.jhiTablePrefix) return;
+        if (entity.entityTableName.startsWith(`${application.jhiTablePrefix}_`)) return;
+        if (isReservedPostgresqlKeyword(entity.entityTableName)) {
+          entity.entityTableName = `${application.jhiTablePrefix}_${entity.entityTableName}`;
+        }
       },
     });
   }
