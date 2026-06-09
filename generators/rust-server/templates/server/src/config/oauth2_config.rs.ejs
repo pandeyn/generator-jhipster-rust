@@ -27,45 +27,55 @@ impl OAuth2Config {
     /// Creates OAuth2 configuration from environment variables
     ///
     /// Required environment variables:
-    /// - OIDC_ISSUER_URI: The OIDC issuer URI
+    /// - OIDC_ISSUER_URI: The OIDC issuer URI (browser-facing; also the `iss`
+    ///   claim the server validates against)
     /// - OIDC_CLIENT_ID: The OAuth2 client ID
     ///
     /// Optional environment variables:
     /// - OIDC_CLIENT_SECRET: The OAuth2 client secret
+    /// - OIDC_INTERNAL_URI: Server-side base URL for OIDC endpoints the app
+    ///   calls directly (token exchange, JWKS, userinfo, end_session). Falls
+    ///   back to OIDC_ISSUER_URI when unset. The split is needed for docker
+    ///   compose: the browser resolves Keycloak at http://localhost:9080 while
+    ///   the app container reaches it at http://keycloak:9080. Keycloak's
+    ///   KC_HOSTNAME pins the `iss` claim so token validation still matches.
+    ///   Bug #18 fix from 1-a.5.3.
     ///
-    /// Other endpoints are derived from the issuer URI following OIDC discovery conventions.
+    /// authorization_endpoint stays on issuer_uri because the browser follows
+    /// it. jwks_uri / token_endpoint / userinfo_endpoint / end_session_endpoint
+    /// are derived from internal_uri because the server calls them directly.
     pub fn from_env() -> Self {
         let issuer_uri = std::env::var("OIDC_ISSUER_URI")
             .unwrap_or_else(|_| "http://localhost:9080/realms/jhipster".to_string());
+
+        let internal_uri = std::env::var("OIDC_INTERNAL_URI").unwrap_or_else(|_| issuer_uri.clone());
 
         let client_id = std::env::var("OIDC_CLIENT_ID")
             .unwrap_or_else(|_| "web_app".to_string());
 
         let client_secret = std::env::var("OIDC_CLIENT_SECRET").ok();
 
-        // Derive endpoints from issuer URI
-        // For Keycloak: {issuer}/protocol/openid-connect/{endpoint}
-        // For Okta: {issuer}/v1/{endpoint}
-        let base = issuer_uri.trim_end_matches('/');
-        let is_okta = base.contains("okta");
+        // Derive endpoints. Two base URLs: external (browser) for auth, internal
+        // (server) for the rest.
+        let external_base = issuer_uri.trim_end_matches('/');
+        let internal_base = internal_uri.trim_end_matches('/');
+        let is_okta = external_base.contains("okta");
 
         let (jwks_uri, authorization_endpoint, token_endpoint, userinfo_endpoint, end_session_endpoint) = if is_okta {
-            // Okta-specific endpoints
             (
-                format!("{}/v1/keys", base),
-                format!("{}/v1/authorize", base),
-                format!("{}/v1/token", base),
-                format!("{}/v1/userinfo", base),
-                format!("{}/v1/logout", base),
+                format!("{}/v1/keys", internal_base),
+                format!("{}/v1/authorize", external_base),
+                format!("{}/v1/token", internal_base),
+                format!("{}/v1/userinfo", internal_base),
+                format!("{}/v1/logout", internal_base),
             )
         } else {
-            // Keycloak/standard OIDC endpoints
             (
-                format!("{}/protocol/openid-connect/certs", base),
-                format!("{}/protocol/openid-connect/auth", base),
-                format!("{}/protocol/openid-connect/token", base),
-                format!("{}/protocol/openid-connect/userinfo", base),
-                format!("{}/protocol/openid-connect/logout", base),
+                format!("{}/protocol/openid-connect/certs", internal_base),
+                format!("{}/protocol/openid-connect/auth", external_base),
+                format!("{}/protocol/openid-connect/token", internal_base),
+                format!("{}/protocol/openid-connect/userinfo", internal_base),
+                format!("{}/protocol/openid-connect/logout", internal_base),
             )
         };
 
@@ -96,6 +106,7 @@ mod tests {
 
         // Clear any existing env vars for test isolation
         std::env::remove_var("OIDC_ISSUER_URI");
+        std::env::remove_var("OIDC_INTERNAL_URI");
         std::env::remove_var("OIDC_CLIENT_ID");
         std::env::remove_var("OIDC_CLIENT_SECRET");
 
@@ -112,6 +123,7 @@ mod tests {
         let _guard = ENV_MUTEX.lock().unwrap();
 
         std::env::set_var("OIDC_ISSUER_URI", "http://keycloak:9080/realms/test");
+        std::env::remove_var("OIDC_INTERNAL_URI");
         std::env::set_var("OIDC_CLIENT_ID", "test_app");
 
         let config = OAuth2Config::from_env();
@@ -126,10 +138,55 @@ mod tests {
     }
 
     #[test]
+    fn test_split_issuer_and_internal_uri() {
+        // Bug #18 fix: in docker compose, the browser-facing issuer URL
+        // and the server-side internal URL differ. authorization_endpoint
+        // must use the issuer URL (browser follows it); the rest use
+        // the internal URL.
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        std::env::set_var("OIDC_ISSUER_URI", "http://localhost:9080/realms/jhipster");
+        std::env::set_var("OIDC_INTERNAL_URI", "http://keycloak:9080/realms/jhipster");
+        std::env::set_var("OIDC_CLIENT_ID", "web_app");
+
+        let config = OAuth2Config::from_env();
+
+        // Browser-facing.
+        assert_eq!(
+            config.authorization_endpoint,
+            "http://localhost:9080/realms/jhipster/protocol/openid-connect/auth"
+        );
+        // Server-side (docker network).
+        assert_eq!(
+            config.token_endpoint,
+            "http://keycloak:9080/realms/jhipster/protocol/openid-connect/token"
+        );
+        assert_eq!(
+            config.jwks_uri,
+            "http://keycloak:9080/realms/jhipster/protocol/openid-connect/certs"
+        );
+        assert_eq!(
+            config.userinfo_endpoint,
+            "http://keycloak:9080/realms/jhipster/protocol/openid-connect/userinfo"
+        );
+        assert_eq!(
+            config.end_session_endpoint,
+            "http://keycloak:9080/realms/jhipster/protocol/openid-connect/logout"
+        );
+        // issuer_uri itself is the browser-facing one (also what's in `iss`).
+        assert_eq!(config.issuer_uri, "http://localhost:9080/realms/jhipster");
+
+        std::env::remove_var("OIDC_ISSUER_URI");
+        std::env::remove_var("OIDC_INTERNAL_URI");
+        std::env::remove_var("OIDC_CLIENT_ID");
+    }
+
+    #[test]
     fn test_okta_endpoints() {
         let _guard = ENV_MUTEX.lock().unwrap();
 
         std::env::set_var("OIDC_ISSUER_URI", "https://dev-12345.okta.com/oauth2/default");
+        std::env::remove_var("OIDC_INTERNAL_URI");
         std::env::set_var("OIDC_CLIENT_ID", "okta_app");
 
         let config = OAuth2Config::from_env();

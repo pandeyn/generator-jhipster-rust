@@ -21,6 +21,17 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=admin
       - KC_HTTP_PORT=9080
       - KC_DB=dev-file
+      # Bug #18 fix (1-a.5.3): pin the issuer URL Keycloak emits in tokens.
+      # In docker compose, the browser reaches Keycloak at http://localhost:9080
+      # while the app container reaches it at http://keycloak:9080. Without a
+      # fixed hostname, Keycloak's `iss` claim depends on the request's Host
+      # header — which differs between the browser flow and the server-side
+      # token exchange, breaking validation. KC_HOSTNAME=localhost pins iss to
+      # http://localhost:9080 regardless of inbound route.
+      - KC_HOSTNAME=localhost
+      - KC_HOSTNAME_PORT=9080
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_BACKCHANNEL=false
     ports:
       - '9080:9080'
     healthcheck:
