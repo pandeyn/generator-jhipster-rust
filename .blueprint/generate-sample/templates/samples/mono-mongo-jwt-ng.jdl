@@ -1,0 +1,69 @@
+/*
+ * Monolith + MongoDB + JWT + Angular E2E Test Sample
+ *
+ * Track 1-a.5.4 conversion (2026-06-09) from the yo-rc form — the
+ * final scaffold conversion in Track 1-a.5. The prior yo-rc skipped
+ * the client + cypress; the JDL form bakes both in so the
+ * e2e-cypress-mongo job can run headless browser tests.
+ *
+ * Two "firsts" this scaffold exercises in cypress:
+ *   - MongoDB entity persistence (gateway-cb / mono-sqlite / mono-pg
+ *     are all SQL via diesel). Mongo uses ObjectId IDs (24-char hex)
+ *     instead of autoincrement integers; entity-by-id routes have
+ *     different path shape.
+ *   - The combination of Angular cypress flow + Mongo entity codegen.
+ *
+ * Entities mirror gateway-cb / mono-sqlite-jwt-ng / mono-pg-jwt-react /
+ * mono-mysql-oauth2-vue (Customer + Order) to keep the matrix clean.
+ * The 1-a.3 entity-regen step adds Author/Book/Tag on top.
+ */
+application {
+  config {
+    applicationType monolith
+    baseName monoMongo
+    packageName com.mycompany.monomongo
+    authenticationType jwt
+    databaseType mongodb
+    devDatabaseType mongodb
+    prodDatabaseType mongodb
+    cacheProvider no
+    buildTool maven
+    clientFramework angular
+    testFrameworks [cypress]
+  }
+  entities Order, Customer
+}
+
+entity Customer {
+  firstName String required minlength(2) maxlength(50)
+  lastName String required minlength(2) maxlength(50)
+  email String required pattern(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
+  phone String maxlength(20)
+  active Boolean
+  createdDate Instant
+}
+
+entity Order {
+  orderNumber String required
+  orderDate Instant required
+  totalAmount BigDecimal required min(0)
+  status OrderStatus required
+  notes TextBlob
+}
+
+enum OrderStatus {
+  PENDING,
+  CONFIRMED,
+  SHIPPED,
+  DELIVERED,
+  CANCELLED
+}
+
+relationship ManyToOne {
+  Order{customer(email)} to Customer
+}
+
+paginate Customer, Order with pagination
+
+service Customer with serviceClass
+service Order with serviceClass

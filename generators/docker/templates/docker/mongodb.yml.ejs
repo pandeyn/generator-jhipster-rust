@@ -11,6 +11,13 @@ services:
       - 127.0.0.1:27017:27017
     volumes:
       - mongodb_data:/data/db
+      # Bug #22 fix (1-a.5.4): mount the generated init script so the mongo
+      # entrypoint runs it on first boot. Without this the users +
+      # authorities collections stay empty and any cypress/manual flow
+      # that authenticates with the documented admin/admin or user/user
+      # creds gets 401 (the existing cargo test path creates its own
+      # users; only end-to-end flows like cypress hit the seeded data).
+      - ../scripts/mongodb_init.js:/docker-entrypoint-initdb.d/init.js:ro
     healthcheck:
       test: |
         mongosh --quiet --eval "

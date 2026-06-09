@@ -40,13 +40,22 @@ impl <%= entityClass %>Service {
         let (sort_field, sort_dir) = page_request.primary_sort().unwrap_or(("_id", "asc"));
         let sort_order = if sort_dir.eq_ignore_ascii_case("desc") { -1 } else { 1 };
 
-        // Map camelCase field names to snake_case for MongoDB
+        // Map camelCase field names to snake_case for MongoDB. Bug #20b
+        // fix (1-a.5.4): the audit-field arms (`createdDate`, `lastModifiedDate`)
+        // are only emitted when the entity doesn't already have them as
+        // user-defined fields. Without the guard, an entity with its own
+        // `createdDate` (e.g. Customer) gets a duplicate match arm and the
+        // generated code fails clippy with "unreachable pattern".
         let mongo_sort_field = match sort_field {
 <%_ for (const field of fields.filter(f => !f.id)) { _%>
             "<%= field.fieldName %>" => "<%= field.fieldNameUnderscored %>",
 <%_ } _%>
+<%_ if (!fields.some(f => f.fieldName === 'createdDate')) { _%>
             "createdDate" => "created_date",
+<%_ } _%>
+<%_ if (!fields.some(f => f.fieldName === 'lastModifiedDate')) { _%>
             "lastModifiedDate" => "last_modified_date",
+<%_ } _%>
             _ => sort_field,
         };
 

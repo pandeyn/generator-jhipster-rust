@@ -153,6 +153,11 @@ mod tests {
             <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
 <%_ } else if (field.fieldType === 'LocalDate') { _%>
             <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%# Bug #21 fix (1-a.5.4): mongo maps BigDecimal → f64. Without _%>
+            <%# this branch the catch-all emitted "test".to_string() which _%>
+            <%# breaks compile against a field typed as f64. _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else { _%>
             <%= field.fieldNameUnderscored %>: "test".to_string(),
 <%_ } _%>
@@ -205,6 +210,11 @@ mod tests {
             <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
 <%_ } else if (field.fieldType === 'LocalDate') { _%>
             <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%# Bug #21 fix (1-a.5.4): mongo maps BigDecimal → f64. Without _%>
+            <%# this branch the catch-all emitted "test".to_string() which _%>
+            <%# breaks compile against a field typed as f64. _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else { _%>
             <%= field.fieldNameUnderscored %>: "test".to_string(),
 <%_ } _%>
@@ -255,6 +265,11 @@ mod tests {
             <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
 <%_ } else if (field.fieldType === 'LocalDate') { _%>
             <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%# Bug #21 fix (1-a.5.4): mongo maps BigDecimal → f64. Without _%>
+            <%# this branch the catch-all emitted "test".to_string() which _%>
+            <%# breaks compile against a field typed as f64. _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else { _%>
             <%= field.fieldNameUnderscored %>: "test".to_string(),
 <%_ } _%>
@@ -308,6 +323,11 @@ mod tests {
             <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
 <%_ } else if (field.fieldType === 'LocalDate') { _%>
             <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%# Bug #21 fix (1-a.5.4): mongo maps BigDecimal → f64. Without _%>
+            <%# this branch the catch-all emitted "test".to_string() which _%>
+            <%# breaks compile against a field typed as f64. _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else { _%>
             <%= field.fieldNameUnderscored %>: "test".to_string(),
 <%_ } _%>
@@ -359,6 +379,11 @@ mod tests {
             <%= field.fieldNameUnderscored %>: BsonDateTime::now(),
 <%_ } else if (field.fieldType === 'LocalDate') { _%>
             <%= field.fieldNameUnderscored %>: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+<%_ } else if (field.fieldType === 'BigDecimal') { _%>
+            <%# Bug #21 fix (1-a.5.4): mongo maps BigDecimal → f64. Without _%>
+            <%# this branch the catch-all emitted "test".to_string() which _%>
+            <%# breaks compile against a field typed as f64. _%>
+            <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else { _%>
             <%= field.fieldNameUnderscored %>: "test".to_string(),
 <%_ } _%>

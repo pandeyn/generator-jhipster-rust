@@ -69,7 +69,12 @@ pub async fn get_all(
 <%_ if (devDatabaseTypeMongodb) { _%>
     let mut dtos: Vec<<%= entityClass %>Dto> = Vec::with_capacity(items.len());
     for item in items {
-        let item_id = item.id.clone();
+<%_ // Bug #20c fix (1-a.5.4): only bind item_id when a M2M-owner rel uses _%>
+<%_ // it. Entities with M2O-only relationships (e.g. Order) hit _%>
+<%_ // unused-variable + clone-on-Copy (Option<ObjectId> is Copy). _%>
+<%_ if (manyToManyOwnerRels.length > 0) { _%>
+        let item_id = item.id;
+<%_ } _%>
 <%_ for (const rel of manyToOneRels) { _%>
         let <%= rel.relationshipFieldName %> = if let Some(ref id) = item.<%= rel.relationshipFieldName %>_id {
             <%= entityClass %>Service::find_<%= rel.relationshipFieldName %>_by_id(&state.db, *id).await?
