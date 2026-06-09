@@ -1,5 +1,27 @@
 // MongoDB initialization script for <%= baseName %>
-// This script runs when the MongoDB container starts for the first time
+// This script runs when the MongoDB container starts for the first time.
+
+// Bug #22 fix (1-a.5.4): the mongo image's docker-entrypoint runs scripts
+// in /docker-entrypoint-initdb.d/ AFTER mongod starts but BEFORE our
+// healthcheck has a chance to call rs.initiate(). Without that, the
+// node has no primary and every write below fails "not primary",
+// crashing the container on first boot. We initialize the replSet
+// directly here, wait for the primary election, then proceed.
+try {
+  rs.status();
+} catch (e) {
+  rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] });
+}
+// Wait until the node has elected itself primary (Up to ~30s; in
+// practice it takes <2s for a single-node replSet).
+for (let i = 0; i < 60; i++) {
+  try {
+    if (db.hello().isWritablePrimary) {
+      break;
+    }
+  } catch (e) {}
+  sleep(500);
+}
 
 // Switch to the application database
 db = db.getSiblingDB('<%= baseName.toLowerCase() %>');
