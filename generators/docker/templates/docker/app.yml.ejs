@@ -5,6 +5,7 @@ const isMysql = typeof devDatabaseTypeMysql !== 'undefined' ? devDatabaseTypeMys
 const isMongodb = typeof devDatabaseTypeMongodb !== 'undefined' ? devDatabaseTypeMongodb : false;
 const isSqlite = typeof devDatabaseTypeSqlite !== 'undefined' ? devDatabaseTypeSqlite : (!isPostgresql && !isMysql && !isMongodb);
 const hasConsul = typeof serviceDiscoveryConsul !== 'undefined' ? serviceDiscoveryConsul : false;
+const isOauth2 = typeof authenticationTypeOauth2 !== 'undefined' ? authenticationTypeOauth2 : false;
 _%>
 # This configuration is intended for development purpose, it's **your** responsibility to harden it for production
 name: <%= baseName.toLowerCase() %>
@@ -70,6 +71,20 @@ services:
       # Forwarded from .env so the entrypoint sees the same CSPRNG hex the
       # generator scaffolded. Empty → entrypoint generates a per-container hex.
       - JWT_SECRET=${JWT_SECRET:-}
+<%_ } _%>
+<%_ if (isOauth2) { _%>
+      # Bug #18 fix (1-a.5.3): split OIDC URLs for docker compose.
+      # OIDC_ISSUER_URI is the browser-facing URL (also the `iss` claim
+      # KC_HOSTNAME pins Keycloak to emit); OIDC_INTERNAL_URI is the
+      # docker-network URL the app calls directly for token exchange,
+      # JWKS fetch, userinfo, end-session. Without the split, the app
+      # tries to reach Keycloak at http://localhost:9080 from inside the
+      # container, which is the app itself → "Connection refused" on
+      # token exchange and the cypress OAuth2 flow fails.
+      - OIDC_ISSUER_URI=http://localhost:9080/realms/jhipster
+      - OIDC_INTERNAL_URI=http://keycloak:9080/realms/jhipster
+      - OIDC_CLIENT_ID=web_app
+      - OIDC_CLIENT_SECRET=web_app
 <%_ } _%>
 <%_ if (hasConsul) { _%>
       # Consul service discovery configuration
