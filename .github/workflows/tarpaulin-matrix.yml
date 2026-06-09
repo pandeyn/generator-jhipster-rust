@@ -1,0 +1,335 @@
+name: Tarpaulin Coverage Matrix
+
+# Track 1-a.6 (v1.0.1, locked decision #3):
+# Per-scaffold tarpaulin coverage as an INFORMATIONAL artifact, NOT a gate.
+# The gating coverage check lives in samples.yml's `coverage` job, which runs
+# tarpaulin against the canonical microservice-cb scaffold with --fail-under 75.
+# This workflow expands the surface to the full e2e matrix so each scaffold's
+# coverage can be inspected over time without imposing release-blocking gates
+# on every dimension combination.
+#
+# Artifacts: each job uploads its tarpaulin cobertura.xml + the human-readable
+# tarpaulin-report.html. Inspect them from the workflow run's "Artifacts"
+# panel. Retention 14 days.
+
+on:
+  # Manual dispatch — for ad-hoc snapshots from the Actions tab.
+  workflow_dispatch:
+  # Nightly at 09:00 UTC (one hour after e2e.yml's nightly so the two
+  # workflows don't fight over runner capacity on shared accounts).
+  schedule:
+    - cron: '0 9 * * *'
+  # Opt-in on PRs via the `tarpaulin` label, for ad-hoc per-PR snapshots.
+  # Default is OFF; the matrix is expensive (tarpaulin instrumentation
+  # roughly doubles cargo build wall-clock).
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  # ---- tarpaulin-sqlite ---------------------------------------------
+  tarpaulin-sqlite:
+    name: ${{ matrix.scaffold }} (sqlite tarpaulin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'tarpaulin'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-sqlite-jwt-ng
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+      # Separate cache key from the e2e job because tarpaulin builds with
+      # -C instrument-coverage (different fingerprint, would fight over slots).
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: tarpaulin-${{ matrix.scaffold }}
+          workspaces: app/server -> target
+          prefix-key: tarpaulin
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version "^0.31" --locked
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: Run cargo tarpaulin (informational, no gate)
+        working-directory: app/server
+        # No --fail-under: locked decision #3 says this matrix is informational,
+        # not gating. The release-blocking gate is samples.yml's coverage job.
+        # --out Xml emits cobertura.xml for tooling (codecov etc.); --out Html
+        # emits a human-readable report for inspection.
+        run: cargo tarpaulin --out Xml --out Html --output-dir ../coverage -- --test-threads=1
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarpaulin-${{ matrix.scaffold }}
+          path: app/coverage/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ---- tarpaulin-postgres -------------------------------------------
+  tarpaulin-postgres:
+    name: ${{ matrix.scaffold }} (postgres tarpaulin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'tarpaulin'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-pg-jwt-react
+          - microservice-cb
+          - gateway-cb
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/jhipster_rust_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/jhipster_rust_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: tarpaulin-${{ matrix.scaffold }}
+          workspaces: app/server -> target
+          prefix-key: tarpaulin
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version "^0.31" --locked
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Wait for postgres readiness
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            sleep 1
+          done
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: Run cargo tarpaulin (informational, no gate)
+        working-directory: app/server
+        run: cargo tarpaulin --out Xml --out Html --output-dir ../coverage -- --test-threads=1
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarpaulin-${{ matrix.scaffold }}
+          path: app/coverage/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ---- tarpaulin-mysql ----------------------------------------------
+  tarpaulin-mysql:
+    name: ${{ matrix.scaffold }} (mysql tarpaulin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'tarpaulin'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-mysql-oauth2-vue
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          # Use the system db here, same as e2e-mysql. The actual test db
+          # (jhipster_rust_test) is created by the test setup. Using
+          # jhipster_rust_test as MYSQL_DATABASE here is harmless but
+          # diverges from the proven e2e-mysql shape.
+          MYSQL_DATABASE: mysql
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      # 127.0.0.1, not localhost: the mysql client treats `localhost` as a
+      # request to use the Unix socket which the GH services container
+      # doesn't expose. e2e-mysql learned this the hard way; aligning the
+      # tarpaulin-mysql shape avoids per-test connection retry storms.
+      TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/jhipster_rust_test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/jhipster_rust_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: tarpaulin-${{ matrix.scaffold }}
+          workspaces: app/server -> target
+          prefix-key: tarpaulin
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version "^0.31" --locked
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Wait for mysql readiness
+        run: |
+          until mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -proot --silent; do
+            sleep 1
+          done
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: Run cargo tarpaulin (informational, no gate)
+        working-directory: app/server
+        run: cargo tarpaulin --out Xml --out Html --output-dir ../coverage -- --test-threads=1
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarpaulin-${{ matrix.scaffold }}
+          path: app/coverage/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ---- tarpaulin-mongo ----------------------------------------------
+  # Covers mono-mongo-jwt-ng, ms-mongo-oauth2-consul, and gateway-mongo-oauth2-react.
+  # The OAuth2 variants run tarpaulin against unit/integration tests that use
+  # wiremock to stub Keycloak (no real Keycloak container needed for cargo test).
+  tarpaulin-mongo:
+    name: ${{ matrix.scaffold }} (mongo tarpaulin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'tarpaulin'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - mono-mongo-jwt-ng
+          - ms-mongo-oauth2-consul
+          - gateway-mongo-oauth2-react
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 })' || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_MONGODB_URI: mongodb://localhost:27017
+      TEST_MONGODB_DATABASE: jhipster_rust_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: tarpaulin-${{ matrix.scaffold }}
+          workspaces: app/server -> target
+          prefix-key: tarpaulin
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version "^0.31" --locked
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Import entity JDL (Author/Book/Tag — Track 1-a.3)
+        working-directory: app
+        run: |
+          cp "$GITHUB_WORKSPACE/.github/workflows/fixtures/relationships.jdl" .
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" jdl relationships.jdl --skip-install --skip-git --force
+      - name: Run cargo tarpaulin (informational, no gate)
+        working-directory: app/server
+        run: cargo tarpaulin --out Xml --out Html --output-dir ../coverage -- --test-threads=1
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarpaulin-${{ matrix.scaffold }}
+          path: app/coverage/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ---- summary ------------------------------------------------------
+  # Informational summary that consolidates the per-scaffold tarpaulin runs
+  # into a single status check. Always succeeds when any artifact was
+  # produced; the per-job failures (e.g. cargo test breakage) surface
+  # individually but don't block PRs since this whole workflow is
+  # opt-in / nightly-only.
+  tarpaulin-summary:
+    name: Tarpaulin Matrix Summary (informational)
+    runs-on: ubuntu-latest
+    needs: [tarpaulin-sqlite, tarpaulin-postgres, tarpaulin-mysql, tarpaulin-mongo]
+    if: always()
+    steps:
+      - name: Report results
+        run: |
+          echo "Tarpaulin matrix (informational — gating remains in samples.yml/coverage):"
+          echo "  tarpaulin-sqlite:   ${{ needs.tarpaulin-sqlite.result }}"
+          echo "  tarpaulin-postgres: ${{ needs.tarpaulin-postgres.result }}"
+          echo "  tarpaulin-mysql:    ${{ needs.tarpaulin-mysql.result }}"
+          echo "  tarpaulin-mongo:    ${{ needs.tarpaulin-mongo.result }}"
