@@ -2,13 +2,14 @@ use axum::{
     extract::{Path, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{delete, get},
     Extension, Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 <%_ if (enableSwaggerCodegen) { _%>
 use utoipa::ToSchema;
 <%_ } _%>
+use validator::Validate;
 
 use crate::dto::{CreateUserDto, PageRequest, QsQuery, UpdateUserDto, UserDto};
 use crate::errors::AppError;
@@ -33,19 +34,24 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/:login", get(get_user).delete(delete_user))
 }
 
-/// Authority routes
+/// Authority routes (full CRUD; admin only). Bug #14 fix from 1-a.5.0:
+/// prior version was GET-only with a hard-coded ROLE_ADMIN/ROLE_USER vec,
+/// so the cypress entity/authority.cy.ts test (POST /api/authorities) got
+/// 405 Method Not Allowed.
 pub fn authority_routes() -> Router<AppState> {
     Router::new()
-        .route("/", get(get_authorities))
+        .route("/", get(get_authorities).post(create_authority))
+        .route("/:name", delete(delete_authority))
 }
 
-#[derive(Serialize<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate<%_ if (enableSwaggerCodegen) { _%>, ToSchema<%_ } _%>)]
 pub struct AuthorityDto {
     /// Authority name (e.g., ROLE_ADMIN, ROLE_USER)
+    #[validate(length(min = 1, max = 50))]
     pub name: String,
 }
 
-/// Get all authorities
+/// Get all authorities (admin only)
 <%_ if (enableSwaggerCodegen) { _%>
 #[utoipa::path(
     get,
@@ -60,16 +66,90 @@ pub struct AuthorityDto {
 )]
 <%_ } _%>
 pub async fn get_authorities(
+    State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<AuthorityDto>>, AppError> {
     if !auth_user.has_authority(RoleType::ADMIN) {
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
 
-    Ok(Json(vec![
-        AuthorityDto { name: "ROLE_ADMIN".to_string() },
-        AuthorityDto { name: "ROLE_USER".to_string() },
-    ]))
+<%_ if (devDatabaseTypeMongodb) { _%>
+    let names = UserService::find_all_authorities(&state.db).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    let names = UserService::find_all_authorities(&mut conn)?;
+<%_ } _%>
+    Ok(Json(names.into_iter().map(|name| AuthorityDto { name }).collect()))
+}
+
+/// Create a new authority (admin only)
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    post,
+    path = "/api/authorities",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    request_body = AuthorityDto,
+    responses(
+        (status = 201, description = "Authority created", body = AuthorityDto),
+        (status = 400, description = "Invalid name or already exists"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+<%_ } _%>
+pub async fn create_authority(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(dto): Json<AuthorityDto>,
+) -> Result<(StatusCode, Json<AuthorityDto>), AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+    dto.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+<%_ if (devDatabaseTypeMongodb) { _%>
+    UserService::create_authority(&state.db, &dto.name).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    UserService::create_authority(&mut conn, &dto.name)?;
+<%_ } _%>
+    Ok((StatusCode::CREATED, Json(dto)))
+}
+
+/// Delete an authority (admin only)
+<%_ if (enableSwaggerCodegen) { _%>
+#[utoipa::path(
+    delete,
+    path = "/api/authorities/{name}",
+    tag = "user-management",
+    security(("bearer_auth" = [])),
+    params(
+        ("name" = String, Path, description = "Authority name")
+    ),
+    responses(
+        (status = 204, description = "Authority deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 404, description = "Authority not found")
+    )
+)]
+<%_ } _%>
+pub async fn delete_authority(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(name): Path<String>,
+) -> Result<StatusCode, AppError> {
+    if !auth_user.has_authority(RoleType::ADMIN) {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+<%_ if (devDatabaseTypeMongodb) { _%>
+    UserService::delete_authority(&state.db, &name).await?;
+<%_ } else { _%>
+    let mut conn = state.pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+    UserService::delete_authority(&mut conn, &name)?;
+<%_ } _%>
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Get public user list (limited info, for non-admin users)
@@ -237,7 +317,9 @@ pub async fn create_user(
     }
 
 <%_ if (devDatabaseTypeMongodb) { _%>
-    let password_hash = UserService::hash_password(&create_dto.password)?;
+    // Admin-create-user with optional password (bug #13, see CreateUserDto).
+    let password = create_dto.password.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let password_hash = UserService::hash_password(&password)?;
     let now = bson::DateTime::now();
 
     let new_user = NewUser {
@@ -686,6 +768,124 @@ mod integration_tests {
             .await;
 
         assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    // ---- Authority CRUD (bug #14 fix from 1-a.5.0) -----------------
+
+    #[tokio::test]
+    async fn test_create_authority_as_admin() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .post("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&serde_json::json!({ "name": "ROLE_REPORTER" }))
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::CREATED);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["name"], "ROLE_REPORTER");
+
+        // Confirm it now appears in GET.
+        let list = server
+            .get("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+        assert!(list.text().contains("ROLE_REPORTER"));
+    }
+
+    #[tokio::test]
+    async fn test_create_authority_duplicate_returns_400() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        // ROLE_ADMIN is seeded by migrations.
+        let response = server
+            .post("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&serde_json::json!({ "name": "ROLE_ADMIN" }))
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_create_authority_forbidden_for_regular_user() {
+        let (server, state) = create_test_app();
+        create_test_user(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "user",
+            &["ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .post("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&serde_json::json!({ "name": "ROLE_SHOULD_NOT_EXIST" }))
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_delete_authority_as_admin() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        // Create then delete a non-seeded authority (avoid FK conflicts with
+        // the admin's existing ROLE_ADMIN/ROLE_USER assignments).
+        server
+            .post("/api/authorities")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .json(&serde_json::json!({ "name": "ROLE_TO_DELETE" }))
+            .await;
+
+        let response = server
+            .delete("/api/authorities/ROLE_TO_DELETE")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn test_delete_authority_not_found() {
+        let (server, state) = create_test_app();
+        create_test_admin(&state.pool);
+
+        let token = generate_test_token(
+            &state.config,
+            "admin",
+            &["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()],
+        );
+
+        let response = server
+            .delete("/api/authorities/ROLE_NEVER_EXISTED")
+            .add_header("Authorization".parse().unwrap(), format!("Bearer {}", token).parse().unwrap())
+            .await;
+
+        assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

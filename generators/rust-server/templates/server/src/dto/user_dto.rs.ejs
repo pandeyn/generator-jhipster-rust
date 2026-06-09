@@ -70,8 +70,12 @@ pub struct CreateUserDto {
     #[validate(length(min = 1, max = 50))]
     pub login: String,
 
+    /// Optional. If absent, the server generates a random password and the
+    /// user must use the reset-password flow to set their own. Matches the
+    /// JHipster admin-create-user convention (Cypress tests POST without
+    /// a password — bug surfaced by 1-a.5.0).
     #[validate(length(min = 4, max = 100))]
-    pub password: String,
+    pub password: Option<String>,
 
     #[validate(length(max = 50))]
     pub first_name: Option<String>,
@@ -398,7 +402,7 @@ mod tests {
         fn test_create_user_dto_valid() {
             let dto = CreateUserDto {
                 login: "newuser".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: Some("New".to_string()),
                 last_name: Some("User".to_string()),
                 email: "newuser@example.com".to_string(),
@@ -414,7 +418,7 @@ mod tests {
         fn test_create_user_dto_empty_login_invalid() {
             let dto = CreateUserDto {
                 login: "".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "test@example.com".to_string(),
@@ -430,7 +434,7 @@ mod tests {
         fn test_create_user_dto_short_password_invalid() {
             let dto = CreateUserDto {
                 login: "testuser".to_string(),
-                password: "abc".to_string(),
+                password: Some("abc".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "test@example.com".to_string(),
@@ -446,7 +450,7 @@ mod tests {
         fn test_create_user_dto_invalid_email() {
             let dto = CreateUserDto {
                 login: "testuser".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "invalid-email".to_string(),
@@ -463,8 +467,21 @@ mod tests {
             let json = r#"{"login":"testuser","password":"password123","email":"test@example.com"}"#;
             let dto: CreateUserDto = serde_json::from_str(json).unwrap();
             assert_eq!(dto.login, "testuser");
-            assert_eq!(dto.password, "password123");
+            assert_eq!(dto.password, Some("password123".to_string()));
             assert_eq!(dto.email, "test@example.com");
+        }
+
+        #[test]
+        fn test_create_user_dto_password_optional() {
+            // Admin-create-user flow: password absent in request body is valid.
+            // The handler generates a random one server-side and the user
+            // sets their own via reset-password. Bug #13 surfaced by 1-a.5.0
+            // gateway-cb cypress against user-management.cy.ts.
+            let json = r#"{"login":"newuser","email":"newuser@example.com"}"#;
+            let dto: CreateUserDto = serde_json::from_str(json).unwrap();
+            assert_eq!(dto.login, "newuser");
+            assert_eq!(dto.password, None);
+            assert!(dto.validate().is_ok());
         }
     }
 
