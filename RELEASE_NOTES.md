@@ -1,4 +1,167 @@
-# Release Notes - v1.0.0
+# Release Notes
+
+# v1.0.1 — 2026-06-09
+
+## Overview
+
+v1.0.0 was a stake in the ground. v1.0.1 is the test surface that proves the ground isn't soft.
+
+The headline: we added an opt-in CI workflow that runs the **end-to-end integration matrix** (`e2e.yml`) — every scaffold dimension combination compiled, tested against a real DB, brought up via `docker compose`, and exercised by Cypress in a headless browser. Each layer caught something the layer below missed:
+
+- `cargo test` against a real postgres / mysql / mongo container surfaced **3 bugs** that wiremock-stubbed unit tests had been hiding.
+- `docker compose up --build` + `/api/health` smoke surfaced **7 docker-config bugs** — the docker-compose generation had quietly been emitting broken stacks since the file existed.
+- Cypress headless surfaced **12 more bugs** in OAuth2 flows, entity codegen, Authority CRUD, and the mongo init script that was never being mounted.
+
+Plus `2 more` caught by the entity-regen step (1-a.3) and the sqlite reserved-word check (1-a.5.1). **Total: 24 generator bugs caught + fixed in v1.0.1.**
+
+Each one would have shipped untouched without this work. The most severe — bug #18 (OAuth2 token exchange broken in docker) and #22 (mongo init script never mounted) — were silent failure modes: the previous CI layers all reported green because none of them actually authenticated a user end-to-end against the real OAuth2 / mongo seed data. Cypress + browser was the first layer that did.
+
+Coverage went from **60.11% → 84.41%** on the canonical scaffold across Phase 2d + Phase 3a/b/c, and the `samples.yml` coverage gate ratcheted from 50 to 75 in one bundled step (locked decision #8) once we saw the trajectory.
+
+## Bug tally by where it was caught
+
+The 24-bug list isn't a measure of historical sloppiness — it's a measure of which test layers have which catch rate. Every test layer has a regression window. The deeper the layer, the larger the window. Here's how the bugs distributed:
+
+| Caught by                                                 |  Count | Examples                                                                                                                                                                                                        |
+| --------------------------------------------------------- | -----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test` against real DB containers (1-a.2)           |      3 | Email-pattern fixture, MySQL DATETIME(6) for sort tests, consul fixture missing mongo keys                                                                                                                      |
+| Entity-regen via `jhipster jdl --force` (1-a.3)           |      2 | `diesel.toml` `[print_schema]` overwriting needles, entity migration timestamp collisions                                                                                                                       |
+| `docker compose up --build` + `/api/health` smoke (1-a.4) |      7 | `context: .` wrong root, sqlite uid-1001 perms, `APP_ENV=production` blocking dev, duplicate `db:` services, `extends:` not inheriting volumes, empty `volumes:` keyword, mongo replSet localhost advertisement |
+| Cypress headless against the SPA (1-a.5)                  | **12** | Password optional, Authority CRUD missing, sqlite reserved-word, OAuth2 internal URI split, OAuth2 logout URL, 4 mongo codegen bugs, BigDecimal mongo test fixture, mongo init mount + bootstrap                |
+
+Cypress dominates the catch count because every layer above it had to actually drive the SPA through a real OAuth2 flow / entity CRUD / login → CRUD → delete sequence. Wiremock stubs are good at compile / type / unit checks; they're bad at exercising the docker network + browser + IdP + db trifecta.
+
+## What's new
+
+### `e2e.yml` integration matrix
+
+13 jobs across 4 DB dimensions:
+
+- **4 cargo-test jobs** (`e2e-sqlite`, `e2e-postgres`, `e2e-mysql`, `e2e-mongo`) — each with a per-DB service container. Postgres scaffolds (3 of them: mono-pg-react, microservice-cb, gateway-cb) and mongo scaffolds (2 of them: mono-mongo-jwt-ng, ms-mongo-oauth2-consul) share a job via matrix.
+- **3 docker-compose-smoke jobs** (`e2e-postgres-docker`, `e2e-mysql-docker`, `e2e-mongo-docker`) — each generates a scaffold, runs `docker compose -f docker/app.yml up -d --build`, polls `/api/health` until it returns `{"status":"UP"}` (max 240s), then tears down. The postgres / mysql / mongo split is needed because the GH Actions `services:` block is job-level, and putting a postgres service container on one job and using docker-compose's own postgres on another would create host-port conflicts.
+- **5 Cypress headless jobs** (`e2e-cypress-gateway`, `-sqlite`, `-react`, `-vue`, `-mongo`, plus `-gateway-mongo` for the stress-test combination). Each generates the scaffold, runs `npm install` in the `client/` dir (downloads the ~150MB Cypress binary), brings up the docker-compose stack, and runs `cypress run --browser chrome` against `http://localhost:8080`. Screenshots upload as artifacts on failure (14-day retention).
+- An **`e2e-check` aggregator** gates the matrix on a single status check.
+
+Triggers: `pull_request` with the `e2e` label (opt-in), manual dispatch, and nightly at 08:00 UTC. The nightly run is the basis for the future release gate (locked decision #4: green within 24h of release commit).
+
+### `tarpaulin-matrix.yml` per-scaffold coverage
+
+8 jobs, one per scaffold across 4 DB dimensions, running `cargo tarpaulin --out Xml --out Html`. Each uploads its own per-scaffold cobertura.xml + tarpaulin-report.html as a 14-day artifact named `tarpaulin-<scaffold>`. **Informational, not gating** — the release-blocking coverage gate stays in `samples.yml`'s `coverage` job at `--fail-under 75` against the canonical `microservice-cb` scaffold.
+
+Triggers: manual dispatch, nightly at 09:00 UTC (1 hour after `e2e.yml` so the two workflows don't fight over runner capacity), and `pull_request` with the `tarpaulin` label (opt-in; expensive).
+
+### 5 new JDL samples
+
+Track 1-a.5 converted the four monolith yo-rc samples (`mono-sqlite-jwt-ng`, `mono-pg-jwt-react`, `mono-mysql-oauth2-vue`, `mono-mongo-jwt-ng`) to JDL form, baking in `clientFramework` + `testFrameworks [cypress]` + Customer + Order entities. The yo-rc form had `skipClient: true` and `testFrameworks: []` — no frontend was generated. Without a frontend, no Cypress.
+
+The conversion added a 6th sample: **`gateway-mongo-oauth2-react`**, a stress-test combination of four paths that the rest of the matrix exercised separately:
+
+- gateway + consul (like gateway-cb)
+- mongo persistence (like mono-mongo-jwt-ng)
+- OAuth2 + Keycloak (like mono-mysql-oauth2-vue)
+- React frontend (like mono-pg-jwt-react)
+
+None of those four had been combined in a single scaffold before. The cypress job for this sample exercises the full stack with all the bug fixes from #18 / #19 / #22 working together — and it passes on first run.
+
+### Phase 2d + Phase 3a/b/c coverage push (60.11% → 84.41%)
+
+The deferred phases from v1.0.0 landed:
+
+- **Phase 2b** — `handlers/account.rs` error-path tests via `axum-test`.
+- **Phase 2c** — `services/resilient_http_client.rs` covered with `wiremock`.
+- **Phase 2d** — entity service sort branches + M2O lookup coverage.
+- **Phase 3a** — `consul_service` + `vault_service` wiremock coverage + yo-rc sample conversion to support the new wiremock-backed tests.
+- **Phase 3b** — `config_watcher` Consul-KV watch loop covered.
+- **Phase 3c** — `tracing_config` env-var parsing + `init_tracer` disabled-branch.
+
+Net: +24.3pp on the canonical scaffold. The gate ratchet from 50 → 75 (locked decision #8) absorbs the 9.36pp slack so a mid-PR coverage dip doesn't fail the gate.
+
+## Two high-impact bugs worth a longer look
+
+### #18 — OAuth2 token exchange broken inside docker compose
+
+Setup: any OAuth2 + docker compose user runs the generated scaffold's `docker compose -f docker/app.yml up -d --build`. The browser opens `http://localhost:8080`. Authentication redirects to `http://localhost:9080` (Keycloak's published port). User logs in. Keycloak redirects back to the app's `/login/oauth2/code/oidc?code=...`. The app's callback handler does:
+
+```rust
+client.post(&config.token_endpoint)   // POST http://localhost:9080/.../token
+    .form(&token_params)
+    .send()
+    .await
+```
+
+But the app is running inside the `monomysql-app-1` container. `localhost:9080` resolves to the **app container itself**, not Keycloak. The POST returns `Connection refused (os error 111)`. The callback redirects back to the frontend with an `?error=...` query string. The user sees a login failure and can't proceed. Silent failure.
+
+Why every previous test layer missed it:
+
+- **cargo test** uses wiremock to stub the token endpoint — never actually calls Keycloak.
+- **docker compose smoke** only polls `/api/health`, which doesn't need authentication.
+- **Browser-based testing** (`/qa`, `/qa-only`, manual) wasn't in the matrix.
+
+Cypress + browser was the first layer that drove a real OAuth2 flow through a real docker stack against a real Keycloak. It found the bug on its first run.
+
+The fix:
+
+1. Added `OIDC_INTERNAL_URI` to `OAuth2Config`. Endpoints derive from it: `jwks_uri`, `token_endpoint`, `userinfo_endpoint`. `authorization_endpoint` and `end_session_endpoint` stay on `OIDC_ISSUER_URI` (those go to the browser).
+2. Generated `docker/app.yml` sets `OIDC_ISSUER_URI=http://localhost:9080/...` (browser-facing) and `OIDC_INTERNAL_URI=http://keycloak:9080/...` (docker-network).
+3. Generated `docker/keycloak.yml` sets `KC_HOSTNAME=localhost` + `KC_HOSTNAME_STRICT=false` + `KC_HOSTNAME_STRICT_BACKCHANNEL=false` so Keycloak emits `iss=http://localhost:9080/...` regardless of which network route the request came in on. Server-side `iss` validation matches the browser-facing URL.
+
+After the fix, the full OAuth2 dance works via curl simulation (we tested before pushing to CI). On CI it surfaced **bug #19** as a follow-on: `end_session_endpoint` had been on `internal_uri` too, so the logout JSON response told the browser to navigate to `http://keycloak:9080/.../logout` — which the browser can't resolve. 60s page-load timeout. Same fix shape (re-categorize endpoints by who consumes them).
+
+### #22 — `mongodb_init.js` was never mounted into the mongo container
+
+Setup: every mongo scaffold generates a `scripts/mongodb_init.js` that creates the `users` and `authorities` collections and seeds them with `admin/admin` + `user/user` + `ROLE_ADMIN` + `ROLE_USER`. The file existed. But `docker/mongodb.yml` had:
+
+```yaml
+volumes:
+  - mongodb_data:/data/db
+```
+
+No mount of `scripts/mongodb_init.js` into `/docker-entrypoint-initdb.d/`. The mongo image runs init scripts only when it finds them in that exact path. So the script never ran. Both collections stayed empty. Any browser flow that tried to authenticate with the documented admin/admin credentials got 401.
+
+Why every previous test layer missed it:
+
+- **cargo test** creates its own test users via `create_test_admin` / `create_test_user` utilities. Bypasses the seed entirely.
+- **docker compose smoke** polls `/api/health`, doesn't authenticate.
+
+Once we added the mount, the container crashed on first boot with `MongoServerError: not primary`. Mongo's docker-entrypoint runs init scripts after `mongod` starts but **before** our healthcheck calls `rs.initiate()`. The init script's `db.users.insertOne(...)` writes fail because no node is primary yet. Inlined `rs.initiate()` + a primary-election wait loop at the top of `mongodb_init.js`. Container boots clean, collections seed, `POST /api/authenticate` returns 200 with a JWT.
+
+Same pattern as #18: **silent failure modes that only an end-to-end browser flow exposed**.
+
+## Coverage trajectory
+
+Measured against the canonical `microservice-cb` scaffold:
+
+| Milestone                                   | Coverage           | Δ from prior |
+| ------------------------------------------- | ------------------ | ------------ |
+| v1.0.0 release (2026-05-11)                 | 60.11% (1139/1895) | —            |
+| Phase 2b — handlers/account error paths     | ~63.5%             | +3.4pp       |
+| Phase 2c — resilient_http_client wiremock   | ~67.8%             | +4.3pp       |
+| Phase 2d — entity-service sort + M2O lookup | ~71.0%             | +3.2pp       |
+| Phase 3a — consul + vault wiremock          | ~78.4%             | +7.4pp       |
+| Phase 3b — config_watcher KV watch loop     | ~81.5%             | +3.1pp       |
+| Phase 3c — tracing_config env parsing       | **84.41%**         | +2.9pp       |
+
+The gate-ratchet-to-75 absorbs 9.4pp of slack so a mid-PR coverage churn doesn't fail the build.
+
+## Backward compatibility
+
+Non-breaking. The five scaffold flags accept the same values. Existing v1.0.0-generated apps are untouched on disk. **Regenerating** a scaffold to v1.0.1 brings:
+
+- Optional `OIDC_INTERNAL_URI` env var on OAuth2 docker setups (falls back to `OIDC_ISSUER_URI` for non-docker)
+- `KC_HOSTNAME` pinning on Keycloak docker config (no effect if you weren't using docker-compose for OAuth2)
+- `mongodb_init.js` bind mount on mongo docker (harmless if the file already exists; safe re-add)
+- `jhi_` prefix on sqlite reserved-word entity names (only affects entities literally named `Order`, `User`, `Group`, etc. — these were previously broken, so this is correction, not migration)
+- Authority CRUD endpoints — additive, no breakage
+
+If your in-place app has an `Order` entity on sqlite and you regenerate to v1.0.1: the _new_ migration emits `CREATE TABLE jhi_order`, but your _existing_ database has `CREATE TABLE order` from the old broken migration. Two options: drop and re-migrate (easiest in dev), or rename the table manually (`ALTER TABLE order RENAME TO jhi_order` — sqlite supports this since 3.25).
+
+## What we deferred
+
+- **CI gate ratchet to 80+** — defer until we have a stable 84-86% trajectory across two release cycles. v1.0.2's gate stays at 75.
+- **Cypress OAuth2 + Vue per-suite isolation** — `cy.session()` is fragile when entity-CRUD suites run interleaved against an OAuth2 backend. We saw flakes in the mono-mysql-oauth2-vue job and worked around them; the proper fix is per-suite session creation rather than shared `cy.session` blocks. Deferred to v1.1.x.
+- **Proper OAuth2 cypress helpers for Okta / Auth0** — current scaffold has stubs (`cy.oktaLogin`, `cy.auth0Login`) but they're untested in CI. Only Keycloak is exercised end-to-end. Deferred.
+
+# v1.0.0 — 2026-05-11
 
 ## Overview
 
