@@ -1,0 +1,73 @@
+/*
+ * Monolith + MySQL + OAuth2 + Vue E2E Test Sample
+ *
+ * Track 1-a.5.3 conversion (2026-06-09) from the yo-rc form. The prior
+ * yo-rc skipped the client + cypress; the JDL form bakes both in so
+ * the e2e-cypress-vue job can run headless browser tests against a
+ * generated scaffold.
+ *
+ * Three "firsts" in the matrix that this scaffold exercises:
+ *   - Vue frontend (only one in the matrix)
+ *   - OAuth2 + Keycloak (only one with cypress so far; gateway-cb,
+ *     mono-sqlite-jwt-ng, mono-pg-jwt-react are all JWT)
+ *   - MySQL (only one with cypress)
+ *
+ * The OAuth2 path expects the cypress generator's customizeAuthTests
+ * hook to .skip the login-page spec (it requires a Keycloak round-trip
+ * the cypress harness doesn't replay). Entity CRUD tests run against
+ * an already-authenticated session.
+ *
+ * Entities mirror gateway-cb / mono-sqlite-jwt-ng / mono-pg-jwt-react
+ * (Customer + Order). The 1-a.3 entity-regen step adds Author/Book/Tag
+ * on top — disjoint.
+ */
+application {
+  config {
+    applicationType monolith
+    baseName monoMysql
+    packageName com.mycompany.monomysql
+    authenticationType oauth2
+    databaseType sql
+    prodDatabaseType mysql
+    devDatabaseType mysql
+    cacheProvider no
+    buildTool maven
+    clientFramework vue
+    testFrameworks [cypress]
+  }
+  entities Order, Customer
+}
+
+entity Customer {
+  firstName String required minlength(2) maxlength(50)
+  lastName String required minlength(2) maxlength(50)
+  email String required pattern(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
+  phone String maxlength(20)
+  active Boolean
+  createdDate Instant
+}
+
+entity Order {
+  orderNumber String required
+  orderDate Instant required
+  totalAmount BigDecimal required min(0)
+  status OrderStatus required
+  notes TextBlob
+}
+
+enum OrderStatus {
+  PENDING,
+  CONFIRMED,
+  SHIPPED,
+  DELIVERED,
+  CANCELLED
+}
+
+relationship ManyToOne {
+  Order{customer(email)} to Customer
+}
+
+paginate Customer, Order with pagination
+
+service Customer with serviceClass
+service Order with serviceClass
