@@ -61,13 +61,23 @@ impl OAuth2Config {
         let internal_base = internal_uri.trim_end_matches('/');
         let is_okta = external_base.contains("okta");
 
+        // Endpoint categorization:
+        //   - authorization_endpoint + end_session_endpoint are browser-facing
+        //     (server returns these in redirects / JSON payloads for the
+        //     browser to follow), so they use the external base.
+        //   - jwks_uri + token_endpoint + userinfo_endpoint are server-internal
+        //     (the app calls them directly), so they use the internal base.
+        //   - Bug #19 follow-on from 1-a.5.3: end_session_endpoint was on the
+        //     internal base, causing the browser to hang following
+        //     http://keycloak:9080/... after logout (60s page-load timeout
+        //     in the cypress logout spec).
         let (jwks_uri, authorization_endpoint, token_endpoint, userinfo_endpoint, end_session_endpoint) = if is_okta {
             (
                 format!("{}/v1/keys", internal_base),
                 format!("{}/v1/authorize", external_base),
                 format!("{}/v1/token", internal_base),
                 format!("{}/v1/userinfo", internal_base),
-                format!("{}/v1/logout", internal_base),
+                format!("{}/v1/logout", external_base),
             )
         } else {
             (
@@ -75,7 +85,7 @@ impl OAuth2Config {
                 format!("{}/protocol/openid-connect/auth", external_base),
                 format!("{}/protocol/openid-connect/token", internal_base),
                 format!("{}/protocol/openid-connect/userinfo", internal_base),
-                format!("{}/protocol/openid-connect/logout", internal_base),
+                format!("{}/protocol/openid-connect/logout", external_base),
             )
         };
 
@@ -169,9 +179,12 @@ mod tests {
             config.userinfo_endpoint,
             "http://keycloak:9080/realms/jhipster/protocol/openid-connect/userinfo"
         );
+        // Bug #19: end_session_endpoint goes back to the BROWSER (the logout
+        // handler emits it in the JSON response for the SPA to navigate to),
+        // so it must use the external base. Browser can't resolve `keycloak`.
         assert_eq!(
             config.end_session_endpoint,
-            "http://keycloak:9080/realms/jhipster/protocol/openid-connect/logout"
+            "http://localhost:9080/realms/jhipster/protocol/openid-connect/logout"
         );
         // issuer_uri itself is the browser-facing one (also what's in `iss`).
         assert_eq!(config.issuer_uri, "http://localhost:9080/realms/jhipster");
