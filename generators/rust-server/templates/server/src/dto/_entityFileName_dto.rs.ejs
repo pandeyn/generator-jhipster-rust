@@ -22,8 +22,16 @@ use regex::Regex;
 <%_ if (hasAnyRelationships || manyToManyOwnerRels.length > 0) { _%>
 use bson::oid::ObjectId;
 <%_ } _%>
+<%_ // Bug #20a fix (1-a.5.4): mirror the SQL-side conditional import. _%>
+<%_ // The required-deserializer is only needed when at least one entity field _%>
+<%_ // is a required DateTime; otherwise importing it leaves clippy with an _%>
+<%_ // unused-import error. Customer (createdDate optional) hit this. _%>
 <%_ if (hasDateTimeFields) { _%>
+<%_ if (hasRequiredDateTimeFields) { _%>
 use crate::dto::common::{deserialize_bson_datetime, deserialize_option_bson_datetime};
+<%_ } else { _%>
+use crate::dto::common::deserialize_option_bson_datetime;
+<%_ } _%>
 <%_ } _%>
 <%_ } else if (hasDateTimeFields) { _%>
 use chrono::NaiveDateTime;
@@ -533,7 +541,14 @@ mod tests {
                 <%= field.fieldNameUnderscored %>: 42.5,
 <%_ } else if (field.fieldType === 'BigDecimal') { _%>
                 <%_ // Track 1-c.2 fix (2026-05-11): BigDecimal parse for required fields. _%>
+                <%_ // Bug #21 fix (1-a.5.4): mongo scaffolds map BigDecimal → f64 _%>
+                <%_ // (no bigdecimal crate dep — see 1-c.0 fix in generator.js). _%>
+                <%_ // Emit the matching test fixture so cargo test compiles. _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: 42.50,
+<%_ } else { _%>
                 <%= field.fieldNameUnderscored %>: "42.50".parse::<bigdecimal::BigDecimal>().unwrap(),
+<%_ } _%>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
                 <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
@@ -557,7 +572,11 @@ mod tests {
 <%_ } else if (field.fieldType === 'Double') { _%>
                 <%= field.fieldNameUnderscored %>: Some(42.5),
 <%_ } else if (field.fieldType === 'BigDecimal') { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: Some(42.50),
+<%_ } else { _%>
                 <%= field.fieldNameUnderscored %>: Some("42.50".parse::<bigdecimal::BigDecimal>().unwrap()),
+<%_ } _%>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
                 <%= field.fieldNameUnderscored %>: Some(true),
 <%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
@@ -675,7 +694,11 @@ mod tests {
 <%_ } else if (field.fieldType === 'Double') { _%>
                 <%= field.fieldNameUnderscored %>: 1.0,
 <%_ } else if (field.fieldType === 'BigDecimal') { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else { _%>
                 <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap(),
+<%_ } _%>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
                 <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
@@ -727,7 +750,11 @@ mod tests {
 <%_ } else if (field.fieldType === 'Double') { _%>
                 <%= field.fieldNameUnderscored %>: 1.0,
 <%_ } else if (field.fieldType === 'BigDecimal') { _%>
+<%_ if (devDatabaseTypeMongodb) { _%>
+                <%= field.fieldNameUnderscored %>: 1.0,
+<%_ } else { _%>
                 <%= field.fieldNameUnderscored %>: "1.0".parse::<bigdecimal::BigDecimal>().unwrap(),
+<%_ } _%>
 <%_ } else if (field.fieldType === 'Boolean') { _%>
                 <%= field.fieldNameUnderscored %>: true,
 <%_ } else if (['Instant', 'ZonedDateTime'].includes(field.fieldType)) { _%>
