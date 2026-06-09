@@ -1,0 +1,71 @@
+/*
+ * Gateway + MongoDB + OAuth2 + React + Cypress E2E Test Sample
+ *
+ * Added in 1-a.5.5 (2026-06-09) as a stress-test combination that mixes
+ * paths exercised separately by the rest of Track 1-a.5:
+ *
+ *   gateway + consul   — like gateway-cb
+ *   mongo persistence  — like mono-mongo-jwt-ng / ms-mongo-oauth2-consul
+ *   OAuth2 + Keycloak  — like mono-mysql-oauth2-vue
+ *   React frontend     — like mono-pg-jwt-react
+ *
+ * Each ingredient is green in isolation; this scaffold proves the
+ * combination still holds. Likely surface area for new bugs:
+ *   - Gateway + Mongo handler routing (unique combo)
+ *   - Gateway + OAuth2 callback shape (unique combo)
+ *   - React + OAuth2 cypress flow (mono-mysql is Vue + OAuth2)
+ *
+ * Entities mirror the rest of 1-a.5 (Customer + Order). The 1-a.3
+ * entity-regen step adds Author/Book/Tag on top.
+ */
+application {
+  config {
+    applicationType gateway
+    baseName gwMongo
+    packageName com.mycompany.gwmongo
+    authenticationType oauth2
+    databaseType mongodb
+    devDatabaseType mongodb
+    prodDatabaseType mongodb
+    cacheProvider no
+    buildTool maven
+    clientFramework react
+    serviceDiscoveryType consul
+    testFrameworks [cypress]
+  }
+  entities Order, Customer
+}
+
+entity Customer {
+  firstName String required minlength(2) maxlength(50)
+  lastName String required minlength(2) maxlength(50)
+  email String required pattern(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
+  phone String maxlength(20)
+  active Boolean
+  createdDate Instant
+}
+
+entity Order {
+  orderNumber String required
+  orderDate Instant required
+  totalAmount BigDecimal required min(0)
+  status OrderStatus required
+  notes TextBlob
+}
+
+enum OrderStatus {
+  PENDING,
+  CONFIRMED,
+  SHIPPED,
+  DELIVERED,
+  CANCELLED
+}
+
+relationship ManyToOne {
+  Order{customer(email)} to Customer
+}
+
+paginate Customer, Order with pagination
+
+service Customer with serviceClass
+service Order with serviceClass
