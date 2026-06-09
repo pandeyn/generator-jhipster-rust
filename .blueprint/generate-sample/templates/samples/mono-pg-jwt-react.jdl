@@ -1,0 +1,69 @@
+/*
+ * Monolith + PostgreSQL + JWT + React E2E Test Sample
+ *
+ * Track 1-a.5.2 conversion (2026-06-09) from the yo-rc form. The prior
+ * yo-rc skipped the client + cypress; the JDL form bakes both in so
+ * the e2e-cypress-postgres job can run headless browser tests against
+ * a generated scaffold.
+ *
+ * Entities mirror gateway-cb and mono-sqlite-jwt-ng (Customer + Order)
+ * — same shape across the matrix to surface backend-storage differences
+ * (sqlite vs postgres vs mysql DDL emission) and frontend-framework
+ * differences (Angular vs React vs Vue cypress flows) without entity
+ * shape acting as a confounder.
+ *
+ * The 1-a.3 entity-regen job still adds Author/Book/Tag on top via
+ * .github/workflows/fixtures/relationships.jdl — disjoint from
+ * Customer/Order, so the regen test continues to exercise the
+ * "add entities to existing scaffold" path.
+ */
+application {
+  config {
+    applicationType monolith
+    baseName monoPg
+    packageName com.mycompany.monopg
+    authenticationType jwt
+    databaseType sql
+    prodDatabaseType postgresql
+    devDatabaseType postgresql
+    cacheProvider no
+    buildTool maven
+    clientFramework react
+    testFrameworks [cypress]
+  }
+  entities Order, Customer
+}
+
+entity Customer {
+  firstName String required minlength(2) maxlength(50)
+  lastName String required minlength(2) maxlength(50)
+  email String required pattern(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
+  phone String maxlength(20)
+  active Boolean
+  createdDate Instant
+}
+
+entity Order {
+  orderNumber String required
+  orderDate Instant required
+  totalAmount BigDecimal required min(0)
+  status OrderStatus required
+  notes TextBlob
+}
+
+enum OrderStatus {
+  PENDING,
+  CONFIRMED,
+  SHIPPED,
+  DELIVERED,
+  CANCELLED
+}
+
+relationship ManyToOne {
+  Order{customer(email)} to Customer
+}
+
+paginate Customer, Order with pagination
+
+service Customer with serviceClass
+service Order with serviceClass
