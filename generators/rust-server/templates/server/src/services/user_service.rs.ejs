@@ -11,10 +11,10 @@ use chrono::Utc;
 use diesel::prelude::*;
 
 use crate::db::connection::DbConnection;
-use crate::db::schema::{user_authorities, users};
+use crate::db::schema::{authorities, user_authorities, users};
 use crate::dto::{CreateUserDto, PageRequest, UpdateUserDto};
 use crate::errors::AppError;
-use crate::models::{NewUser, RoleType, UpdateUser, User, UserAuthority};
+use crate::models::{Authority, NewUser, RoleType, UpdateUser, User, UserAuthority};
 
 pub struct UserService;
 
@@ -252,8 +252,14 @@ impl UserService {
             return Err(AppError::BadRequest("Email already exists".to_string()));
         }
 
-        // Hash the password
-        let password_hash = Self::hash_password(&dto.password)?;
+        // Hash the password. JHipster admin-create-user flow allows omitting
+        // the password — the server generates a random one and the user must
+        // use the reset-password flow to set their own. Bug #13 surfaced by
+        // 1-a.5.0 gateway-cb cypress (user-management.cy.ts POSTs login+email
+        // only). The UUID-based fallback is unguessable, so the created user
+        // can't log in until they reset.
+        let password = dto.password.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let password_hash = Self::hash_password(&password)?;
         let now = Utc::now().naive_utc();
 
         let new_user = NewUser {
@@ -361,6 +367,60 @@ impl UserService {
             .execute(conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        Ok(())
+    }
+
+    // Authority CRUD (bug #14 fix from 1-a.5.0). Previously the GET
+    // /api/authorities endpoint returned a hard-coded ROLE_ADMIN/ROLE_USER
+    // vec; POST returned 405 and the cypress entity/authority.cy.ts test
+    // failed. These methods back the endpoints with the existing
+    // `authorities` table.
+
+    /// List all authority names (ordered for stable diffs/tests)
+    pub fn find_all_authorities(conn: &mut DbConnection) -> Result<Vec<String>, AppError> {
+        authorities::table
+            .order(authorities::name.asc())
+            .select(authorities::name)
+            .load::<String>(conn)
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Create a new authority. Returns BadRequest if it already exists
+    /// (the PK is `name`, so a duplicate insert fails with UniqueViolation).
+    pub fn create_authority(conn: &mut DbConnection, name: &str) -> Result<Authority, AppError> {
+        let authority = Authority { name: name.to_string() };
+        diesel::insert_into(authorities::table)
+            .values(&authority)
+            .execute(conn)
+            .map_err(|e| {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unique") || msg.contains("duplicate") {
+                    AppError::BadRequest(format!("Authority '{}' already exists", name))
+                } else {
+                    AppError::Internal(e.to_string())
+                }
+            })?;
+        Ok(authority)
+    }
+
+    /// Delete an authority. Returns NotFound if the row didn't exist. The
+    /// user_authorities FK is ON DELETE-restricted (no cascade), so deleting
+    /// an authority that's still assigned to a user surfaces an FK error
+    /// — caller sees BadRequest.
+    pub fn delete_authority(conn: &mut DbConnection, name: &str) -> Result<(), AppError> {
+        let rows = diesel::delete(authorities::table.find(name.to_string()))
+            .execute(conn)
+            .map_err(|e| {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("foreign key") || msg.contains("references") {
+                    AppError::BadRequest(format!("Authority '{}' is still assigned to users", name))
+                } else {
+                    AppError::Internal(e.to_string())
+                }
+            })?;
+        if rows == 0 {
+            return Err(AppError::NotFound(format!("Authority '{}' not found", name)));
+        }
         Ok(())
     }
 
@@ -797,7 +857,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "testuser".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: Some("Test".to_string()),
                 last_name: Some("User".to_string()),
                 email: "testuser@example.com".to_string(),
@@ -823,7 +883,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "duplicate".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "first@example.com".to_string(),
@@ -839,7 +899,7 @@ mod tests {
             // Second creation with same login should fail
             let dto2 = CreateUserDto {
                 login: "duplicate".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "second@example.com".to_string(),
@@ -860,7 +920,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "user1".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "same@example.com".to_string(),
@@ -876,7 +936,7 @@ mod tests {
             // Second creation with same email should fail
             let dto2 = CreateUserDto {
                 login: "user2".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "same@example.com".to_string(),
@@ -898,7 +958,7 @@ mod tests {
             // Create a user first
             let dto = CreateUserDto {
                 login: "findbyid".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: Some("Find".to_string()),
                 last_name: Some("ById".to_string()),
                 email: "findbyid@example.com".to_string(),
@@ -931,7 +991,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "findbylogin".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "findbylogin@example.com".to_string(),
@@ -954,7 +1014,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "findbyemail".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "findbyemail@example.com".to_string(),
@@ -987,7 +1047,7 @@ mod tests {
             for i in 0..5 {
                 let dto = CreateUserDto {
                     login: format!("paguser{}", i),
-                    password: "password123".to_string(),
+                    password: Some("password123".to_string()),
                     first_name: Some(format!("User{}", i)),
                     last_name: None,
                     email: format!("paguser{}@example.com", i),
@@ -1020,7 +1080,7 @@ mod tests {
             for login in ["zcharlie", "zalice", "zbob"] {
                 let dto = CreateUserDto {
                     login: login.to_string(),
-                    password: "password123".to_string(),
+                    password: Some("password123".to_string()),
                     first_name: None,
                     last_name: None,
                     email: format!("{}@example.com", login),
@@ -1066,7 +1126,7 @@ mod tests {
             for (suffix, email_p, fn_, ln, lk) in users {
                 let dto = CreateUserDto {
                     login: format!("{}_{}", prefix, suffix),
-                    password: "password123".to_string(),
+                    password: Some("password123".to_string()),
                     first_name: Some(fn_.to_string()),
                     last_name: Some(ln.to_string()),
                     email: format!("{}_{}@example.com", email_p, prefix),
@@ -1155,7 +1215,7 @@ mod tests {
             for (suffix, activated) in [("on", true), ("off", false)] {
                 let dto = CreateUserDto {
                     login: format!("{}_{}", prefix, suffix),
-                    password: "password123".to_string(),
+                    password: Some("password123".to_string()),
                     first_name: None,
                     last_name: None,
                     email: format!("{}_{}@x.com", prefix, suffix),
@@ -1208,7 +1268,7 @@ mod tests {
             for suffix in ["a", "b", "c"] {
                 let dto = CreateUserDto {
                     login: format!("{}_{}", prefix, suffix),
-                    password: "password123".to_string(),
+                    password: Some("password123".to_string()),
                     first_name: None,
                     last_name: None,
                     email: format!("{}_{}@x.com", prefix, suffix),
@@ -1245,7 +1305,7 @@ mod tests {
             // Create a user
             let dto = CreateUserDto {
                 login: "toupdate".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: Some("Original".to_string()),
                 last_name: Some("Name".to_string()),
                 email: "toupdate@example.com".to_string(),
@@ -1286,7 +1346,7 @@ mod tests {
             // Create a user with USER role
             let dto = CreateUserDto {
                 login: "authupdate".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "authupdate@example.com".to_string(),
@@ -1325,7 +1385,7 @@ mod tests {
             // Create a user
             let dto = CreateUserDto {
                 login: "todelete".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "todelete@example.com".to_string(),
@@ -1353,7 +1413,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "withauth".to_string(),
-                password: "password123".to_string(),
+                password: Some("password123".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "withauth@example.com".to_string(),
@@ -1378,7 +1438,7 @@ mod tests {
 
             let dto = CreateUserDto {
                 login: "pwdupdate".to_string(),
-                password: "oldpassword".to_string(),
+                password: Some("oldpassword".to_string()),
                 first_name: None,
                 last_name: None,
                 email: "pwdupdate@example.com".to_string(),

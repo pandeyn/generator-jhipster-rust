@@ -9,13 +9,67 @@ use mongodb::Collection;
 use crate::db::MongoPool;
 use crate::dto::PageRequest;
 use crate::errors::AppError;
-use crate::models::{NewUser, UpdateUser, User};
+use crate::models::{Authority, NewUser, UpdateUser, User};
 
 pub struct UserService;
 
 impl UserService {
     fn collection(db: &MongoPool) -> Collection<User> {
         db.collection::<User>("users")
+    }
+
+    fn authority_collection(db: &MongoPool) -> Collection<Authority> {
+        db.collection::<Authority>("authorities")
+    }
+
+    // Authority CRUD (bug #14 fix from 1-a.5.0). MongoDB stores authorities
+    // in their own collection keyed by `_id` (matches mongodb_init.js seed).
+
+    /// List all authority names (sorted)
+    pub async fn find_all_authorities(db: &MongoPool) -> Result<Vec<String>, AppError> {
+        use mongodb::options::FindOptions;
+        let collection = Self::authority_collection(db);
+        let opts = FindOptions::builder().sort(doc! { "_id": 1 }).build();
+        let cursor = collection
+            .find(doc! {})
+            .with_options(opts)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        let docs: Vec<Authority> = cursor
+            .try_collect()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        Ok(docs.into_iter().map(|a| a.name).collect())
+    }
+
+    /// Create a new authority. Returns BadRequest if already exists.
+    pub async fn create_authority(db: &MongoPool, name: &str) -> Result<Authority, AppError> {
+        let collection = Self::authority_collection(db);
+        let authority = Authority::new(name);
+        match collection.insert_one(&authority).await {
+            Ok(_) => Ok(authority),
+            Err(e) => {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("duplicate") || msg.contains("e11000") {
+                    Err(AppError::BadRequest(format!("Authority '{}' already exists", name)))
+                } else {
+                    Err(AppError::Internal(e.to_string()))
+                }
+            }
+        }
+    }
+
+    /// Delete an authority. Returns NotFound if it didn't exist.
+    pub async fn delete_authority(db: &MongoPool, name: &str) -> Result<(), AppError> {
+        let collection = Self::authority_collection(db);
+        let result = collection
+            .delete_one(doc! { "_id": name })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        if result.deleted_count == 0 {
+            return Err(AppError::NotFound(format!("Authority '{}' not found", name)));
+        }
+        Ok(())
     }
 
     /// Hash a password using Argon2

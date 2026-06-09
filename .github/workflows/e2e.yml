@@ -29,7 +29,9 @@ name: E2E Integration Matrix
 #           `jhipster jdl` onto a scaffold with existing entities)
 #   1-a.4 — docker-compose up + /health probe (rolled out per-DB like
 #           1-a.2; sqlite scaffold first in this PR, other DBs follow)
-#   1-a.5 — Cypress for monolith + gateway scaffolds
+#   1-a.5 — Cypress for monolith + gateway scaffolds:
+#     1-a.5.0 — gateway-cb (already JDL, ships cypress out of box)
+#     1-a.5.1–5.4 — convert mono-* yo-rc samples to JDL + add Cypress
 #   1-a.6 — per-scaffold tarpaulin (informational artifact, NOT gating per
 #           locked decision #3 — coverage gating stays on samples.yml)
 
@@ -664,13 +666,116 @@ jobs:
           docker compose -f docker/app.yml down -v
           echo "::endgroup::"
 
+  # ---- e2e-cypress-gateway ------------------------------------------
+  # Track 1-a.5.0: Cypress headless against the gateway-cb scaffold.
+  # gateway-cb is the only sample today that ships cypress out of the
+  # box (testFrameworks [cypress] + clientFramework angular, no skipClient).
+  # The four monolith scaffolds get their own Cypress jobs in 1-a.5.1+
+  # after their yo-rc samples are converted to JDL with the same shape.
+  #
+  # Pipeline:
+  #   1. Generate scaffold.
+  #   2. npm install in app/client (downloads Cypress binary ~150MB).
+  #   3. docker compose up --build — embeds the prod Angular bundle into
+  #      the Rust runtime image (Dockerfile client-builder stage copies
+  #      it into /app/static/), so the backend serves the SPA at /.
+  #   4. Wait for /api/health UP.
+  #   5. cypress run --browser chrome against http://localhost:8080/.
+  #      Specs cover login/logout/register/password/settings, admin pages,
+  #      and CRUD for the Order/Customer entities + user-management.
+  #
+  # Chrome is pre-installed on ubuntu-latest GH runners. No setup-chrome
+  # step needed — Cypress auto-detects.
+  e2e-cypress-gateway:
+    name: ${{ matrix.scaffold }} (cypress)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    strategy:
+      fail-fast: false
+      matrix:
+        scaffold:
+          - gateway-cb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable as of 2026-03-27
+      - name: Install blueprint dependencies
+        run: npm ci
+      - name: Generate scaffold
+        run: |
+          mkdir -p app
+          cd app
+          node "$GITHUB_WORKSPACE/cli/cli.cjs" generate-sample ${{ matrix.scaffold }} --skip-install --skip-git
+      - name: Sanity-check generated tree
+        working-directory: app
+        run: |
+          test -f Dockerfile || { echo "FAIL: Dockerfile missing"; exit 1; }
+          test -f docker/app.yml || { echo "FAIL: docker/app.yml missing"; exit 1; }
+          test -d client || { echo "FAIL: client/ missing"; exit 1; }
+          test -f client/cypress.config.ts || { echo "FAIL: client/cypress.config.ts missing"; exit 1; }
+          test -d client/test/cypress/e2e || { echo "FAIL: client/test/cypress/e2e missing"; exit 1; }
+      - name: Install client npm deps (incl. Cypress binary)
+        working-directory: app/client
+        run: npm install --no-audit --no-fund
+      - name: Build + start docker compose stack
+        working-directory: app
+        run: docker compose -f docker/app.yml up -d --build
+      - name: Wait for /api/health UP (max 240s)
+        working-directory: app
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8080/api/health 2>/dev/null | grep -q '"status":"UP"'; then
+              echo "OK — /api/health UP after ${i}*2s"
+              break
+            fi
+            sleep 2
+            if [ "$i" = "120" ]; then
+              echo "FAIL — /api/health never returned UP"
+              echo "--- docker compose ps -a ---"
+              docker compose -f docker/app.yml ps -a
+              echo "--- docker compose logs app (last 200) ---"
+              docker compose -f docker/app.yml logs --no-color --no-log-prefix app | tail -200
+              exit 1
+            fi
+          done
+      - name: Run Cypress headless (chrome)
+        working-directory: app/client
+        run: npm run e2e:cypress
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots-${{ matrix.scaffold }}
+          path: app/tmp/cypress/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Docker compose logs on failure
+        if: failure()
+        working-directory: app
+        run: |
+          echo "--- docker compose ps -a ---"
+          docker compose -f docker/app.yml ps -a
+          echo "--- docker compose logs (all, last 500) ---"
+          docker compose -f docker/app.yml logs --no-color | tail -500
+      - name: Teardown
+        if: always()
+        working-directory: app
+        run: docker compose -f docker/app.yml down -v
+
   # ---- Aggregator ---------------------------------------------------
   # Single status check for branch-protection use even though the work
   # spans multiple jobs.
   e2e-check:
     name: All E2E Scaffolds Pass
     runs-on: ubuntu-latest
-    needs: [e2e-sqlite, e2e-postgres, e2e-mysql, e2e-mongo, e2e-postgres-docker, e2e-mysql-docker, e2e-mongo-docker]
+    needs: [e2e-sqlite, e2e-postgres, e2e-mysql, e2e-mongo, e2e-postgres-docker, e2e-mysql-docker, e2e-mongo-docker, e2e-cypress-gateway]
     if: |
       always() && (
         github.event_name == 'workflow_dispatch' ||
@@ -680,17 +785,18 @@ jobs:
     steps:
       - name: Verify all scaffolds passed
         run: |
-          for r in "${{ needs.e2e-sqlite.result }}" "${{ needs.e2e-postgres.result }}" "${{ needs.e2e-mysql.result }}" "${{ needs.e2e-mongo.result }}" "${{ needs.e2e-postgres-docker.result }}" "${{ needs.e2e-mysql-docker.result }}" "${{ needs.e2e-mongo-docker.result }}"; do
+          for r in "${{ needs.e2e-sqlite.result }}" "${{ needs.e2e-postgres.result }}" "${{ needs.e2e-mysql.result }}" "${{ needs.e2e-mongo.result }}" "${{ needs.e2e-postgres-docker.result }}" "${{ needs.e2e-mysql-docker.result }}" "${{ needs.e2e-mongo-docker.result }}" "${{ needs.e2e-cypress-gateway.result }}"; do
             if [ "$r" != "success" ]; then
               echo "One or more e2e jobs failed:"
-              echo "  e2e-sqlite:          ${{ needs.e2e-sqlite.result }}"
-              echo "  e2e-postgres:        ${{ needs.e2e-postgres.result }}"
-              echo "  e2e-mysql:           ${{ needs.e2e-mysql.result }}"
-              echo "  e2e-mongo:           ${{ needs.e2e-mongo.result }}"
-              echo "  e2e-postgres-docker: ${{ needs.e2e-postgres-docker.result }}"
-              echo "  e2e-mysql-docker:    ${{ needs.e2e-mysql-docker.result }}"
-              echo "  e2e-mongo-docker:    ${{ needs.e2e-mongo-docker.result }}"
+              echo "  e2e-sqlite:           ${{ needs.e2e-sqlite.result }}"
+              echo "  e2e-postgres:         ${{ needs.e2e-postgres.result }}"
+              echo "  e2e-mysql:            ${{ needs.e2e-mysql.result }}"
+              echo "  e2e-mongo:            ${{ needs.e2e-mongo.result }}"
+              echo "  e2e-postgres-docker:  ${{ needs.e2e-postgres-docker.result }}"
+              echo "  e2e-mysql-docker:     ${{ needs.e2e-mysql-docker.result }}"
+              echo "  e2e-mongo-docker:     ${{ needs.e2e-mongo-docker.result }}"
+              echo "  e2e-cypress-gateway:  ${{ needs.e2e-cypress-gateway.result }}"
               exit 1
             fi
           done
-          echo "All 7 scaffolds passed across 7 jobs (closes Track 1-a.4)."
+          echo "All scaffolds passed (Track 1-a.5.0 in progress)."
