@@ -182,17 +182,25 @@ jobs:
         image: mysql:8.4
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: jhipster_rust_test
+          # Use the system db here, same as e2e-mysql. The actual test db
+          # (jhipster_rust_test) is created by the test setup. Using
+          # jhipster_rust_test as MYSQL_DATABASE here is harmless but
+          # diverges from the proven e2e-mysql shape.
+          MYSQL_DATABASE: mysql
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
-          --health-interval=5s
-          --health-timeout=3s
-          --health-retries=20
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     env:
-      TEST_DATABASE_URL: mysql://root:root@localhost:3306/jhipster_rust_test
-      DATABASE_URL: mysql://root:root@localhost:3306/jhipster_rust_test
+      # 127.0.0.1, not localhost: the mysql client treats `localhost` as a
+      # request to use the Unix socket which the GH services container
+      # doesn't expose. e2e-mysql learned this the hard way; aligning the
+      # tarpaulin-mysql shape avoids per-test connection retry storms.
+      TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/jhipster_rust_test
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/jhipster_rust_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
