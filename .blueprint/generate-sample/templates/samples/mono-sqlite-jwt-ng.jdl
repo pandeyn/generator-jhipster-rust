@@ -1,0 +1,68 @@
+/*
+ * Monolith + SQLite + JWT + Angular E2E Test Sample
+ *
+ * Track 1-a.5.1 conversion (2026-06-09) from the yo-rc form. The prior
+ * yo-rc skipped the client + cypress; the JDL form bakes both in so
+ * the e2e-cypress-sqlite job can run headless browser tests against
+ * a generated scaffold.
+ *
+ * Entities mirror gateway-cb (Customer + Order) on purpose: same field
+ * types and relationship shape, different backend storage (sqlite vs
+ * postgres). Differences in DDL emission (BigDecimal -> NUMERIC vs
+ * REAL/TEXT; Instant -> TIMESTAMP vs DATETIME) surface here rather than
+ * hiding behind postgres-only coverage.
+ *
+ * The 1-a.3 entity-regen job adds Author/Book/Tag on top via
+ * .github/workflows/fixtures/relationships.jdl — that still works
+ * because they're disjoint from Customer/Order.
+ */
+application {
+  config {
+    applicationType monolith
+    baseName monoSqlite
+    packageName com.mycompany.monosqlite
+    authenticationType jwt
+    databaseType sql
+    prodDatabaseType sqlite
+    devDatabaseType sqlite
+    cacheProvider no
+    buildTool maven
+    clientFramework angular
+    testFrameworks [cypress]
+  }
+  entities Order, Customer
+}
+
+entity Customer {
+  firstName String required minlength(2) maxlength(50)
+  lastName String required minlength(2) maxlength(50)
+  email String required pattern(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
+  phone String maxlength(20)
+  active Boolean
+  createdDate Instant
+}
+
+entity Order {
+  orderNumber String required
+  orderDate Instant required
+  totalAmount BigDecimal required min(0)
+  status OrderStatus required
+  notes TextBlob
+}
+
+enum OrderStatus {
+  PENDING,
+  CONFIRMED,
+  SHIPPED,
+  DELIVERED,
+  CANCELLED
+}
+
+relationship ManyToOne {
+  Order{customer(email)} to Customer
+}
+
+paginate Customer, Order with pagination
+
+service Customer with serviceClass
+service Order with serviceClass
